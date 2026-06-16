@@ -62,13 +62,20 @@ export class SocialAccountsPage {
     { value: 'shares', label: 'Shares', icon: 'S' },
     { value: 'followers', label: 'Followers', icon: 'F' },
   ];
+  readonly chartPlatforms: { value: SocialPlatform; label: string; color: string }[] = [
+    { value: 'youtube', label: 'YouTube', color: '#d92727' },
+    { value: 'facebook', label: 'Facebook', color: '#1877f2' },
+    { value: 'instagram', label: 'Instagram', color: '#c13584' },
+    { value: 'pinterest', label: 'Pinterest', color: '#bd081c' },
+    { value: 'tiktok', label: 'TikTok', color: '#111827' },
+  ];
 
   readonly selectedAccount = computed(() =>
     this.accounts().find(account => account.id === this.selectedAccountId()) ?? this.accounts()[0] ?? null,
   );
   readonly maxMetricValue = computed(() =>
-    Math.max(1, ...this.accounts().flatMap(account =>
-      account.metrics.map(metric => Number(metric[this.selectedMetric()]) || 0),
+    Math.max(1, ...this.chartPlatforms.flatMap(platform =>
+      this.chartDates().map(date => this.platformMetricValue(platform.value, date)),
     )),
   );
   readonly chartDates = computed(() => {
@@ -218,6 +225,7 @@ export class SocialAccountsPage {
         id: video.id,
       })));
       console.log('YouTube raw debug snapshot', snapshot);
+      await this.load();
       this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
     });
   }
@@ -226,18 +234,31 @@ export class SocialAccountsPage {
     this.selectedYouTubeVideoId.set(videoId);
   }
 
-  accountPath(account: SocialAccount): string {
+  platformPath(platform: SocialPlatform): string {
     const dates = this.chartDates();
     if (dates.length === 0) return '';
-    const byDate = new Map(account.metrics.map(metric => [metric.snapshotDate, metric]));
     const points = dates.map((date, index) => {
-      const metric = byDate.get(date);
-      const value = metric ? Number(metric[this.selectedMetric()]) || 0 : 0;
+      const value = this.platformMetricValue(platform, date);
       const x = dates.length === 1 ? 50 : 40 + (index * 520) / (dates.length - 1);
       const y = 250 - (value * 210) / this.maxMetricValue();
       return `${x},${y}`;
     });
     return points.join(' ');
+  }
+
+  platformMetricTotal(platform: SocialPlatform): number {
+    return this.accounts()
+      .filter(account => account.platform === platform)
+      .flatMap(account => account.metrics)
+      .reduce((sum, metric) => sum + (Number(metric[this.selectedMetric()]) || 0), 0);
+  }
+
+  private platformMetricValue(platform: SocialPlatform, date: string): number {
+    return this.accounts()
+      .filter(account => account.platform === platform)
+      .flatMap(account => account.metrics)
+      .filter(metric => metric.snapshotDate === date)
+      .reduce((sum, metric) => sum + (Number(metric[this.selectedMetric()]) || 0), 0);
   }
 
   totalFor(account: SocialAccount, key: SocialMetricKey): number {

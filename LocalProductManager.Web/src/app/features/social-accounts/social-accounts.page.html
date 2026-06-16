@@ -88,8 +88,15 @@
 
     <section class="panel chart-panel">
       <div class="section-heading">
-        <div><h2>{{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Each line represents one social account.</p></div>
+        <div><h2>{{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Each line represents one marketing platform.</p></div>
         <strong>{{ maxMetricValue() | number }}</strong>
+      </div>
+      <div class="chart-legend">
+        <span *ngFor="let platform of chartPlatforms">
+          <i [style.background]="platform.color"></i>
+          {{ platform.label }}
+          <em>{{ platformMetricTotal(platform.value) | number }}</em>
+        </span>
       </div>
       <svg viewBox="0 0 600 290" role="img">
         <line x1="40" y1="250" x2="570" y2="250"></line>
@@ -97,7 +104,7 @@
         <text x="40" y="272">{{ chartDates()[0] || 'No data' }}</text>
         <text x="470" y="272">{{ chartDates()[chartDates().length - 1] || '' }}</text>
         <text x="8" y="42">{{ maxMetricValue() | number }}</text>
-        <polyline *ngFor="let account of accounts()" [attr.points]="accountPath(account)" [attr.stroke]="account.color || '#176b87'"></polyline>
+        <polyline *ngFor="let platform of chartPlatforms" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
       </svg>
     </section>
 
@@ -125,7 +132,7 @@
             <img *ngIf="video.thumbnailUrl" [src]="video.thumbnailUrl" alt="" />
             <span>
               <strong>{{ video.title }}</strong>
-            <small>{{ video.views | number }} views · {{ video.likes | number }} likes · {{ video.comments | number }} comments</small>
+            <small>{{ video.views | number }} views - {{ video.likes | number }} likes - {{ video.comments | number }} comments</small>
             <em>{{ video.metrics.length }} snapshots recorded</em>
           </span>
         </button>
