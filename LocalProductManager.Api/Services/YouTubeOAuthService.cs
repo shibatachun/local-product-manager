@@ -233,6 +233,66 @@ public sealed class YouTubeOAuthService
             videos);
     }
 
+    public async Task<YouTubeDebugSnapshotDto?> GetStoredSnapshotAsync(
+        AppDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var account = await db.SocialAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Platform == "youtube", cancellationToken);
+        if (account is null)
+        {
+            return null;
+        }
+
+        var token = LoadToken();
+        var channelMetric = await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == account.Id)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var videoRows = await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == account.Id)
+            .OrderBy(item => item.SnapshotDate)
+            .ToListAsync(cancellationToken);
+        var videos = videoRows
+            .GroupBy(item => item.PlatformVideoId)
+            .Select(group =>
+            {
+                var latest = group.OrderByDescending(item => item.SnapshotDate).First();
+                return new YouTubeDebugVideoDto(
+                    latest.PlatformVideoId,
+                    latest.Title,
+                    latest.ThumbnailUrl,
+                    latest.PublishedAt,
+                    latest.Views,
+                    latest.Likes,
+                    latest.Comments,
+                    group.Select(item => new YouTubeVideoMetricPointDto(
+                        item.SnapshotDate,
+                        item.Views,
+                        item.Likes,
+                        item.Comments,
+                        item.Clicks)).ToArray());
+            })
+            .OrderByDescending(item => item.PublishedAt)
+            .ToArray();
+
+        return new YouTubeDebugSnapshotDto(
+            new YouTubeDebugChannelDto(
+                account.AccountHandle ?? token?.ChannelId ?? "",
+                account.AccountName,
+                token?.ChannelThumbnailUrl,
+                channelMetric?.Followers ?? 0,
+                channelMetric?.Views ?? 0,
+                channelMetric?.Shares ?? videos.Length,
+                null,
+                "YouTube Data API v3 does not expose marketing link click counts here; video views are logged separately."),
+            videos);
+    }
+
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
         var token = LoadToken();

@@ -114,4 +114,11 @@ public sealed class YouTubeAuthController(
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
         }
     }
+
+    [HttpGet("videos")]
+    public async Task<ActionResult<YouTubeDebugSnapshotDto>> StoredVideos(CancellationToken cancellationToken)
+    {
+        var snapshot = await youtube.GetStoredSnapshotAsync(db, cancellationToken);
+        return snapshot is null ? NotFound() : Ok(snapshot);
+    }
 }

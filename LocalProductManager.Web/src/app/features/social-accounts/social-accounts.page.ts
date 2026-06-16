@@ -106,6 +106,7 @@ export class SocialAccountsPage {
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.load(), this.loadYouTubeStatus()]);
+    await this.loadStoredYouTubeVideos();
   }
 
   async load(): Promise<void> {
@@ -205,7 +206,10 @@ export class SocialAccountsPage {
     if (!confirm('Disconnect YouTube authorization on this server?')) return;
     await this.perform(async () => {
       await this.api.youtubeDisconnect();
+      this.youtubeSnapshot.set(null);
+      this.selectedYouTubeVideoId.set(null);
       await this.loadYouTubeStatus();
+      await this.load();
       this.showNotice('YouTube authorization disconnected. Reconnect to request the updated scopes.');
     });
   }
@@ -228,6 +232,17 @@ export class SocialAccountsPage {
       await this.load();
       this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
     });
+  }
+
+  async loadStoredYouTubeVideos(): Promise<void> {
+    try {
+      const snapshot = await this.api.youtubeStoredVideos();
+      this.youtubeSnapshot.set(snapshot);
+      this.selectedYouTubeVideoId.set(snapshot.videos[0]?.id ?? null);
+    } catch {
+      this.youtubeSnapshot.set(null);
+      this.selectedYouTubeVideoId.set(null);
+    }
   }
 
   selectYouTubeVideo(videoId: string): void {

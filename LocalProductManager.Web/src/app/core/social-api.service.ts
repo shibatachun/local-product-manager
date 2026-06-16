@@ -70,4 +70,8 @@ export class SocialApiService {
   youtubeVideosDebug(): Promise<YouTubeDebugSnapshot> {
     return firstValueFrom(this.http.get<YouTubeDebugSnapshot>(`${this.baseUrl}/youtube/videos/debug`));
   }
+
+  youtubeStoredVideos(): Promise<YouTubeDebugSnapshot> {
+    return firstValueFrom(this.http.get<YouTubeDebugSnapshot>(`${this.baseUrl}/youtube/videos`));
+  }
 }
