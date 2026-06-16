@@ -48,16 +48,31 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .account-list strong,.account-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .account-list small { margin-top:3px; color:#7d8993; font-size:11px; }
 .account-list em { color:#50606c; font-size:11px; font-style:normal; font-weight:800; }
-.chart-panel { min-height:360px; }
+.chart-panel { min-height:430px; }
 .section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
 .section-heading p { margin:5px 0 0; color:#7a8791; font-size:12px; }
 .chart-legend { display:flex; flex-wrap:wrap; gap:8px; margin:-2px 0 12px; }
 .chart-legend span { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:0 9px; border:1px solid #e1e7eb; border-radius:6px; background:#fafbfc; color:#465764; font-size:11px; font-weight:800; }
 .chart-legend i { width:18px; height:3px; border-radius:3px; }
 .chart-legend em { color:#7f8c96; font-style:normal; font-weight:750; }
-svg { width:100%; height:280px; overflow:visible; }
-svg line { stroke:#d6dee3; stroke-width:1; } svg text { fill:#73818c; font-size:11px; }
-polyline { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+.market-chart { width:100%; height:330px; overflow:visible; cursor:crosshair; user-select:none; }
+.chart-bg { fill:url(#chartFade); stroke:#d9e2e7; stroke-width:1; }
+.chart-grid line { stroke:#e7edf1; stroke-width:1; }
+.chart-grid .date-grid { stroke:#f0f3f5; }
+.chart-grid text { fill:#75838f; font-size:11px; text-anchor:end; }
+.axis { stroke:#aebbc4; stroke-width:1.2; }
+.date-label { fill:#75838f; font-size:11px; }
+.date-label.end { text-anchor:end; }
+.trend-line { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 2px 2px rgba(28,43,54,.12)); }
+.crosshair { stroke:#4b6474; stroke-width:1; stroke-dasharray:4 4; }
+.hover-dot { stroke:#fff; stroke-width:2; }
+.hover-ring { fill:none; stroke-width:1.5; opacity:.42; }
+.chart-tooltip rect { fill:rgba(19,31,39,.94); stroke:rgba(255,255,255,.18); stroke-width:1; filter:drop-shadow(0 10px 24px rgba(20,30,38,.22)); }
+.chart-tooltip text { fill:#f7fbfd; font-size:11px; }
+.chart-tooltip .tooltip-date { font-weight:850; }
+.chart-tooltip .tooltip-total { text-anchor:end; font-weight:850; }
+.chart-tooltip .tooltip-name { fill:#dbe5eb; font-weight:750; }
+.chart-tooltip .tooltip-value { text-anchor:end; font-weight:850; }
 .platform-content { grid-column:2; }
 .platform-content .section-heading button { min-height:34px; padding:0 11px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-weight:750; }
 .content-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:-2px 0 14px; }

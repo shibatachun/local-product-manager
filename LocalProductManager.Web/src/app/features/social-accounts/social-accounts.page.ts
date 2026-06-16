@@ -22,9 +22,16 @@ export class SocialAccountsPage {
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
+  readonly hoveredChartIndex = signal<number | null>(null);
   readonly appVersion = 'social-platform-content-v2';
   readonly today = new Date().toISOString().slice(0, 10);
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
+  readonly chartWidth = 640;
+  readonly chartHeight = 330;
+  readonly chartLeft = 58;
+  readonly chartRight = 610;
+  readonly chartTop = 26;
+  readonly chartBottom = 272;
   private youtubePollTimer: number | null = null;
 
   readonly range = {
@@ -129,6 +136,35 @@ export class SocialAccountsPage {
       { label: 'Shares', value: metrics.reduce((sum, metric) => sum + metric.shares, 0) },
       { label: 'Followers', value: metrics.reduce((sum, metric) => sum + metric.followers, 0) },
     ];
+  });
+  readonly yAxisTicks = computed(() => {
+    const max = this.maxMetricValue();
+    return [1, 0.75, 0.5, 0.25, 0].map(ratio => {
+      const value = Math.round(max * ratio);
+      return { value, y: this.chartY(value) };
+    });
+  });
+  readonly chartHover = computed(() => {
+    const index = this.hoveredChartIndex();
+    const dates = this.chartDates();
+    if (index === null || !dates[index]) return null;
+    const date = dates[index];
+    const rows = this.chartPlatforms.map(platform => {
+      const value = this.platformMetricValue(platform.value, date);
+      return {
+        ...platform,
+        value,
+        x: this.chartX(index),
+        y: this.chartY(value),
+      };
+    });
+    return {
+      date,
+      x: this.chartX(index),
+      rows,
+      total: rows.reduce((sum, row) => sum + row.value, 0),
+      tooltipX: Math.min(this.chartRight - 176, Math.max(this.chartLeft + 8, this.chartX(index) + 12)),
+    };
   });
 
   async ngOnInit(): Promise<void> {
@@ -295,11 +331,39 @@ export class SocialAccountsPage {
     if (dates.length === 0) return '';
     const points = dates.map((date, index) => {
       const value = this.platformMetricValue(platform, date);
-      const x = dates.length === 1 ? 50 : 40 + (index * 520) / (dates.length - 1);
-      const y = 250 - (value * 210) / this.maxMetricValue();
+      const x = this.chartX(index);
+      const y = this.chartY(value);
       return `${x},${y}`;
     });
     return points.join(' ');
+  }
+
+  chartX(index: number): number {
+    const dates = this.chartDates();
+    if (dates.length <= 1) return (this.chartLeft + this.chartRight) / 2;
+    return this.chartLeft + (index * (this.chartRight - this.chartLeft)) / (dates.length - 1);
+  }
+
+  chartY(value: number): number {
+    return this.chartBottom - (Math.max(0, value) * (this.chartBottom - this.chartTop)) / this.maxMetricValue();
+  }
+
+  updateChartHover(event: MouseEvent): void {
+    const dates = this.chartDates();
+    if (!dates.length) {
+      this.hoveredChartIndex.set(null);
+      return;
+    }
+
+    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const svgX = ((event.clientX - rect.left) / rect.width) * this.chartWidth;
+    const clampedX = Math.min(this.chartRight, Math.max(this.chartLeft, svgX));
+    const ratio = dates.length <= 1 ? 0 : (clampedX - this.chartLeft) / (this.chartRight - this.chartLeft);
+    this.hoveredChartIndex.set(Math.min(dates.length - 1, Math.max(0, Math.round(ratio * (dates.length - 1)))));
+  }
+
+  clearChartHover(): void {
+    this.hoveredChartIndex.set(null);
   }
 
   platformMetricTotal(platform: SocialPlatform): number {

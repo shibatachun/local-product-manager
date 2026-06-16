@@ -110,13 +110,45 @@
           <em>{{ platformMetricTotal(platform.value) | number }}</em>
         </span>
       </div>
-      <svg viewBox="0 0 600 290" role="img">
-        <line x1="40" y1="250" x2="570" y2="250"></line>
-        <line x1="40" y1="35" x2="40" y2="250"></line>
-        <text x="40" y="272">{{ chartDates()[0] || 'No data' }}</text>
-        <text x="470" y="272">{{ chartDates()[chartDates().length - 1] || '' }}</text>
-        <text x="8" y="42">{{ maxMetricValue() | number }}</text>
-        <polyline *ngFor="let platform of chartPlatforms" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
+      <svg class="market-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" (mousemove)="updateChartHover($event)" (mouseleave)="clearChartHover()">
+        <defs>
+          <linearGradient id="chartFade" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#f8fbfc"></stop>
+            <stop offset="100%" stop-color="#ffffff"></stop>
+          </linearGradient>
+        </defs>
+        <rect class="chart-bg" [attr.x]="chartLeft" [attr.y]="chartTop" [attr.width]="chartRight - chartLeft" [attr.height]="chartBottom - chartTop"></rect>
+        <g class="chart-grid">
+          <g *ngFor="let tick of yAxisTicks()">
+            <line [attr.x1]="chartLeft" [attr.y1]="tick.y" [attr.x2]="chartRight" [attr.y2]="tick.y"></line>
+            <text [attr.x]="chartLeft - 10" [attr.y]="tick.y + 4">{{ tick.value | number }}</text>
+          </g>
+          <g *ngFor="let date of chartDates(); let index = index">
+            <line class="date-grid" [attr.x1]="chartX(index)" [attr.y1]="chartTop" [attr.x2]="chartX(index)" [attr.y2]="chartBottom"></line>
+          </g>
+        </g>
+        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartBottom" [attr.x2]="chartRight" [attr.y2]="chartBottom"></line>
+        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartTop" [attr.x2]="chartLeft" [attr.y2]="chartBottom"></line>
+        <text class="date-label" [attr.x]="chartLeft" [attr.y]="chartBottom + 24">{{ chartDates()[0] || 'No data' }}</text>
+        <text class="date-label end" [attr.x]="chartRight" [attr.y]="chartBottom + 24">{{ chartDates()[chartDates().length - 1] || '' }}</text>
+        <polyline *ngFor="let platform of chartPlatforms" class="trend-line" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
+        <ng-container *ngIf="chartHover() as hover">
+          <line class="crosshair" [attr.x1]="hover.x" [attr.y1]="chartTop" [attr.x2]="hover.x" [attr.y2]="chartBottom"></line>
+          <g *ngFor="let row of hover.rows">
+            <circle class="hover-dot" [attr.cx]="row.x" [attr.cy]="row.y" r="4.5" [attr.fill]="row.color"></circle>
+            <circle class="hover-ring" [attr.cx]="row.x" [attr.cy]="row.y" r="7" [attr.stroke]="row.color"></circle>
+          </g>
+          <g class="chart-tooltip" [attr.transform]="'translate(' + hover.tooltipX + ' 38)'">
+            <rect width="168" height="154" rx="7"></rect>
+            <text class="tooltip-date" x="12" y="22">{{ hover.date }}</text>
+            <text class="tooltip-total" x="156" y="22">{{ hover.total | number }}</text>
+            <g *ngFor="let row of hover.rows; let i = index" [attr.transform]="'translate(12 ' + (44 + i * 21) + ')'">
+              <circle cx="0" cy="-4" r="4" [attr.fill]="row.color"></circle>
+              <text class="tooltip-name" x="10" y="0">{{ row.label }}</text>
+              <text class="tooltip-value" x="144" y="0">{{ row.value | number }}</text>
+            </g>
+          </g>
+        </ng-container>
       </svg>
     </section>
 
