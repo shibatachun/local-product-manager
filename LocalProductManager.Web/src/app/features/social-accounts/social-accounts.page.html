@@ -4,8 +4,12 @@
       <p class="eyebrow">Marketing Hub</p>
       <h1>Social Accounts</h1>
     </div>
-    <nav><a routerLink="/">Product manager</a><button type="button" (click)="sync()">Sync API</button></nav>
+    <nav><a routerLink="/">Product manager</a><button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button></nav>
   </header>
+
+  <section class="readonly-banner" *ngIf="youtubeStatus() && !youtubeStatus()?.isAdminHost">
+    This is a read-only dashboard from this computer. Connect, disconnect, account editing, and data fetching are only available on the host computer through localhost.
+  </section>
 
   <section class="filters">
     <label>From<input type="date" [(ngModel)]="range.from" (change)="load()" /></label>
@@ -19,7 +23,7 @@
 
   <main class="grid">
     <aside class="accounts">
-      <section class="panel">
+      <section class="panel" *ngIf="youtubeStatus()?.isAdminHost; else readonlyAccountPanel">
         <h2>Add account</h2>
         <label class="platform-select">Platform
           <select [(ngModel)]="accountForm.platform">
@@ -71,6 +75,13 @@
         </div>
       </section>
 
+      <ng-template #readonlyAccountPanel>
+        <section class="panel">
+          <h2>Accounts</h2>
+          <p class="readonly-copy">Saved social data from the host computer is shown below.</p>
+        </section>
+      </ng-template>
+
       <section class="panel account-list">
         <h2>Accounts</h2>
         <div class="account-row" *ngFor="let account of accounts()" [class.active]="selectedAccount()?.id === account.id">
@@ -79,7 +90,7 @@
             <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
             <em>{{ totalFor(account, selectedMetric()) | number }}</em>
           </button>
-          <button class="disconnect-account" type="button" (click)="deleteAccount(account)">
+          <button class="disconnect-account" *ngIf="youtubeStatus()?.isAdminHost" type="button" (click)="deleteAccount(account)">
             {{ account.platform === 'youtube' ? 'Disconnect' : 'Delete' }}
           </button>
         </div>
@@ -111,7 +122,7 @@
     <section class="panel youtube-videos">
       <div class="section-heading">
         <div><h2>YouTube videos</h2><p>{{ selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.' }}</p></div>
-        <button type="button" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
+        <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
       </div>
 
       <div class="youtube-summary">
@@ -138,7 +149,7 @@
         </button>
           <div class="empty-videos" *ngIf="!(youtubeSnapshot()?.videos?.length)">
             <strong>No videos loaded</strong>
-            <small>Connect YouTube, then click Fetch videos.</small>
+            <small>{{ youtubeStatus()?.isAdminHost ? 'Connect YouTube, then click Fetch videos.' : 'Waiting for the host computer to fetch YouTube data.' }}</small>
           </div>
         </div>
 
@@ -161,7 +172,7 @@
       </div>
     </section>
 
-    <section class="panel metric-entry" *ngIf="selectedAccount() as account">
+    <section class="panel metric-entry" *ngIf="youtubeStatus()?.isAdminHost && selectedAccount() as account">
       <div class="section-heading"><div><h2>Manual metrics</h2><p>{{ account.accountName }}</p></div></div>
       <div class="metric-form">
         <label>Date<input type="date" [(ngModel)]="metricForm.snapshotDate" /></label>

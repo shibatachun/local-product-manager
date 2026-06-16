@@ -130,6 +130,7 @@ export interface YouTubeAuthStatus {
   channelThumbnailUrl: string | null;
   message: string | null;
   redirectUri: string;
+  isAdminHost: boolean;
 }
 
 export interface YouTubeDebugSnapshot {

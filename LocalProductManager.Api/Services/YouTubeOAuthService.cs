@@ -37,7 +37,7 @@ public sealed class YouTubeOAuthService
         defaultSecretPath = Path.Combine(environment.ContentRootPath, "Data", "youtube-client-secret.json");
     }
 
-    public YouTubeAuthStatusDto GetStatus()
+    public YouTubeAuthStatusDto GetStatus(bool isAdminHost)
     {
         var configured = IsConfigured(out _, out _);
         var token = LoadToken();
@@ -50,7 +50,8 @@ public sealed class YouTubeOAuthService
             configured
                 ? null
                 : "Put the Google OAuth client secret file at Data/youtube-client-secret.json or set YouTubeOAuth:ClientId and YouTubeOAuth:ClientSecret.",
-            RedirectUri());
+            RedirectUri(),
+            isAdminHost);
     }
 
     public string RedirectUri() =>

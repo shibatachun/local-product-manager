@@ -31,6 +31,7 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
         UpsertSocialAccountRequest request,
         CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         if (string.IsNullOrWhiteSpace(request.Platform) ||
             string.IsNullOrWhiteSpace(request.AccountName))
         {
@@ -58,6 +59,7 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
         UpsertSocialAccountRequest request,
         CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         var account = await db.SocialAccounts
             .Include(item => item.Metrics)
             .FirstOrDefaultAsync(item => item.Id == accountId, cancellationToken);
@@ -78,6 +80,7 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
     [HttpDelete("{accountId:int}")]
     public async Task<IActionResult> Delete(int accountId, CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         var deleted = await db.SocialAccounts
             .Where(account => account.Id == accountId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -90,6 +93,7 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
         UpsertSocialMetricRequest request,
         CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         if (!await db.SocialAccounts.AnyAsync(account => account.Id == accountId, cancellationToken))
         {
             return NotFound();
@@ -123,6 +127,7 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
     [HttpPost("sync")]
     public async Task<ActionResult<SocialSyncResult>> Sync(CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         var accounts = await db.SocialAccounts.CountAsync(
             account => account.IsActive,
             cancellationToken);
@@ -169,4 +174,13 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
         var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
+
+    private bool IsAdminHost()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        return remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+    }
+
+    private ObjectResult AdminOnly() =>
+        StatusCode(StatusCodes.Status403Forbidden, "This action is only available on the host computer through localhost.");
 }

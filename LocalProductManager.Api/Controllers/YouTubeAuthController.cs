@@ -13,11 +13,12 @@ public sealed class YouTubeAuthController(
     YouTubeOAuthService youtube) : ControllerBase
 {
     [HttpGet("auth/status")]
-    public ActionResult<YouTubeAuthStatusDto> Status() => Ok(youtube.GetStatus());
+    public ActionResult<YouTubeAuthStatusDto> Status() => Ok(youtube.GetStatus(IsAdminHost()));
 
     [HttpGet("auth/start")]
     public ActionResult<YouTubeAuthStartResult> Start()
     {
+        if (!IsAdminHost()) return AdminOnly();
         try
         {
             return Ok(new YouTubeAuthStartResult(
@@ -33,6 +34,7 @@ public sealed class YouTubeAuthController(
     [HttpPost("auth/disconnect")]
     public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         await youtube.DisconnectAsync(cancellationToken);
         await db.SocialAccounts
             .Where(account => account.Platform == "youtube")
@@ -47,6 +49,7 @@ public sealed class YouTubeAuthController(
         [FromQuery] string? error,
         CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         if (!string.IsNullOrWhiteSpace(error))
         {
             return Content(
@@ -83,6 +86,7 @@ public sealed class YouTubeAuthController(
     [HttpPost("sync")]
     public async Task<ActionResult<SocialSyncResult>> Sync(CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         try
         {
             var imported = await youtube.SyncChannelMetricsAsync(db, cancellationToken);
@@ -101,6 +105,7 @@ public sealed class YouTubeAuthController(
     [HttpGet("videos/debug")]
     public async Task<ActionResult<YouTubeDebugSnapshotDto>> VideosDebug(CancellationToken cancellationToken)
     {
+        if (!IsAdminHost()) return AdminOnly();
         try
         {
             return Ok(await youtube.GetDebugSnapshotAsync(db, cancellationToken));
@@ -121,4 +126,13 @@ public sealed class YouTubeAuthController(
         var snapshot = await youtube.GetStoredSnapshotAsync(db, cancellationToken);
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
+
+    private bool IsAdminHost()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        return remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+    }
+
+    private ObjectResult AdminOnly() =>
+        StatusCode(StatusCodes.Status403Forbidden, "This action is only available on the host computer through localhost.");
 }

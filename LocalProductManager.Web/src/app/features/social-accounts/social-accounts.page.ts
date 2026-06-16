@@ -118,6 +118,7 @@ export class SocialAccountsPage {
   }
 
   async createAccount(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Account editing is only available on the host computer.');
     if (!this.accountForm.accountName.trim()) return this.showNotice('Account name is required.');
     await this.perform(async () => {
       const account = await this.api.createAccount({
@@ -138,6 +139,7 @@ export class SocialAccountsPage {
   }
 
   async deleteAccount(account: SocialAccount): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Account editing is only available on the host computer.');
     const action = account.platform === 'youtube' ? 'Disconnect' : 'Delete';
     if (!confirm(`${action} ${account.accountName}? Metrics for this account will be removed.`)) return;
     await this.perform(async () => {
@@ -149,6 +151,7 @@ export class SocialAccountsPage {
   }
 
   async saveMetric(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Manual metrics are only available on the host computer.');
     const account = this.selectedAccount();
     if (!account) return this.showNotice('Select or create an account first.');
     await this.perform(async () => {
@@ -159,6 +162,7 @@ export class SocialAccountsPage {
   }
 
   async sync(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('API sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.sync();
       this.showNotice(result.status);
@@ -175,6 +179,9 @@ export class SocialAccountsPage {
 
   async connectYouTube(): Promise<void> {
     const status = this.youtubeStatus();
+    if (status?.isAdminHost === false) {
+      return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
+    }
     if (status?.isConfigured === false) {
       return this.showNotice(status.message || 'Set YouTube OAuth ClientId and ClientSecret first.');
     }
@@ -195,6 +202,7 @@ export class SocialAccountsPage {
   }
 
   async syncYouTube(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.youtubeSync();
       await Promise.all([this.load(), this.loadYouTubeStatus()]);
@@ -203,6 +211,7 @@ export class SocialAccountsPage {
   }
 
   async disconnectYouTube(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Disconnect is only available on the host computer.');
     if (!confirm('Disconnect YouTube authorization on this server?')) return;
     await this.perform(async () => {
       await this.api.youtubeDisconnect();
@@ -215,6 +224,7 @@ export class SocialAccountsPage {
   }
 
   async fetchYouTubeVideos(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Fetching is only available on the host computer. Showing saved data.');
     await this.perform(async () => {
       const snapshot = await this.api.youtubeVideosDebug();
       this.youtubeSnapshot.set(snapshot);
@@ -291,6 +301,7 @@ export class SocialAccountsPage {
   youtubeHelperText(): string {
     const status = this.youtubeStatus();
     if (!status) return 'Checking YouTube connection...';
+    if (!status.isAdminHost) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
     if (status.isConnected) return status.channelTitle || 'YouTube Channel';
     if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
     return status.message || 'Open Google authorization';

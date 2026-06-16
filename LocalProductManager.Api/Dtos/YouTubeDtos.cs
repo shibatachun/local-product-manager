@@ -7,7 +7,8 @@ public sealed record YouTubeAuthStatusDto(
     string? ChannelTitle,
     string? ChannelThumbnailUrl,
     string? Message,
-    string RedirectUri);
+    string RedirectUri,
+    bool IsAdminHost);
 
 public sealed record YouTubeAuthStartResult(string AuthorizationUrl, string RedirectUri);
 
