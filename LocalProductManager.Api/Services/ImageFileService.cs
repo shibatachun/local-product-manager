@@ -1,0 +1,207 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.StaticFiles;
+
+namespace LocalProductManager.Api.Services;
+
+public sealed record ImageFileResult(
+    string FullPath,
+    string FileName,
+    string ContentType);
+
+public sealed record ImageStorageRoot(
+    string Path,
+    bool Available);
+
+public sealed class ImageFileService
+{
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".bmp",
+        ".gif"
+    };
+
+    private readonly object sync = new();
+    private readonly string contentRootPath;
+    private readonly string storageFilePath;
+    private List<string> allowedRoots;
+
+    public ImageFileService(
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
+    {
+        contentRootPath = environment.ContentRootPath;
+        storageFilePath = Path.Combine(contentRootPath, "Data", "image-storage-roots.json");
+
+        var configuredRoots = configuration
+            .GetSection("ImageStorage:AllowedRoots")
+            .Get<string[]>() ?? [];
+
+        allowedRoots = LoadStoredRoots(configuredRoots);
+    }
+
+    public IReadOnlyList<ImageStorageRoot> GetRoots()
+    {
+        lock (sync)
+        {
+            return allowedRoots
+                .Select(path => new ImageStorageRoot(path, Directory.Exists(path)))
+                .ToArray();
+        }
+    }
+
+    public ImageStorageRoot AddRoot(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("Image storage path is required.");
+        }
+
+        var normalizedPath = NormalizePath(path, contentRootPath);
+        lock (sync)
+        {
+            if (!allowedRoots.Contains(normalizedPath, StringComparer.OrdinalIgnoreCase))
+            {
+                allowedRoots.Add(normalizedPath);
+                allowedRoots = allowedRoots
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(item => item)
+                    .ToList();
+                SaveRoots();
+            }
+        }
+
+        return new ImageStorageRoot(normalizedPath, Directory.Exists(normalizedPath));
+    }
+
+    public bool RemoveRoot(string path)
+    {
+        var normalizedPath = NormalizePath(path, contentRootPath);
+        lock (sync)
+        {
+            var removed = allowedRoots.RemoveAll(
+                root => string.Equals(root, normalizedPath, StringComparison.OrdinalIgnoreCase)) > 0;
+            if (removed)
+            {
+                SaveRoots();
+            }
+
+            return removed;
+        }
+    }
+
+    public ImageFileResult GetImage(string imagePath)
+    {
+        var roots = GetRootPaths();
+        if (roots.Length == 0)
+        {
+            throw new InvalidOperationException("No image storage roots are configured.");
+        }
+
+        var fullPath = NormalizePath(imagePath, contentRootPath);
+        var extension = Path.GetExtension(fullPath);
+        if (!AllowedExtensions.Contains(extension))
+        {
+            throw new InvalidOperationException("The product path is not a supported image file.");
+        }
+
+        if (!roots.Any(root => IsUnderRoot(fullPath, root)))
+        {
+            throw new UnauthorizedAccessException("The image path is outside the configured image storage roots.");
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("The image file was not found.", fullPath);
+        }
+
+        var contentTypeProvider = new FileExtensionContentTypeProvider();
+        if (!contentTypeProvider.TryGetContentType(fullPath, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        return new ImageFileResult(fullPath, Path.GetFileName(fullPath), contentType);
+    }
+
+    public bool TryGetAllowedDirectory(string folderPath, out string fullPath)
+    {
+        var normalizedPath = NormalizePath(folderPath, contentRootPath);
+        fullPath = normalizedPath;
+        return GetRootPaths().Any(root => IsUnderRoot(normalizedPath, root));
+    }
+
+    private List<string> LoadStoredRoots(IEnumerable<string> configuredRoots)
+    {
+        try
+        {
+            if (File.Exists(storageFilePath))
+            {
+                var json = File.ReadAllText(storageFilePath);
+                var storedRoots = JsonSerializer.Deserialize<string[]>(json) ?? [];
+                return NormalizeRoots(storedRoots);
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall back to appsettings when the runtime file is invalid.
+        }
+
+        var roots = NormalizeRoots(configuredRoots);
+        Directory.CreateDirectory(Path.GetDirectoryName(storageFilePath)!);
+        File.WriteAllText(storageFilePath, JsonSerializer.Serialize(roots, JsonOptions));
+        return roots;
+    }
+
+    private List<string> NormalizeRoots(IEnumerable<string> roots) => roots
+        .Where(root => !string.IsNullOrWhiteSpace(root))
+        .Select(root => NormalizePath(root, contentRootPath))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(root => root)
+        .ToList();
+
+    private string[] GetRootPaths()
+    {
+        lock (sync)
+        {
+            return allowedRoots.ToArray();
+        }
+    }
+
+    private void SaveRoots()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(storageFilePath)!);
+        File.WriteAllText(
+            storageFilePath,
+            JsonSerializer.Serialize(allowedRoots, JsonOptions));
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
+    private static string NormalizePath(string path, string contentRootPath)
+    {
+        var trimmed = path.Trim();
+        var fullPath = Path.IsPathRooted(trimmed)
+            ? Path.GetFullPath(trimmed)
+            : Path.GetFullPath(Path.Combine(contentRootPath, trimmed));
+        return Path.TrimEndingDirectorySeparator(fullPath);
+    }
+
+    private static bool IsUnderRoot(string path, string root)
+    {
+        if (string.Equals(path, root, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return path.StartsWith(
+            root + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
+    }
+}

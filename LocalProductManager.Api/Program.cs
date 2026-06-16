@@ -1,0 +1,129 @@
+using LocalProductManager.Api.Data;
+using LocalProductManager.Api.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
+var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "Data Source=Data/local-product-manager.db";
+var connectionString = ResolveSqliteConnectionString(
+    configuredConnectionString,
+    builder.Environment.ContentRootPath);
+var dbPath = GetSqlitePath(connectionString);
+if (dbPath is not null)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+}
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<AmazonAttributionImportService>();
+builder.Services.AddScoped<AmazonBusinessReportImportService>();
+builder.Services.AddScoped<BulkAttributionImportService>();
+builder.Services.AddScoped<AttributionFolderImportService>();
+builder.Services.AddHttpClient<YouTubeOAuthService>();
+builder.Services.AddHttpClient<AmazonImageLookupService>();
+builder.Services.AddHttpClient<RemoteImageProxyService>();
+builder.Services.AddSingleton<ImageMatcherService>();
+builder.Services.AddSingleton<ImageFileService>();
+builder.Services.AddControllers();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("LanFrontend", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+var angularRoot = Path.GetFullPath(Path.Combine(
+    app.Environment.ContentRootPath,
+    "..",
+    "LocalProductManager.Web",
+    "dist",
+    "LocalProductManager.Web",
+    "browser"));
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+    DatabaseSchemaService.Upgrade(db);
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+else
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseCors("LanFrontend");
+if (Directory.Exists(angularRoot))
+{
+    var angularFiles = new PhysicalFileProvider(angularRoot);
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = angularFiles });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = angularFiles });
+}
+app.MapControllers();
+if (Directory.Exists(angularRoot))
+{
+    var indexPath = Path.Combine(angularRoot, "index.html");
+    app.MapFallback(async context =>
+    {
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(indexPath);
+    });
+}
+
+app.Run();
+
+static string? GetSqlitePath(string connectionString)
+{
+    const string prefix = "Data Source=";
+    var part = connectionString
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .FirstOrDefault(value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+    if (part is null)
+    {
+        return null;
+    }
+
+    var path = part[prefix.Length..].Trim();
+    return Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
+}
+
+static string ResolveSqliteConnectionString(string connectionString, string contentRootPath)
+{
+    const string prefix = "Data Source=";
+    var parts = connectionString
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .ToList();
+    var dataSourceIndex = parts.FindIndex(value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+    if (dataSourceIndex < 0)
+    {
+        return connectionString;
+    }
+
+    var path = parts[dataSourceIndex][prefix.Length..].Trim();
+    if (!Path.IsPathRooted(path))
+    {
+        path = Path.GetFullPath(Path.Combine(contentRootPath, path));
+        parts[dataSourceIndex] = $"{prefix}{path}";
+    }
+
+    return string.Join(';', parts);
+}

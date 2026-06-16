@@ -1,0 +1,64 @@
+<main class="test-shell">
+  <header>
+    <div>
+      <a routerLink="/">← Product Manager</a>
+      <h1>API Test Console</h1>
+      <p>{{ apiBase }}</p>
+    </div>
+    <button type="button" (click)="refresh()">Refresh</button>
+  </header>
+
+  <div class="test-grid">
+    <section>
+      <h2>Products</h2>
+      <button class="product" *ngFor="let product of products()" (click)="select(product.id)">
+        <strong>{{ product.sku }}</strong><span>{{ product.productName }}</span>
+      </button>
+    </section>
+
+    <section>
+      <h2>Create Product</h2>
+      <label>SKU<input [(ngModel)]="productForm.sku" /></label>
+      <label>Name<input [(ngModel)]="productForm.productName" /></label>
+      <label>Cost<input type="number" [(ngModel)]="productForm.cost" /></label>
+      <label>Image path<input [(ngModel)]="productForm.imagePath" /></label>
+      <button (click)="create()">Create</button>
+    </section>
+
+    <section>
+      <h2>{{ selectedTitle() }}</h2>
+      <button class="danger" (click)="removeProduct()">Delete selected</button>
+      <h3>Listing</h3>
+      <select [(ngModel)]="listingForm.platform"><option *ngFor="let p of ['amazon','walmart','ebay','etsy']" [value]="p">{{ p }}</option></select>
+      <input [(ngModel)]="listingForm.listingUrl" />
+      <button (click)="saveListing()">Save listing</button>
+      <button class="row" *ngFor="let item of selectedProduct()?.listings" (click)="removeListing(item)">Remove {{ item.platform }}</button>
+    </section>
+
+    <section>
+      <h2>Amazon</h2>
+      <label>ASIN<input [(ngModel)]="asinForm.asin" /></label>
+      <select [(ngModel)]="asinForm.asinType"><option value="parent">parent</option><option value="child">child</option></select>
+      <label>Parent<input [(ngModel)]="asinForm.parentAsin" /></label>
+      <button (click)="saveAsin()">Add ASIN</button>
+      <button class="row" *ngFor="let item of selectedProduct()?.amazonAsins" (click)="removeAsin(item)">Remove {{ item.asin }}</button>
+    </section>
+
+    <section>
+      <h2>Attribution</h2>
+      <select [(ngModel)]="attributionForm.platform"><option *ngFor="let p of ['pinterest','facebook','instagram','tiktok','youtube','shopify']" [value]="p">{{ p }}</option></select>
+      <input [(ngModel)]="attributionForm.attributionUrl" />
+      <button (click)="saveAttribution()">Save link</button>
+      <h3>Image Match</h3>
+      <input [(ngModel)]="imageForm.sku" />
+      <input [(ngModel)]="imageForm.folderPath" />
+      <button (click)="matchImages()">Match</button>
+      <p *ngFor="let path of matchedImages()">{{ path }}</p>
+    </section>
+
+    <section class="logs">
+      <h2>Log <span *ngIf="loading()">Working...</span></h2>
+      <pre>{{ logs().join('\n') }}</pre>
+    </section>
+  </div>
+</main>

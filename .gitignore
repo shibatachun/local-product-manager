@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/Data/*.db
+**/Data/*.db-shm
+**/Data/*.db-wal
+**/Data/image-storage-roots.json
+**/Data/youtube-oauth-token.json
+**/Data/youtube-client-secret.json
+*.log
+*.user
+*.suo

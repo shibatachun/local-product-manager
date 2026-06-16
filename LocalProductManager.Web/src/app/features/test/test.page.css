@@ -1,0 +1,15 @@
+:host { display:block; min-height:100vh; background:#f4f6f8; color:#243b53; font-family:Inter,system-ui,sans-serif; }
+* { box-sizing:border-box; }
+.test-shell { width:min(1440px,calc(100% - 32px)); margin:auto; padding:24px 0; }
+header { display:flex; justify-content:space-between; align-items:end; margin-bottom:18px; }
+h1 { margin:8px 0 2px; } h2 { margin:0 0 14px; font-size:16px; } h3 { font-size:13px; margin:18px 0 8px; }
+p { color:#627d98; overflow-wrap:anywhere; } a { color:#176b87; }
+.test-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+section { padding:16px; border:1px solid #d9e2ec; border-radius:8px; background:#fff; }
+label { display:grid; gap:5px; margin-bottom:10px; font-size:12px; font-weight:700; }
+input,select,button { width:100%; min-height:36px; margin-bottom:8px; padding:7px 9px; border:1px solid #bcccdc; border-radius:6px; background:#fff; font:inherit; }
+button { cursor:pointer; font-weight:700; background:#f0f4f8; } button:hover { background:#d9e2ec; }
+.product,.row { display:flex; justify-content:space-between; gap:8px; text-align:left; }
+.danger { color:#b42318; border-color:#f0aaa3; background:#fff5f4; }
+.logs pre { min-height:180px; white-space:pre-wrap; font-size:12px; }
+@media(max-width:900px){.test-grid{grid-template-columns:1fr;}}

@@ -1,0 +1,106 @@
+<div class="social-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Marketing Hub</p>
+      <h1>Social Accounts</h1>
+    </div>
+    <nav><a routerLink="/">Product manager</a><button type="button" (click)="sync()">Sync API</button></nav>
+  </header>
+
+  <section class="filters">
+    <label>From<input type="date" [(ngModel)]="range.from" (change)="load()" /></label>
+    <label>To<input type="date" [(ngModel)]="range.to" (change)="load()" /></label>
+    <div class="metric-tabs">
+      <button *ngFor="let metric of metrics" [class.active]="selectedMetric() === metric.value" (click)="selectedMetric.set(metric.value)">
+        <span>{{ metric.icon }}</span>{{ metric.label }}
+      </button>
+    </div>
+  </section>
+
+  <main class="grid">
+    <aside class="accounts">
+      <section class="panel">
+        <h2>Add account</h2>
+        <label class="platform-select">Platform
+          <select [(ngModel)]="accountForm.platform">
+            <option *ngFor="let platform of platforms" [value]="platform.value">{{ platform.label }}</option>
+          </select>
+        </label>
+
+        <div class="connect-card" *ngIf="accountForm.platform === 'youtube'; else disabledConnect">
+          <div>
+            <span class="platform-mark youtube">YT</span>
+            <strong>{{ youtubeStatus()?.isConnected ? 'YouTube connected' : 'Connect YouTube' }}</strong>
+            <small>{{ youtubeHelperText() }}</small>
+          </div>
+          <button type="button" (click)="connectYouTube()" [disabled]="loading()">
+            Connect YouTube
+          </button>
+          <button class="primary" type="button" (click)="syncYouTube()" [disabled]="!youtubeStatus()?.isConnected || loading()">
+            Sync
+          </button>
+        </div>
+
+        <ng-template #disabledConnect>
+          <div class="connect-card pending">
+            <div>
+              <span class="platform-mark muted">{{ platformLabel(accountForm.platform).slice(0, 2).toUpperCase() }}</span>
+              <strong>{{ connectLabel() }}</strong>
+              <small>Coming soon. Manual entry is available below.</small>
+            </div>
+            <button type="button" disabled>{{ connectLabel() }}</button>
+          </div>
+        </ng-template>
+
+        <div class="manual-divider"><span>or add manually</span></div>
+        <div class="account-form">
+          <input [(ngModel)]="accountForm.accountName" placeholder="Account name" />
+          <input [(ngModel)]="accountForm.accountHandle" placeholder="@handle" />
+          <input [(ngModel)]="accountForm.accountUrl" placeholder="Profile URL" />
+          <input type="color" [(ngModel)]="accountForm.color" />
+          <button class="primary" (click)="createAccount()">Add</button>
+        </div>
+      </section>
+
+      <section class="panel account-list">
+        <h2>Accounts</h2>
+        <button *ngFor="let account of accounts()" [class.active]="selectedAccount()?.id === account.id" (click)="selectedAccountId.set(account.id)">
+          <i [style.background]="account.color || '#176b87'"></i>
+          <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
+          <em>{{ totalFor(account, selectedMetric()) | number }}</em>
+        </button>
+      </section>
+    </aside>
+
+    <section class="panel chart-panel">
+      <div class="section-heading">
+        <div><h2>{{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Each line represents one social account.</p></div>
+        <strong>{{ maxMetricValue() | number }}</strong>
+      </div>
+      <svg viewBox="0 0 600 290" role="img">
+        <line x1="40" y1="250" x2="570" y2="250"></line>
+        <line x1="40" y1="35" x2="40" y2="250"></line>
+        <text x="40" y="272">{{ chartDates()[0] || 'No data' }}</text>
+        <text x="470" y="272">{{ chartDates()[chartDates().length - 1] || '' }}</text>
+        <text x="8" y="42">{{ maxMetricValue() | number }}</text>
+        <polyline *ngFor="let account of accounts()" [attr.points]="accountPath(account)" [attr.stroke]="account.color || '#176b87'"></polyline>
+      </svg>
+    </section>
+
+    <section class="panel metric-entry" *ngIf="selectedAccount() as account">
+      <div class="section-heading"><div><h2>Manual metrics</h2><p>{{ account.accountName }}</p></div></div>
+      <div class="metric-form">
+        <label>Date<input type="date" [(ngModel)]="metricForm.snapshotDate" /></label>
+        <label>Clicks<input type="number" [(ngModel)]="metricForm.clicks" /></label>
+        <label>Likes<input type="number" [(ngModel)]="metricForm.likes" /></label>
+        <label>Views<input type="number" [(ngModel)]="metricForm.views" /></label>
+        <label>Comments<input type="number" [(ngModel)]="metricForm.comments" /></label>
+        <label>Shares<input type="number" [(ngModel)]="metricForm.shares" /></label>
+        <label>Followers<input type="number" [(ngModel)]="metricForm.followers" /></label>
+        <button class="primary" (click)="saveMetric()">Save snapshot</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" *ngIf="notice()">{{ notice() }}</div>

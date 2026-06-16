@@ -1,0 +1,319 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">LP</span>
+      <span><strong>Local Product</strong><small>Manager</small></span>
+    </div>
+
+    <nav aria-label="Main navigation">
+      <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
+      <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> Image storage</button>
+      <a routerLink="/test"><span>⌘</span> API Test</a>
+    </nav>
+
+    <div class="connection">
+      <span class="online-dot"></span>
+      <div><strong>Local API</strong><small>{{ api.baseUrl }}</small></div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">{{ view() === 'products' ? 'Catalog' : view() === 'marketing' ? 'Amazon Attribution' : 'Server settings' }}</p>
+        <h1>{{ view() === 'products' ? 'Product management' : view() === 'marketing' ? 'Marketing links' : 'Image storage' }}</h1>
+      </div>
+      <div class="header-actions" *ngIf="view() !== 'storage'">
+        <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
+        <button type="button" *ngIf="view() === 'products'" (click)="openImport()">Import</button>
+        <button class="primary" type="button" (click)="openWizard()"><span>+</span> Add product</button>
+      </div>
+    </header>
+
+    <ng-container *ngIf="view() === 'products'; else marketingView">
+      <section class="stats-band">
+        <div><span>Total products</span><strong>{{ stats().total }}</strong></div>
+        <div><span>Amazon listed</span><strong>{{ stats().amazon }}</strong></div>
+        <div><span>ASIN pending</span><strong>{{ stats().pending }}</strong></div>
+        <div><span>Active channels</span><strong>{{ stats().channels }}</strong></div>
+      </section>
+
+      <section class="toolbar">
+        <label class="search-box">
+          <span>⌕</span>
+          <input placeholder="Search by SKU or product name" [ngModel]="search()" (ngModelChange)="search.set($event)" (keyup.enter)="loadProducts()" />
+        </label>
+        <select [ngModel]="platformFilter()" (ngModelChange)="platformFilter.set($event); loadProducts()">
+          <option *ngFor="let option of platformOptions" [value]="option.value">{{ option.label }}</option>
+        </select>
+        <button class="icon-button" type="button" title="Refresh products" (click)="loadProducts()">↻</button>
+      </section>
+
+      <section class="table-wrap">
+        <table>
+          <thead><tr><th>Product</th><th>SKU</th><th>Cost</th><th>Platforms</th><th>Amazon</th><th>Updated</th><th></th></tr></thead>
+          <tbody>
+            <ng-container *ngFor="let product of products()">
+            <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
+              <td>
+                <button class="product-cell" type="button" (click)="openDetail(product.id)">
+                  <span class="tree-toggle" role="button" tabindex="0" *ngIf="product.children.length" [title]="isExpanded(product.id) ? 'Collapse variations' : 'Expand variations'" (click)="toggleParent(product.id, $event)">
+                    {{ isExpanded(product.id) ? '−' : '+' }}
+                  </span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></span>
+                  <span><strong>{{ product.productName }}</strong><small *ngIf="product.children.length">{{ product.children.length }} child variations</small><small *ngIf="!product.children.length">{{ product.imagePath || 'No image path' }}</small></span>
+                </button>
+              </td>
+              <td><code>{{ product.amazonParentAsin || product.sku }}</code><small class="sku-caption" *ngIf="product.productType === 'parent'">Parent ASIN</small></td>
+              <td>{{ product.cost === null ? '—' : ('$' + (product.cost | number:'1.2-2')) }}</td>
+              <td><span class="platform-pill" *ngFor="let platform of product.platforms">{{ platformLabel(platform) }}</span><span class="muted" *ngIf="!product.platforms.length">Not listed</span></td>
+              <td><span class="status" [class.ready]="hasAmazon(product) && product.asinCount > 0">{{ hasAmazon(product) ? product.asinCount + ' ASIN' : 'Not listed' }}</span></td>
+              <td>{{ product.updatedAt | date:'MMM d, y' }}</td>
+              <td><button class="icon-button" title="Open details" (click)="openDetail(product.id)">›</button></td>
+            </tr>
+            <tr class="child-row" *ngFor="let child of (isExpanded(product.id) ? product.children : [])" (dblclick)="openDetail(child.id)">
+              <td>
+                <button class="product-cell child-product-cell" type="button" (click)="openDetail(child.id)">
+                  <span class="tree-branch"></span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(child) }}</span><img *ngIf="child.imagePath" [src]="productImageUrl(child.id)" [alt]="child.productName" (error)="hideBrokenImage($event)" /></span>
+                  <span><strong>{{ child.productName }}</strong><small>Child variation</small></span>
+                </button>
+              </td>
+              <td><code>{{ child.sku }}</code><small class="sku-caption" *ngIf="child.skuBase">Base {{ child.skuBase }}</small></td>
+              <td>{{ child.cost === null ? '—' : ('$' + (child.cost | number:'1.2-2')) }}</td>
+              <td><span class="platform-pill" *ngFor="let platform of child.platforms">{{ platformLabel(platform) }}</span></td>
+              <td><span class="status ready">{{ child.asinCount }} ASIN</span></td>
+              <td>{{ child.updatedAt | date:'MMM d, y' }}</td>
+              <td><button class="icon-button" title="Open child details" (click)="openDetail(child.id)">›</button></td>
+            </tr>
+            </ng-container>
+          </tbody>
+        </table>
+        <div class="empty-state" *ngIf="!products().length">
+          <span>□</span><strong>No products found</strong><p>Adjust the filters or add your first product.</p>
+        </div>
+      </section>
+    </ng-container>
+
+    <ng-template #marketingView>
+      <ng-container *ngIf="view() === 'marketing'; else storageView">
+      <section class="marketing-layout">
+        <div class="marketing-list">
+          <div class="section-heading"><div><h2>Amazon products</h2><p>Select a product to switch attribution links.</p></div></div>
+          <label class="marketing-search">
+            <span>⌕</span>
+            <input placeholder="Search SKU or ASIN" [ngModel]="marketingSearch()" (ngModelChange)="marketingSearch.set($event)" />
+          </label>
+          <div class="marketing-list-scroll">
+        <button *ngFor="let product of amazonProducts()" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
+            <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></span>
+            <span><strong>{{ product.productName }}</strong><small>{{ product.sku }}<ng-container *ngIf="product.amazonAsinValues.length"> · {{ product.amazonAsinValues[0] }}</ng-container></small></span>
+            <em>{{ product.asinCount }} ASIN</em>
+          </button>
+          <div class="mini-empty" *ngIf="!amazonProducts().length">No Amazon products match.</div>
+          </div>
+        </div>
+        <div class="marketing-workspace">
+          <div class="folder-import">
+            <div>
+              <strong>Batch import attribution folder</strong>
+              <small>File names are matched to existing products by SKU.</small>
+            </div>
+            <label class="file-button">
+              {{ attributionFolderFiles().length ? attributionFolderFiles().length + ' CSV files selected' : 'Choose folder' }}
+              <input type="file" accept=".csv,text/csv" multiple webkitdirectory directory (change)="onAttributionFolderSelected($event)" />
+            </label>
+            <button class="primary" [disabled]="!attributionFolderFiles().length || loading()" (click)="importAttributionFolder()">Import folder</button>
+          </div>
+          <div class="folder-import-result" *ngIf="attributionFolderSummary()">
+            <strong>{{ attributionFolderSummary() }}</strong>
+            <span *ngIf="unmatchedAttributionFiles().length">Unmatched: {{ unmatchedAttributionFiles().join(', ') }}</span>
+          </div>
+          <div class="empty-marketing" *ngIf="!selectedProduct()"><span>↗</span><h2>Select an Amazon product</h2><p>Its six marketing channel links will appear here.</p></div>
+          <ng-container *ngIf="selectedProduct() as product">
+            <div class="section-heading">
+              <div><h2>{{ product.productName }}</h2><p>{{ product.sku }} · {{ product.amazonAsins.length }} ASIN</p></div>
+              <label class="file-button">Import CSV<input type="file" accept=".csv" (change)="onFileSelected($event)" /></label>
+            </div>
+            <button class="import-row" *ngIf="importFile()" (click)="importAttribution()">Import {{ importFile()?.name }}</button>
+            <div class="channel-grid">
+              <div class="channel" *ngFor="let platform of attributionPlatforms">
+                <div><span class="channel-icon">{{ platform.slice(0,1).toUpperCase() }}</span><strong>{{ platformLabel(platform) }}</strong></div>
+                <input #url [value]="attributionUrl(platform)" placeholder="Paste attribution link" />
+                <footer><button (click)="saveAttribution(platform, url.value)">Save</button><button class="copy" (click)="copyAttribution(platform)" [disabled]="!attributionUrl(platform)">Copy link</button></footer>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </section>
+      </ng-container>
+    </ng-template>
+
+    <ng-template #storageView>
+      <section class="storage-page">
+        <div class="storage-intro">
+          <div>
+            <h2>Allowed image folders</h2>
+            <p>The server can read and publish images only from these folders and their subfolders.</p>
+          </div>
+          <button class="icon-button" title="Check folder availability" (click)="loadImageStorageRoots()">↻</button>
+        </div>
+
+        <div class="add-root">
+          <label>
+            Folder path
+            <input [ngModel]="newImageRoot()" (ngModelChange)="newImageRoot.set($event)" (keyup.enter)="addImageRoot()" placeholder="\\IMAGE-PC\ProductImages" />
+          </label>
+          <button class="primary" (click)="addImageRoot()">Add folder</button>
+        </div>
+
+        <div class="root-table">
+          <div class="root-header"><span>Path</span><span>Status</span><span></span></div>
+          <div class="root-row" *ngFor="let root of imageStorageRoots()">
+            <span class="root-path"><strong>{{ root.path }}</strong><small>{{ root.path.startsWith('\\\\') ? 'Network share' : 'Server folder' }}</small></span>
+            <span class="root-status" [class.available]="root.available"><i></i>{{ root.available ? 'Available' : 'Unavailable' }}</span>
+            <button class="danger-link" (click)="removeImageRoot(root)">Remove</button>
+          </div>
+          <div class="root-empty" *ngIf="!imageStorageRoots().length">No image folders are currently allowed.</div>
+        </div>
+
+        <div class="storage-note">
+          <strong>Network share permissions</strong>
+          <p>For UNC paths, the Windows account running this server must have read permission on the remote share. Use paths such as <code>\\IMAGE-PC\ProductImages</code>, not mapped drives such as <code>Z:\</code>.</p>
+        </div>
+      </section>
+    </ng-template>
+  </main>
+</div>
+
+<div class="backdrop" *ngIf="importOpen()" (click)="closeImport()"></div>
+<section class="modal import-modal" *ngIf="importOpen()" role="dialog" aria-modal="true">
+  <header>
+    <div><p class="eyebrow">Bulk import</p><h2>Import Amazon data</h2></div>
+    <button class="icon-button" title="Close" (click)="closeImport()">×</button>
+  </header>
+  <div class="modal-body import-options">
+    <section class="import-option">
+      <div class="import-option-heading">
+        <span class="import-icon">BR</span>
+        <div><h3>Amazon Business Report</h3><p>Creates Amazon products and groups child ASINs under their Parent ASIN.</p></div>
+      </div>
+      <label class="file-drop">
+        <strong>{{ businessReportFile()?.name || 'Choose Business Report CSV' }}</strong>
+        <small>Required columns: (Parent) ASIN, (Child) ASIN, Title, SKU</small>
+        <input type="file" accept=".csv,text/csv" (change)="onBusinessReportSelected($event)" />
+      </label>
+      <button class="primary" [disabled]="!businessReportFile() || loading()" (click)="importBusinessReport()">Import products</button>
+    </section>
+
+    <section class="import-option">
+      <div class="import-option-heading">
+        <span class="import-icon attribution">AT</span>
+        <div><h3>Amazon Attribution</h3><p>Matches rows by SKU and imports links for the six marketing channels.</p></div>
+      </div>
+      <label class="file-drop">
+        <strong>{{ bulkAttributionFile()?.name || 'Choose Attribution CSV' }}</strong>
+        <small>Include a SKU column and channel link columns.</small>
+        <input type="file" accept=".csv,text/csv" (change)="onBulkAttributionSelected($event)" />
+      </label>
+      <button class="primary" [disabled]="!bulkAttributionFile() || loading()" (click)="importBulkAttributions()">Import links</button>
+    </section>
+  </div>
+</section>
+
+<div class="backdrop" *ngIf="wizardOpen()" (click)="closeWizard()"></div>
+<section class="modal wizard" *ngIf="wizardOpen()" role="dialog" aria-modal="true">
+  <header><div><p class="eyebrow">New product</p><h2>Add product</h2></div><button class="icon-button" title="Close" (click)="closeWizard()">×</button></header>
+  <ol class="steps"><li [class.active]="wizardStep() === 1" [class.done]="wizardStep() > 1"><span>1</span>Basic info</li><li [class.active]="wizardStep() === 2" [class.done]="wizardStep() > 2"><span>2</span>Platforms</li><li [class.active]="wizardStep() === 3"><span>3</span>Amazon ASIN</li></ol>
+
+  <div class="modal-body" *ngIf="wizardStep() === 1">
+    <div class="form-grid">
+      <label>SKU number<input [(ngModel)]="createForm.sku" placeholder="e.g. 123456-BLACK" /></label>
+      <label>Product name<input [(ngModel)]="createForm.productName" placeholder="Product display name" /></label>
+      <label>Cost<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
+      <label>Image folder<input [(ngModel)]="createForm.imageFolder" placeholder="\\IMAGE-PC\ProductImages" /></label>
+      <label>Configured image root
+        <select [ngModel]="''" (ngModelChange)="selectImageRoot($event)">
+          <option value="">Choose a configured root</option>
+          <option *ngFor="let root of imageStorageRoots()" [value]="root.path" [disabled]="!root.available">{{ root.path }}{{ root.available ? '' : ' (unavailable)' }}</option>
+        </select>
+      </label>
+      <div class="wide image-mode-field">
+        <span>Image selection method</span>
+        <div class="segmented">
+          <button type="button" [class.active]="createForm.imageMatchMode === 'folder'" (click)="createForm.imageMatchMode = 'folder'">Product folder</button>
+          <button type="button" [class.active]="createForm.imageMatchMode === 'sku'" (click)="createForm.imageMatchMode = 'sku'">Search by SKU</button>
+        </div>
+        <small *ngIf="createForm.imageMatchMode === 'folder'">Every image directly inside this folder will be shown.</small>
+        <small *ngIf="createForm.imageMatchMode === 'sku'">Only images whose file name contains the complete SKU will be shown.</small>
+      </div>
+      <label class="wide">Product image path<span class="input-action"><input [(ngModel)]="createForm.imagePath" placeholder="Select a result or enter a path" /><button (click)="autoMatchImages()">{{ createForm.imageMatchMode === 'folder' ? 'Load folder' : 'Find by SKU' }}</button></span></label>
+    </div>
+    <div class="image-results" *ngIf="matchedImages().length">
+      <button *ngFor="let path of matchedImages()" [class.selected]="createForm.imagePath === path" (click)="chooseMatchedImage(path)"><span>▧</span><small>{{ path }}</small></button>
+    </div>
+  </div>
+
+  <div class="modal-body" *ngIf="wizardStep() === 2">
+    <p class="helper">Select every marketplace where this product is already listed.</p>
+    <div class="platform-choices">
+      <div *ngFor="let choice of platformChoices" [class.selected]="choice.selected">
+        <label class="platform-toggle"><input type="checkbox" [(ngModel)]="choice.selected" /><span>{{ choice.label.slice(0,1) }}</span><strong>{{ choice.label }}</strong></label>
+        <input *ngIf="choice.selected" [(ngModel)]="choice.url" [placeholder]="choice.label + ' listing URL'" />
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-body" *ngIf="wizardStep() === 3">
+    <p class="helper">Add the first Amazon ASIN now. More ASINs can be added later from product details.</p>
+    <div class="form-grid">
+      <label>ASIN<input [(ngModel)]="createAsin.asin" placeholder="B0XXXXXXXX" /></label>
+      <label>ASIN type<select [(ngModel)]="createAsin.asinType"><option value="parent">Parent</option><option value="child">Child</option></select></label>
+      <label *ngIf="createAsin.asinType === 'child'">Parent ASIN<input [(ngModel)]="createAsin.parentAsin" placeholder="Optional" /></label>
+      <label class="checkbox"><input type="checkbox" [(ngModel)]="createAsin.amazonAttributeDone" />Amazon Attribution completed</label>
+    </div>
+  </div>
+
+  <footer class="modal-footer"><button (click)="previousWizardStep()" [disabled]="wizardStep() === 1">Back</button><div><button (click)="closeWizard()">Cancel</button><button class="primary" (click)="wizardStep() === 3 ? finishCreate() : nextWizardStep()" [disabled]="loading()">{{ wizardStep() === 3 ? 'Create product' : wizardStep() === 2 && !platformChoices[0].selected ? 'Create product' : 'Continue' }}</button></div></footer>
+</section>
+
+<div class="backdrop" *ngIf="detailOpen()" (click)="closeDetail()"></div>
+<aside class="drawer" *ngIf="detailOpen() && selectedProduct() as product">
+  <header><div><p class="eyebrow">Product details</p><h2>{{ product.productName }}</h2><code>{{ product.sku }}</code></div><button class="icon-button" title="Close" (click)="closeDetail()">×</button></header>
+  <div class="drawer-body">
+    <section>
+      <div class="section-heading">
+        <div><h3>Basic information</h3></div>
+        <div class="section-actions">
+          <button type="button" (click)="useAmazonImage()" [disabled]="!listingDrafts.amazon || loading()">Use Amazon image</button>
+          <button type="button" (click)="updateProduct()">Save</button>
+        </div>
+      </div>
+      <div class="image-preview" *ngIf="product.imagePath">
+        <div><span>{{ productInitial(product) }}</span><img [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></div>
+        <span><strong>{{ product.imageSource === 'remote' ? 'Amazon image URL' : 'Server image' }}</strong><small>{{ product.imagePath }}</small></span>
+        <button (click)="copyImage(product.id)">Copy image</button>
+        <button (click)="copyImageLink(product.id)">Copy link</button>
+        <a [href]="productImageUrl(product.id, true)">Download</a>
+      </div>
+      <div class="form-grid"><label>SKU<input [(ngModel)]="editForm.sku" /></label><label>Name<input [(ngModel)]="editForm.productName" /></label><label>Cost<input type="number" [(ngModel)]="editForm.cost" /></label><label>Image path<input [(ngModel)]="editForm.imagePath" placeholder="Local path or https:// image URL" /></label></div>
+    </section>
+    <section>
+      <div class="section-heading"><div><h3>Marketplace listings</h3><p>Add, update, or remove channels.</p></div></div>
+      <div class="listing-editor" *ngFor="let option of listingOptions">
+        <strong>{{ option.label }}</strong><input [(ngModel)]="listingDrafts[option.value]" placeholder="Listing URL" />
+        <button (click)="saveListing(option.value)">Save</button>
+        <button class="danger-link" *ngIf="listingFor(product, option.value) as listing" (click)="removeListing(listing)">Remove</button>
+      </div>
+    </section>
+    <section *ngIf="listingFor(product, 'amazon')">
+      <div class="section-heading"><div><h3>Amazon ASINs</h3><p>Parent and child variation records.</p></div></div>
+      <div class="asin-list"><div *ngFor="let asin of product.amazonAsins"><span><strong>{{ asin.asin }}</strong><small>{{ asin.asinType }}<ng-container *ngIf="asin.parentAsin"> · Parent {{ asin.parentAsin }}</ng-container></small></span><em [class.done]="asin.amazonAttributeDone">{{ asin.amazonAttributeDone ? 'Attribution done' : 'Pending' }}</em><button class="icon-button" title="Remove ASIN" (click)="removeAsin(asin)">×</button></div></div>
+      <div class="asin-add"><input [(ngModel)]="asinDraft.asin" placeholder="New ASIN" /><select [(ngModel)]="asinDraft.asinType"><option value="parent">Parent</option><option value="child">Child</option></select><input *ngIf="asinDraft.asinType === 'child'" [(ngModel)]="asinDraft.parentAsin" placeholder="Parent ASIN" /><button (click)="addAsin()">Add</button></div>
+    </section>
+    <button class="delete-product" (click)="deleteProduct()">Delete product</button>
+  </div>
+</aside>
+
+<div class="toast" *ngIf="notice()">{{ notice() }}</div>
