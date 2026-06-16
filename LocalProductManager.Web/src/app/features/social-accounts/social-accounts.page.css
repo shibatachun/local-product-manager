@@ -4,6 +4,7 @@
 .topbar { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:18px; }
 .eyebrow { margin:0 0 4px; color:#176b87; font-size:11px; font-weight:800; text-transform:uppercase; }
 h1,h2,p { margin-top:0; letter-spacing:0; } h1 { margin-bottom:0; font-size:27px; } h2 { margin-bottom:0; font-size:16px; }
+.version-tag { display:block; margin-top:5px; color:#7d8993; font-size:11px; font-weight:750; }
 .topbar nav { display:flex; gap:8px; }
 .topbar a,.topbar button,.primary { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:0 13px; border:1px solid #cbd4da; border-radius:6px; color:#334e68; background:#fff; text-decoration:none; font-weight:750; }
 .primary { color:#fff; border-color:#176b87; background:#176b87; }

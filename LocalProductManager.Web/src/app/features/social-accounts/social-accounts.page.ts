@@ -22,6 +22,7 @@ export class SocialAccountsPage {
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
+  readonly appVersion = 'social-platform-content-v2';
   readonly today = new Date().toISOString().slice(0, 10);
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   private youtubePollTimer: number | null = null;

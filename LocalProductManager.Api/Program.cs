@@ -46,6 +46,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+const string appVersion = "2026-06-16-social-platform-content-v2";
 var angularRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",
@@ -71,6 +72,34 @@ else
 }
 
 app.UseCors("LanFrontend");
+app.MapGet("/api/app/version", () =>
+{
+    var indexPath = Path.Combine(angularRoot, "index.html");
+    var mainFiles = Directory.Exists(angularRoot)
+        ? Directory.GetFiles(angularRoot, "main-*.js")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Select(file => new
+            {
+                file.Name,
+                lastWriteTime = file.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+            })
+            .ToList()
+        : [];
+
+    return Results.Ok(new
+    {
+        version = appVersion,
+        contentRoot = app.Environment.ContentRootPath,
+        angularRoot,
+        angularRootExists = Directory.Exists(angularRoot),
+        indexExists = File.Exists(indexPath),
+        indexLastWriteTime = File.Exists(indexPath)
+            ? File.GetLastWriteTime(indexPath).ToString("yyyy-MM-dd HH:mm:ss")
+            : null,
+        mainFiles
+    });
+});
 if (Directory.Exists(angularRoot))
 {
     var angularFiles = new PhysicalFileProvider(angularRoot);

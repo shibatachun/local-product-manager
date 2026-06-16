@@ -3,6 +3,7 @@
     <div>
       <p class="eyebrow">Marketing Hub</p>
       <h1>Social Accounts</h1>
+      <small class="version-tag">{{ appVersion }}</small>
     </div>
     <nav><a routerLink="/">Product manager</a><button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button></nav>
   </header>
