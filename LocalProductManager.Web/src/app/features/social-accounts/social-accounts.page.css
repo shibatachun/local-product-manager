@@ -13,10 +13,11 @@ h1,h2,p { margin-top:0; letter-spacing:0; } h1 { margin-bottom:0; font-size:27px
 .filters { display:grid; grid-template-columns:150px 150px auto minmax(0,1fr); gap:10px; margin-bottom:14px; align-items:end; }
 label { display:grid; gap:5px; color:#55646f; font-size:12px; font-weight:700; }
 input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #cfd7dd; border-radius:6px; background:#fff; }
-.time-scale { display:flex; align-items:end; gap:5px; min-height:38px; padding:3px; border:1px solid #d9e1e6; border-radius:7px; background:#fff; }
-.time-scale button { min-width:44px; min-height:30px; padding:0 9px; border:0; border-radius:5px; color:#50606c; background:transparent; font-size:12px; font-weight:850; }
-.time-scale button:hover { background:#edf5f7; }
-.time-scale button.active { color:#fff; background:#176b87; }
+.time-scale { display:flex; align-items:end; gap:4px; min-height:38px; padding:0 2px; }
+.time-scale button { position:relative; min-width:38px; min-height:34px; padding:0 8px; border:0; color:#62717c; background:transparent; font-size:12px; font-weight:850; }
+.time-scale button:hover { color:#17212b; }
+.time-scale button.active { color:#00a86b; }
+.time-scale button.active::after { content:""; position:absolute; left:8px; right:8px; bottom:0; height:3px; border-radius:3px; background:#00a86b; }
 .metric-tabs { display:flex; flex-wrap:wrap; gap:7px; justify-content:flex-end; align-items:end; }
 .metric-tabs button { min-height:38px; padding:0 10px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-size:12px; font-weight:750; }
 .metric-tabs button.active { color:#fff; border-color:#176b87; background:#176b87; }
@@ -65,8 +66,7 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .chart-grid .date-grid { stroke:#f0f3f5; }
 .chart-grid text { fill:#75838f; font-size:11px; text-anchor:end; }
 .axis { stroke:#aebbc4; stroke-width:1.2; }
-.date-label { fill:#75838f; font-size:11px; }
-.date-label.end { text-anchor:end; }
+.date-label { fill:#75838f; font-size:11px; text-anchor:middle; }
 .trend-line { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 2px 2px rgba(28,43,54,.12)); }
 .crosshair { stroke:#4b6474; stroke-width:1; stroke-dasharray:4 4; }
 .hover-dot { stroke:#fff; stroke-width:2; }

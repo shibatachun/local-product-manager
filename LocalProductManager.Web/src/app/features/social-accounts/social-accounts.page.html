@@ -128,14 +128,13 @@
             <line [attr.x1]="chartLeft" [attr.y1]="tick.y" [attr.x2]="chartRight" [attr.y2]="tick.y"></line>
             <text [attr.x]="chartLeft - 10" [attr.y]="tick.y + 4">{{ tick.value | number }}</text>
           </g>
-          <g *ngFor="let date of chartDates(); let index = index">
-            <line class="date-grid" [attr.x1]="chartX(index)" [attr.y1]="chartTop" [attr.x2]="chartX(index)" [attr.y2]="chartBottom"></line>
+          <g *ngFor="let tick of xAxisTicks()">
+            <line class="date-grid" [attr.x1]="tick.x" [attr.y1]="chartTop" [attr.x2]="tick.x" [attr.y2]="chartBottom"></line>
           </g>
         </g>
         <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartBottom" [attr.x2]="chartRight" [attr.y2]="chartBottom"></line>
         <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartTop" [attr.x2]="chartLeft" [attr.y2]="chartBottom"></line>
-        <text class="date-label" [attr.x]="chartLeft" [attr.y]="chartBottom + 24">{{ chartDates()[0] || 'No data' }}</text>
-        <text class="date-label end" [attr.x]="chartRight" [attr.y]="chartBottom + 24">{{ chartDates()[chartDates().length - 1] || '' }}</text>
+        <text *ngFor="let tick of xAxisTicks()" class="date-label" [attr.x]="tick.x" [attr.y]="chartBottom + 24">{{ tick.label }}</text>
         <polyline *ngFor="let platform of chartPlatforms" class="trend-line" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
         <ng-container *ngIf="chartHover() as hover">
           <line class="crosshair" [attr.x1]="hover.x" [attr.y1]="chartTop" [attr.x2]="hover.x" [attr.y2]="chartBottom"></line>
@@ -145,7 +144,7 @@
           </g>
           <g class="chart-tooltip" [attr.transform]="'translate(' + hover.tooltipX + ' 38)'">
             <rect width="168" height="154" rx="7"></rect>
-            <text class="tooltip-date" x="12" y="22">{{ hover.date }}</text>
+            <text class="tooltip-date" x="12" y="22">{{ hover.dateLabel }}</text>
             <text class="tooltip-total" x="156" y="22">{{ hover.total | number }}</text>
             <g *ngFor="let row of hover.rows; let i = index" [attr.transform]="'translate(12 ' + (44 + i * 21) + ')'">
               <circle cx="0" cy="-4" r="4" [attr.fill]="row.color"></circle>

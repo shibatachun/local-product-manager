@@ -73,9 +73,9 @@ export class SocialAccountsPage {
     { value: 'followers', label: 'Followers', icon: 'F' },
   ];
   readonly rangePresets: { value: RangePreset; label: string }[] = [
-    { value: 'day', label: 'Day' },
-    { value: 'week', label: 'Week' },
-    { value: 'month', label: 'Month' },
+    { value: 'day', label: '1D' },
+    { value: 'week', label: '1W' },
+    { value: 'month', label: '1M' },
     { value: 'ytd', label: 'YTD' },
     { value: '5y', label: '5Y' },
   ];
@@ -152,6 +152,26 @@ export class SocialAccountsPage {
       return { value, y: this.chartY(value) };
     });
   });
+  readonly xAxisTicks = computed(() => {
+    const dates = this.chartDates();
+    if (!dates.length) return [];
+    if (dates.length === 1) {
+      return [{ label: this.formatChartDate(dates[0]), x: this.chartX(0) }];
+    }
+
+    const tickCount = Math.min(6, dates.length);
+    const indexes = new Set<number>();
+    for (var i = 0; i < tickCount; i++) {
+      indexes.add(Math.round((i * (dates.length - 1)) / (tickCount - 1)));
+    }
+
+    return Array.from(indexes)
+      .sort((left, right) => left - right)
+      .map(index => ({
+        label: this.formatChartDate(dates[index]),
+        x: this.chartX(index),
+      }));
+  });
   readonly chartHover = computed(() => {
     const index = this.hoveredChartIndex();
     const dates = this.chartDates();
@@ -168,6 +188,7 @@ export class SocialAccountsPage {
     });
     return {
       date,
+      dateLabel: this.formatTooltipDate(date),
       x: this.chartX(index),
       rows,
       total: rows.reduce((sum, row) => sum + row.value, 0),
@@ -478,6 +499,38 @@ export class SocialAccountsPage {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private parseDateInput(value: string): Date {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  private formatChartDate(value: string): string {
+    const date = this.parseDateInput(value);
+    const preset = this.selectedRangePreset();
+    if (preset === 'day' || preset === 'week') {
+      return date.toLocaleDateString(undefined, { weekday: 'short' });
+    }
+    if (preset === 'month') {
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    if (preset === 'ytd') {
+      return date.toLocaleDateString(undefined, { month: 'short' });
+    }
+    if (preset === '5y') {
+      return String(date.getFullYear());
+    }
+
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  private formatTooltipDate(value: string): string {
+    return this.parseDateInput(value).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   }
 }
 

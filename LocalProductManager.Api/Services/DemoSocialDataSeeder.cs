@@ -40,32 +40,51 @@ public static class DemoSocialDataSeeder
                 db.SocialAccounts.Add(account);
             }
 
-            for (var dayOffset = 6; dayOffset >= 0; dayOffset--)
+            for (var monthOffset = 60; monthOffset >= 1; monthOffset--)
             {
-                var index = 6 - dayOffset;
-                var date = today.AddDays(-dayOffset);
-                var metric = account.Metrics.FirstOrDefault(item => item.SnapshotDate == date);
-                if (metric is null)
-                {
-                    metric = new SocialMetricSnapshot
-                    {
-                        SocialAccount = account,
-                        SnapshotDate = date
-                    };
-                    account.Metrics.Add(metric);
-                }
+                var index = 60 - monthOffset;
+                var date = today.AddMonths(-monthOffset);
+                UpsertMetric(account, demo, date, index, 28, 210, 5);
+            }
 
-                metric.Clicks = demo.Clicks + index * 9 + index % 2 * 5;
-                metric.Likes = demo.Likes + index * 17 + index % 3 * 8;
-                metric.Views = demo.Views + index * 260 + index % 2 * 110;
-                metric.Comments = demo.Comments + index * 3 + index % 2;
-                metric.Shares = demo.Shares + index * 4 + index % 3;
-                metric.Followers = demo.Followers + index * 22 + index % 2 * 7;
-                metric.UpdatedAt = DateTimeOffset.UtcNow;
+            for (var dayOffset = 30; dayOffset >= 0; dayOffset--)
+            {
+                var index = 30 - dayOffset;
+                var date = today.AddDays(-dayOffset);
+                UpsertMetric(account, demo, date, index + 61, 9, 260, 3);
             }
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void UpsertMetric(
+        SocialAccount account,
+        DemoAccount demo,
+        DateOnly date,
+        int index,
+        int clickStep,
+        int viewStep,
+        int commentStep)
+    {
+        var metric = account.Metrics.FirstOrDefault(item => item.SnapshotDate == date);
+        if (metric is null)
+        {
+            metric = new SocialMetricSnapshot
+            {
+                SocialAccount = account,
+                SnapshotDate = date
+            };
+            account.Metrics.Add(metric);
+        }
+
+        metric.Clicks = demo.Clicks + index * clickStep + index % 2 * 5;
+        metric.Likes = demo.Likes + index * (clickStep + 8) + index % 3 * 8;
+        metric.Views = demo.Views + index * viewStep + index % 2 * 110;
+        metric.Comments = demo.Comments + index * commentStep + index % 2;
+        metric.Shares = demo.Shares + index * (commentStep + 1) + index % 3;
+        metric.Followers = demo.Followers + index * 22 + index % 2 * 7;
+        metric.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private sealed record DemoAccount(
