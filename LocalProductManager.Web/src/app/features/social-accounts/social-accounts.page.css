@@ -10,9 +10,13 @@ h1,h2,p { margin-top:0; letter-spacing:0; } h1 { margin-bottom:0; font-size:27px
 .primary { color:#fff; border-color:#176b87; background:#176b87; }
 .readonly-banner { margin:0 0 14px; padding:12px 14px; border:1px solid #d9e3e8; border-radius:7px; color:#405260; background:#eef6f8; font-size:13px; font-weight:700; }
 .readonly-copy { margin:10px 0 0; color:#73818c; font-size:12px; line-height:1.45; }
-.filters { display:grid; grid-template-columns:150px 150px minmax(0,1fr); gap:10px; margin-bottom:14px; }
+.filters { display:grid; grid-template-columns:150px 150px auto minmax(0,1fr); gap:10px; margin-bottom:14px; align-items:end; }
 label { display:grid; gap:5px; color:#55646f; font-size:12px; font-weight:700; }
 input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #cfd7dd; border-radius:6px; background:#fff; }
+.time-scale { display:flex; align-items:end; gap:5px; min-height:38px; padding:3px; border:1px solid #d9e1e6; border-radius:7px; background:#fff; }
+.time-scale button { min-width:44px; min-height:30px; padding:0 9px; border:0; border-radius:5px; color:#50606c; background:transparent; font-size:12px; font-weight:850; }
+.time-scale button:hover { background:#edf5f7; }
+.time-scale button.active { color:#fff; background:#176b87; }
 .metric-tabs { display:flex; flex-wrap:wrap; gap:7px; justify-content:flex-end; align-items:end; }
 .metric-tabs button { min-height:38px; padding:0 10px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-size:12px; font-weight:750; }
 .metric-tabs button.active { color:#fff; border-color:#176b87; background:#176b87; }

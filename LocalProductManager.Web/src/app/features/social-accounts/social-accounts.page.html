@@ -13,8 +13,13 @@
   </section>
 
   <section class="filters">
-    <label>From<input type="date" [(ngModel)]="range.from" (change)="load()" /></label>
-    <label>To<input type="date" [(ngModel)]="range.to" (change)="load()" /></label>
+    <label>From<input type="date" [(ngModel)]="range.from" (change)="rangeChanged()" /></label>
+    <label>To<input type="date" [(ngModel)]="range.to" (change)="rangeChanged()" /></label>
+    <div class="time-scale">
+      <button *ngFor="let preset of rangePresets" type="button" [class.active]="selectedRangePreset() === preset.value" (click)="applyRangePreset(preset.value)">
+        {{ preset.label }}
+      </button>
+    </div>
     <div class="metric-tabs">
       <button *ngFor="let metric of metrics" [class.active]="selectedMetric() === metric.value" (click)="selectedMetric.set(metric.value)">
         <span>{{ metric.icon }}</span>{{ metric.label }}

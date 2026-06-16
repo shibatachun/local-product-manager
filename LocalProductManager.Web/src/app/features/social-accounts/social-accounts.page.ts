@@ -23,8 +23,9 @@ export class SocialAccountsPage {
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
+  readonly selectedRangePreset = signal<RangePreset>('month');
   readonly appVersion = 'social-platform-content-v2';
-  readonly today = new Date().toISOString().slice(0, 10);
+  readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
   readonly chartHeight = 330;
@@ -35,7 +36,7 @@ export class SocialAccountsPage {
   private youtubePollTimer: number | null = null;
 
   readonly range = {
-    from: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString().slice(0, 10),
+    from: this.toDateInput(this.addDays(new Date(), -30)),
     to: this.today,
   };
   readonly accountForm = {
@@ -70,6 +71,13 @@ export class SocialAccountsPage {
     { value: 'comments', label: 'Comments', icon: 'M' },
     { value: 'shares', label: 'Shares', icon: 'S' },
     { value: 'followers', label: 'Followers', icon: 'F' },
+  ];
+  readonly rangePresets: { value: RangePreset; label: string }[] = [
+    { value: 'day', label: 'Day' },
+    { value: 'week', label: 'Week' },
+    { value: 'month', label: 'Month' },
+    { value: 'ytd', label: 'YTD' },
+    { value: '5y', label: '5Y' },
   ];
   readonly chartPlatforms: { value: SocialPlatform; label: string; color: string }[] = [
     { value: 'youtube', label: 'YouTube', color: '#d92727' },
@@ -178,6 +186,27 @@ export class SocialAccountsPage {
       this.accounts.set(accounts);
       if (!this.selectedAccountId() && accounts[0]) this.selectedAccountId.set(accounts[0].id);
     }, false);
+  }
+
+  async applyRangePreset(preset: RangePreset): Promise<void> {
+    const today = new Date();
+    let from = today;
+    if (preset === 'week') from = this.addDays(today, -6);
+    if (preset === 'month') from = this.addMonths(today, -1);
+    if (preset === 'ytd') from = new Date(today.getFullYear(), 0, 1);
+    if (preset === '5y') from = new Date(today.getFullYear() - 5, today.getMonth(), today.getDate());
+
+    this.selectedRangePreset.set(preset);
+    this.range.from = this.toDateInput(from);
+    this.range.to = this.toDateInput(today);
+    this.clearChartHover();
+    await this.load();
+  }
+
+  async rangeChanged(): Promise<void> {
+    this.selectedRangePreset.set('custom');
+    this.clearChartHover();
+    await this.load();
   }
 
   async createAccount(): Promise<void> {
@@ -431,4 +460,25 @@ export class SocialAccountsPage {
       if (this.notice() === message) this.notice.set('');
     }, 3200);
   }
+
+  private addDays(date: Date, days: number): Date {
+    const copy = new Date(date);
+    copy.setDate(copy.getDate() + days);
+    return copy;
+  }
+
+  private addMonths(date: Date, months: number): Date {
+    const copy = new Date(date);
+    copy.setMonth(copy.getMonth() + months);
+    return copy;
+  }
+
+  private toDateInput(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
+
+type RangePreset = 'day' | 'week' | 'month' | 'ytd' | '5y' | 'custom';
