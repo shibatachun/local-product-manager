@@ -75,7 +75,16 @@ if (Directory.Exists(angularRoot))
 {
     var angularFiles = new PhysicalFileProvider(angularRoot);
     app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = angularFiles });
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = angularFiles });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = angularFiles,
+        OnPrepareResponse = context =>
+        {
+            context.Context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            context.Context.Response.Headers.Pragma = "no-cache";
+            context.Context.Response.Headers.Expires = "0";
+        }
+    });
 }
 app.MapControllers();
 if (Directory.Exists(angularRoot))
@@ -84,6 +93,9 @@ if (Directory.Exists(angularRoot))
     app.MapFallback(async context =>
     {
         context.Response.ContentType = "text/html; charset=utf-8";
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers.Expires = "0";
         await context.Response.SendFileAsync(indexPath);
     });
 }

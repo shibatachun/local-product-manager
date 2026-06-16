@@ -119,13 +119,19 @@
       </svg>
     </section>
 
-    <section class="panel youtube-videos">
+    <section class="panel platform-content">
       <div class="section-heading">
-        <div><h2>YouTube videos</h2><p>{{ selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.' }}</p></div>
-        <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
+        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : 'Saved data and future API posts for this platform.' }}</p></div>
+        <button type="button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
       </div>
 
-      <div class="youtube-summary">
+      <div class="content-tabs">
+        <button *ngFor="let platform of contentPlatforms" type="button" [class.active]="selectedContentPlatform() === platform.value" (click)="selectContentPlatform(platform.value)">
+          {{ platform.label }}
+        </button>
+      </div>
+
+      <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'youtube'; else platformSummary">
         <div class="stat-card" *ngFor="let stat of youtubeStats()">
           <span>{{ stat.label.slice(0, 1) }}</span>
           <strong>{{ stat.value === null ? 'N/A' : (stat.value | number) }}</strong>
@@ -136,8 +142,18 @@
           <em>{{ stat.detail }}</em>
         </div>
       </div>
+      <ng-template #platformSummary>
+        <div class="youtube-summary">
+          <div class="stat-card" *ngFor="let stat of selectedPlatformTotals()">
+            <span>{{ stat.label.slice(0, 1) }}</span>
+            <strong>{{ stat.value | number }}</strong>
+            <small>{{ stat.label }}</small>
+            <em>{{ selectedContentMeta().label }} saved totals</em>
+          </div>
+        </div>
+      </ng-template>
 
-      <div class="video-workspace">
+      <div class="video-workspace" *ngIf="selectedContentPlatform() === 'youtube'; else genericPlatformContent">
         <div class="video-list">
           <button *ngFor="let video of youtubeSnapshot()?.videos || []" type="button" [class.active]="selectedYouTubeVideo()?.id === video.id" (click)="selectYouTubeVideo(video.id)">
             <img *ngIf="video.thumbnailUrl" [src]="video.thumbnailUrl" alt="" />
@@ -170,6 +186,28 @@
           </div>
         </ng-template>
       </div>
+      <ng-template #genericPlatformContent>
+        <div class="platform-workspace">
+          <div class="platform-post-list">
+            <div class="empty-videos" *ngIf="!selectedPlatformAccounts().length">
+              <strong>No {{ selectedContentMeta().pluralLabel }} loaded</strong>
+              <small>{{ selectedContentMeta().label }} API fetching is not connected yet. Host-entered data will appear here.</small>
+            </div>
+            <button *ngFor="let account of selectedPlatformAccounts()" type="button">
+              <span>
+                <strong>{{ account.accountName }}</strong>
+                <small>{{ account.metrics.length }} snapshots - {{ totalFor(account, selectedMetric()) | number }} {{ selectedMetric() }}</small>
+              </span>
+            </button>
+          </div>
+          <div class="video-detail empty">
+            <div>
+              <h3>{{ selectedContentMeta().label }} {{ selectedContentMeta().itemLabel }} data</h3>
+              <p>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }} will use this panel once that platform API is connected.</p>
+            </div>
+          </div>
+        </div>
+      </ng-template>
     </section>
 
     <section class="panel metric-entry" *ngIf="youtubeStatus()?.isAdminHost && selectedAccount() as account">

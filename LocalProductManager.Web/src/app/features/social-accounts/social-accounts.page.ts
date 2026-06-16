@@ -21,6 +21,7 @@ export class SocialAccountsPage {
   readonly youtubeStatus = signal<YouTubeAuthStatus | null>(null);
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
+  readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly today = new Date().toISOString().slice(0, 10);
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   private youtubePollTimer: number | null = null;
@@ -69,6 +70,13 @@ export class SocialAccountsPage {
     { value: 'pinterest', label: 'Pinterest', color: '#bd081c' },
     { value: 'tiktok', label: 'TikTok', color: '#111827' },
   ];
+  readonly contentPlatforms: { value: SocialPlatform; label: string; itemLabel: string; pluralLabel: string }[] = [
+    { value: 'youtube', label: 'YouTube', itemLabel: 'video', pluralLabel: 'videos' },
+    { value: 'pinterest', label: 'Pinterest', itemLabel: 'pin', pluralLabel: 'pins' },
+    { value: 'instagram', label: 'Instagram', itemLabel: 'post', pluralLabel: 'posts / reels' },
+    { value: 'facebook', label: 'Facebook', itemLabel: 'post', pluralLabel: 'posts' },
+    { value: 'tiktok', label: 'TikTok', itemLabel: 'video', pluralLabel: 'videos' },
+  ];
 
   readonly selectedAccount = computed(() =>
     this.accounts().find(account => account.id === this.selectedAccountId()) ?? this.accounts()[0] ?? null,
@@ -101,6 +109,24 @@ export class SocialAccountsPage {
       { label: 'Comments', value: video?.comments ?? 0, delta: video && previous ? video.comments - previous.comments : null, detail: video ? 'Selected video comments' : 'Select a video' },
       { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Channel subscribers' },
       { label: 'Videos', value: snapshot?.channel.videoCount ?? snapshot?.videos.length ?? 0, delta: null, detail: 'Channel video count' },
+    ];
+  });
+  readonly selectedContentMeta = computed(() =>
+    this.contentPlatforms.find(platform => platform.value === this.selectedContentPlatform()) ?? this.contentPlatforms[0],
+  );
+  readonly selectedPlatformAccounts = computed(() =>
+    this.accounts().filter(account => account.platform === this.selectedContentPlatform()),
+  );
+  readonly selectedPlatformTotals = computed(() => {
+    const accounts = this.selectedPlatformAccounts();
+    const metrics = accounts.flatMap(account => account.metrics);
+    return [
+      { label: 'Clicks', value: metrics.reduce((sum, metric) => sum + metric.clicks, 0) },
+      { label: 'Views', value: metrics.reduce((sum, metric) => sum + metric.views, 0) },
+      { label: 'Likes', value: metrics.reduce((sum, metric) => sum + metric.likes, 0) },
+      { label: 'Comments', value: metrics.reduce((sum, metric) => sum + metric.comments, 0) },
+      { label: 'Shares', value: metrics.reduce((sum, metric) => sum + metric.shares, 0) },
+      { label: 'Followers', value: metrics.reduce((sum, metric) => sum + metric.followers, 0) },
     ];
   });
 
@@ -257,6 +283,10 @@ export class SocialAccountsPage {
 
   selectYouTubeVideo(videoId: string): void {
     this.selectedYouTubeVideoId.set(videoId);
+  }
+
+  selectContentPlatform(platform: SocialPlatform): void {
+    this.selectedContentPlatform.set(platform);
   }
 
   platformPath(platform: SocialPlatform): string {
