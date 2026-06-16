@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { SocialAccount, SocialMetricKey, SocialPlatform, YouTubeAuthStatus } from '../../core/models';
+import { SocialAccount, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -19,8 +19,11 @@ export class SocialAccountsPage {
   readonly notice = signal('');
   readonly loading = signal(false);
   readonly youtubeStatus = signal<YouTubeAuthStatus | null>(null);
+  readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
+  readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly today = new Date().toISOString().slice(0, 10);
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
+  private youtubePollTimer: number | null = null;
 
   readonly range = {
     from: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString().slice(0, 10),
@@ -75,6 +78,24 @@ export class SocialAccountsPage {
     }
     return Array.from(dates).sort();
   });
+  readonly selectedYouTubeVideo = computed(() => {
+    const snapshot = this.youtubeSnapshot();
+    if (!snapshot?.videos.length) return null;
+    return snapshot.videos.find(video => video.id === this.selectedYouTubeVideoId()) ?? snapshot.videos[0];
+  });
+  readonly youtubeStats = computed(() => {
+    const snapshot = this.youtubeSnapshot();
+    const video = this.selectedYouTubeVideo();
+    const previous = video?.metrics.length && video.metrics.length > 1 ? video.metrics[video.metrics.length - 2] : null;
+    return [
+      { label: 'Clicks', value: snapshot?.channel.clicks ?? null, delta: null, detail: snapshot?.channel.clicksNote ?? 'Not available from YouTube Data API' },
+      { label: 'Views', value: video?.views ?? snapshot?.channel.views ?? 0, delta: video && previous ? video.views - previous.views : null, detail: video ? 'Selected video views' : 'Channel total views' },
+      { label: 'Likes', value: video?.likes ?? 0, delta: video && previous ? video.likes - previous.likes : null, detail: video ? 'Selected video likes' : 'Select a video' },
+      { label: 'Comments', value: video?.comments ?? 0, delta: video && previous ? video.comments - previous.comments : null, detail: video ? 'Selected video comments' : 'Select a video' },
+      { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Channel subscribers' },
+      { label: 'Videos', value: snapshot?.channel.videoCount ?? snapshot?.videos.length ?? 0, delta: null, detail: 'Channel video count' },
+    ];
+  });
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.load(), this.loadYouTubeStatus()]);
@@ -105,6 +126,17 @@ export class SocialAccountsPage {
       await this.load();
       this.selectedAccountId.set(account.id);
       this.showNotice('Social account added.');
+    });
+  }
+
+  async deleteAccount(account: SocialAccount): Promise<void> {
+    const action = account.platform === 'youtube' ? 'Disconnect' : 'Delete';
+    if (!confirm(`${action} ${account.accountName}? Metrics for this account will be removed.`)) return;
+    await this.perform(async () => {
+      await this.api.deleteAccount(account.id);
+      if (this.selectedAccountId() === account.id) this.selectedAccountId.set(null);
+      await this.load();
+      this.showNotice(`${this.platformLabel(account.platform)} account removed.`);
     });
   }
 
@@ -149,6 +181,7 @@ export class SocialAccountsPage {
         location.href = result.authorizationUrl;
         return;
       }
+      this.startYouTubeStatusPolling(popup);
       this.showNotice('Complete YouTube authorization in the popup, then click Sync YouTube.');
     });
   }
@@ -159,6 +192,38 @@ export class SocialAccountsPage {
       await Promise.all([this.load(), this.loadYouTubeStatus()]);
       this.showNotice(result.status);
     });
+  }
+
+  async disconnectYouTube(): Promise<void> {
+    if (!confirm('Disconnect YouTube authorization on this server?')) return;
+    await this.perform(async () => {
+      await this.api.youtubeDisconnect();
+      await this.loadYouTubeStatus();
+      this.showNotice('YouTube authorization disconnected. Reconnect to request the updated scopes.');
+    });
+  }
+
+  async fetchYouTubeVideos(): Promise<void> {
+    await this.perform(async () => {
+      const snapshot = await this.api.youtubeVideosDebug();
+      this.youtubeSnapshot.set(snapshot);
+      this.selectedYouTubeVideoId.set(snapshot.videos[0]?.id ?? null);
+      console.log('YouTube channel metrics', snapshot.channel);
+      console.table(snapshot.videos.map(video => ({
+        title: video.title,
+        views: video.views,
+        likes: video.likes,
+        comments: video.comments,
+        publishedAt: video.publishedAt,
+        id: video.id,
+      })));
+      console.log('YouTube raw debug snapshot', snapshot);
+      this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
+    });
+  }
+
+  selectYouTubeVideo(videoId: string): void {
+    this.selectedYouTubeVideoId.set(videoId);
   }
 
   accountPath(account: SocialAccount): string {
@@ -193,6 +258,18 @@ export class SocialAccountsPage {
     if (status.isConnected) return status.channelTitle || 'YouTube Channel';
     if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
     return status.message || 'Open Google authorization';
+  }
+
+  private startYouTubeStatusPolling(popup: Window): void {
+    if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
+    this.youtubePollTimer = window.setInterval(async () => {
+      await this.loadYouTubeStatus();
+      if (this.youtubeStatus()?.isConnected || popup.closed) {
+        if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
+        this.youtubePollTimer = null;
+        await this.load();
+      }
+    }, 1200);
   }
 
   private async perform(action: () => Promise<void>, showErrors = true): Promise<void> {

@@ -125,7 +125,38 @@ export interface SocialSyncResult {
 export interface YouTubeAuthStatus {
   isConfigured: boolean;
   isConnected: boolean;
+  channelId: string | null;
   channelTitle: string | null;
+  channelThumbnailUrl: string | null;
   message: string | null;
   redirectUri: string;
+}
+
+export interface YouTubeDebugSnapshot {
+  channel: {
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    followers: number;
+    views: number;
+    videoCount: number;
+    clicks: number | null;
+    clicksNote: string;
+  };
+  videos: {
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    views: number;
+    likes: number;
+    comments: number;
+    metrics: {
+      snapshotDate: string;
+      views: number;
+      likes: number;
+      comments: number;
+      clicks: number;
+    }[];
+  }[];
 }

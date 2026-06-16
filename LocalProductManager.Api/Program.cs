@@ -27,6 +27,7 @@ builder.Services.AddScoped<AmazonBusinessReportImportService>();
 builder.Services.AddScoped<BulkAttributionImportService>();
 builder.Services.AddScoped<AttributionFolderImportService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
+builder.Services.AddHostedService<YouTubeDailyMetricsHostedService>();
 builder.Services.AddHttpClient<AmazonImageLookupService>();
 builder.Services.AddHttpClient<RemoteImageProxyService>();
 builder.Services.AddSingleton<ImageMatcherService>();

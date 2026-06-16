@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { SocialAccount, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus } from './models';
+import { SocialAccount, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -26,6 +26,10 @@ export class SocialApiService {
     isActive: boolean;
   }): Promise<SocialAccount> {
     return firstValueFrom(this.http.post<SocialAccount>(`${this.baseUrl}/social-accounts`, body));
+  }
+
+  deleteAccount(accountId: number): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/social-accounts/${accountId}`));
   }
 
   saveMetric(accountId: number, body: {
@@ -57,5 +61,13 @@ export class SocialApiService {
 
   youtubeSync(): Promise<SocialSyncResult> {
     return firstValueFrom(this.http.post<SocialSyncResult>(`${this.baseUrl}/youtube/sync`, {}));
+  }
+
+  youtubeDisconnect(): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/youtube/auth/disconnect`, {}));
+  }
+
+  youtubeVideosDebug(): Promise<YouTubeDebugSnapshot> {
+    return firstValueFrom(this.http.get<YouTubeDebugSnapshot>(`${this.baseUrl}/youtube/videos/debug`));
   }
 }

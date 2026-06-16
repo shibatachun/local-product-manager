@@ -11,6 +11,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AmazonAttributionLink> AmazonAttributionLinks => Set<AmazonAttributionLink>();
     public DbSet<SocialAccount> SocialAccounts => Set<SocialAccount>();
     public DbSet<SocialMetricSnapshot> SocialMetricSnapshots => Set<SocialMetricSnapshot>();
+    public DbSet<SocialVideoMetricSnapshot> SocialVideoMetricSnapshots => Set<SocialVideoMetricSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -90,6 +91,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(metric => new { metric.SocialAccountId, metric.SnapshotDate }).IsUnique();
             entity.HasOne(metric => metric.SocialAccount)
                 .WithMany(account => account.Metrics)
+                .HasForeignKey(metric => metric.SocialAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SocialVideoMetricSnapshot>(entity =>
+        {
+            entity.ToTable("social_video_metric_snapshots");
+            entity.HasIndex(metric => new { metric.SocialAccountId, metric.PlatformVideoId, metric.SnapshotDate }).IsUnique();
+            entity.Property(metric => metric.PlatformVideoId).HasMaxLength(128).IsRequired();
+            entity.Property(metric => metric.Title).HasMaxLength(512).IsRequired();
+            entity.Property(metric => metric.ThumbnailUrl).HasMaxLength(2048);
+            entity.HasOne(metric => metric.SocialAccount)
+                .WithMany()
                 .HasForeignKey(metric => metric.SocialAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

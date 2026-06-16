@@ -2,6 +2,7 @@ using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LocalProductManager.Api.Controllers;
 
@@ -27,6 +28,16 @@ public sealed class YouTubeAuthController(
         {
             return BadRequest(ex.Message);
         }
+    }
+
+    [HttpPost("auth/disconnect")]
+    public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
+    {
+        await youtube.DisconnectAsync(cancellationToken);
+        await db.SocialAccounts
+            .Where(account => account.Platform == "youtube")
+            .ExecuteDeleteAsync(cancellationToken);
+        return NoContent();
     }
 
     [HttpGet("oauth/callback")]
@@ -76,6 +87,23 @@ public sealed class YouTubeAuthController(
         {
             var imported = await youtube.SyncChannelMetricsAsync(db, cancellationToken);
             return Ok(new SocialSyncResult(1, imported, "YouTube channel metrics synced."));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+    }
+
+    [HttpGet("videos/debug")]
+    public async Task<ActionResult<YouTubeDebugSnapshotDto>> VideosDebug(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await youtube.GetDebugSnapshotAsync(db, cancellationToken));
         }
         catch (InvalidOperationException ex)
         {

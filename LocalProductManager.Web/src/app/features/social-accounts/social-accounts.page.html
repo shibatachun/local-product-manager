@@ -28,17 +28,26 @@
         </label>
 
         <div class="connect-card" *ngIf="accountForm.platform === 'youtube'; else disabledConnect">
-          <div>
-            <span class="platform-mark youtube">YT</span>
+          <div class="connect-identity">
+            <img class="channel-avatar" *ngIf="youtubeStatus()?.channelThumbnailUrl; else youtubeMark" [src]="youtubeStatus()?.channelThumbnailUrl || ''" alt="" />
+            <ng-template #youtubeMark><span class="platform-mark youtube">YT</span></ng-template>
             <strong>{{ youtubeStatus()?.isConnected ? 'YouTube connected' : 'Connect YouTube' }}</strong>
             <small>{{ youtubeHelperText() }}</small>
           </div>
-          <button type="button" (click)="connectYouTube()" [disabled]="loading()">
-            Connect YouTube
-          </button>
-          <button class="primary" type="button" (click)="syncYouTube()" [disabled]="!youtubeStatus()?.isConnected || loading()">
-            Sync
-          </button>
+          <div class="connect-actions">
+            <button type="button" *ngIf="!youtubeStatus()?.isConnected" (click)="connectYouTube()" [disabled]="loading()">
+              Connect
+            </button>
+            <button class="primary" type="button" (click)="syncYouTube()" [disabled]="!youtubeStatus()?.isConnected || loading()">
+              Sync
+            </button>
+            <button type="button" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">
+              Fetch videos
+            </button>
+            <button type="button" (click)="disconnectYouTube()" [disabled]="!youtubeStatus()?.isConnected || loading()">
+              Disconnect
+            </button>
+          </div>
         </div>
 
         <ng-template #disabledConnect>
@@ -64,11 +73,16 @@
 
       <section class="panel account-list">
         <h2>Accounts</h2>
-        <button *ngFor="let account of accounts()" [class.active]="selectedAccount()?.id === account.id" (click)="selectedAccountId.set(account.id)">
-          <i [style.background]="account.color || '#176b87'"></i>
-          <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
-          <em>{{ totalFor(account, selectedMetric()) | number }}</em>
-        </button>
+        <div class="account-row" *ngFor="let account of accounts()" [class.active]="selectedAccount()?.id === account.id">
+          <button class="account-pick" type="button" (click)="selectedAccountId.set(account.id)">
+            <i [style.background]="account.color || '#176b87'"></i>
+            <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
+            <em>{{ totalFor(account, selectedMetric()) | number }}</em>
+          </button>
+          <button class="disconnect-account" type="button" (click)="deleteAccount(account)">
+            {{ account.platform === 'youtube' ? 'Disconnect' : 'Delete' }}
+          </button>
+        </div>
       </section>
     </aside>
 
@@ -85,6 +99,59 @@
         <text x="8" y="42">{{ maxMetricValue() | number }}</text>
         <polyline *ngFor="let account of accounts()" [attr.points]="accountPath(account)" [attr.stroke]="account.color || '#176b87'"></polyline>
       </svg>
+    </section>
+
+    <section class="panel youtube-videos">
+      <div class="section-heading">
+        <div><h2>YouTube videos</h2><p>{{ selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.' }}</p></div>
+        <button type="button" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
+      </div>
+
+      <div class="youtube-summary">
+        <div class="stat-card" *ngFor="let stat of youtubeStats()">
+          <span>{{ stat.label.slice(0, 1) }}</span>
+          <strong>{{ stat.value === null ? 'N/A' : (stat.value | number) }}</strong>
+          <small>{{ stat.label }}</small>
+          <b *ngIf="stat.delta !== null" [class.positive]="stat.delta > 0" [class.flat]="stat.delta === 0">
+            {{ stat.delta > 0 ? '+' : '' }}{{ stat.delta | number }} since previous
+          </b>
+          <em>{{ stat.detail }}</em>
+        </div>
+      </div>
+
+      <div class="video-workspace">
+        <div class="video-list">
+          <button *ngFor="let video of youtubeSnapshot()?.videos || []" type="button" [class.active]="selectedYouTubeVideo()?.id === video.id" (click)="selectYouTubeVideo(video.id)">
+            <img *ngIf="video.thumbnailUrl" [src]="video.thumbnailUrl" alt="" />
+            <span>
+              <strong>{{ video.title }}</strong>
+            <small>{{ video.views | number }} views · {{ video.likes | number }} likes · {{ video.comments | number }} comments</small>
+            <em>{{ video.metrics.length }} snapshots recorded</em>
+          </span>
+        </button>
+          <div class="empty-videos" *ngIf="!(youtubeSnapshot()?.videos?.length)">
+            <strong>No videos loaded</strong>
+            <small>Connect YouTube, then click Fetch videos.</small>
+          </div>
+        </div>
+
+        <div class="video-detail" *ngIf="selectedYouTubeVideo() as video; else noVideoSelected">
+          <img *ngIf="video.thumbnailUrl" [src]="video.thumbnailUrl" alt="" />
+          <div>
+            <h3>{{ video.title }}</h3>
+            <p>{{ video.publishedAt ? (video.publishedAt | date:'mediumDate') : 'No publish date' }}</p>
+            <a [href]="'https://www.youtube.com/watch?v=' + video.id" target="_blank" rel="noreferrer">Open video</a>
+          </div>
+        </div>
+        <ng-template #noVideoSelected>
+          <div class="video-detail empty">
+            <div>
+              <h3>Select a video</h3>
+              <p>Video metrics will appear in the stat cards above.</p>
+            </div>
+          </div>
+        </ng-template>
+      </div>
     </section>
 
     <section class="panel metric-entry" *ngIf="selectedAccount() as account">

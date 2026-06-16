@@ -64,6 +64,28 @@ public sealed class DatabaseSchemaService
             """);
         db.Database.ExecuteSqlRaw(
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_social_metric_snapshots_SocialAccountId_SnapshotDate ON social_metric_snapshots (SocialAccountId, SnapshotDate)");
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS social_video_metric_snapshots (
+                Id INTEGER NOT NULL CONSTRAINT PK_social_video_metric_snapshots PRIMARY KEY AUTOINCREMENT,
+                SocialAccountId INTEGER NOT NULL,
+                PlatformVideoId TEXT NOT NULL,
+                Title TEXT NOT NULL,
+                ThumbnailUrl TEXT NULL,
+                PublishedAt TEXT NULL,
+                SnapshotDate TEXT NOT NULL,
+                Clicks INTEGER NOT NULL,
+                Views INTEGER NOT NULL,
+                Likes INTEGER NOT NULL,
+                Comments INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CONSTRAINT FK_social_video_metric_snapshots_social_accounts_SocialAccountId
+                    FOREIGN KEY (SocialAccountId) REFERENCES social_accounts (Id) ON DELETE CASCADE
+            )
+            """);
+        db.Database.ExecuteSqlRaw(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_social_video_metric_snapshots_SocialAccountId_PlatformVideoId_SnapshotDate ON social_video_metric_snapshots (SocialAccountId, PlatformVideoId, SnapshotDate)");
     }
 
     private static HashSet<string> GetProductColumns(DbContext db)
