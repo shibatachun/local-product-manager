@@ -9,6 +9,7 @@ import {
   BulkAttributionImportResult,
   BusinessReportImportResult,
   ImageMatchResult,
+  ImageHostBrowseResult,
   ImageStorageRoot,
   Platform,
   ProductDetail,
@@ -149,6 +150,16 @@ export class ProductApiService {
     }
 
     return `${this.baseUrl}/images/preview?path=${encodeURIComponent(trimmed)}`;
+  }
+
+  imageDownloadUrl(path: string): string {
+    return `${this.baseUrl}/images/preview?path=${encodeURIComponent(path.trim())}&download=true`;
+  }
+
+  browseImageHost(path: string): Promise<ImageHostBrowseResult> {
+    return firstValueFrom(this.http.get<ImageHostBrowseResult>(`${this.baseUrl}/images/host/browse`, {
+      params: { path },
+    }));
   }
 
   imageStorageRoots(): Promise<ImageStorageRoot[]> {

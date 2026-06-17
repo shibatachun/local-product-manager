@@ -12,6 +12,19 @@ public sealed record ImageStorageRoot(
     string Path,
     bool Available);
 
+public sealed record ImageHostEntry(
+    string Name,
+    string Path,
+    string Type,
+    long? Size,
+    DateTimeOffset? ModifiedAt);
+
+public sealed record ImageHostBrowseResult(
+    string Path,
+    string? ParentPath,
+    IReadOnlyList<ImageHostEntry> Folders,
+    IReadOnlyList<ImageHostEntry> Images);
+
 public sealed class ImageFileService
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -132,6 +145,49 @@ public sealed class ImageFileService
         var normalizedPath = NormalizePath(folderPath, contentRootPath);
         fullPath = normalizedPath;
         return GetRootPaths().Any(root => IsUnderRoot(normalizedPath, root));
+    }
+
+    public ImageHostBrowseResult BrowseDirectory(string folderPath)
+    {
+        if (!TryGetAllowedDirectory(folderPath, out var fullPath))
+        {
+            throw new UnauthorizedAccessException("The image host folder is outside the configured image storage roots.");
+        }
+
+        if (!Directory.Exists(fullPath))
+        {
+            throw new DirectoryNotFoundException($"Folder not found: {fullPath}");
+        }
+
+        var roots = GetRootPaths();
+        var parentPath = Directory.GetParent(fullPath)?.FullName;
+        if (parentPath is null || !roots.Any(root => IsUnderRoot(parentPath, root)))
+        {
+            parentPath = null;
+        }
+
+        var folders = Directory
+            .EnumerateDirectories(fullPath)
+            .Select(path =>
+            {
+                var info = new DirectoryInfo(path);
+                return new ImageHostEntry(info.Name, info.FullName, "folder", null, info.LastWriteTime);
+            })
+            .OrderBy(item => item.Name)
+            .ToArray();
+
+        var images = Directory
+            .EnumerateFiles(fullPath)
+            .Where(path => AllowedExtensions.Contains(Path.GetExtension(path)))
+            .Select(path =>
+            {
+                var info = new FileInfo(path);
+                return new ImageHostEntry(info.Name, info.FullName, "image", info.Length, info.LastWriteTime);
+            })
+            .OrderBy(item => item.Name)
+            .ToArray();
+
+        return new ImageHostBrowseResult(fullPath, parentPath, folders, images);
     }
 
     private List<string> LoadStoredRoots(IEnumerable<string> configuredRoots)

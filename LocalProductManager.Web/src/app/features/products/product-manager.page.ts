@@ -10,6 +10,7 @@ import {
   ProductDetail,
   ProductListItem,
   ProductListing,
+  ImageHostBrowseResult,
   ImageStorageRoot,
   StoreLink,
 } from '../../core/models';
@@ -125,8 +126,10 @@ export class ProductManagerPage {
   readonly unmatchedAttributionFiles = signal<string[]>([]);
   readonly expandedParents = signal<Set<number>>(new Set());
   readonly imageStorageRoots = signal<ImageStorageRoot[]>([]);
+  readonly imageHost = signal<ImageHostBrowseResult | null>(null);
   readonly storeLinks = signal<StoreLink[]>([]);
   readonly newImageRoot = signal('');
+  readonly imageHostPath = signal('');
 
   readonly platformOptions: { value: Platform | ''; label: string }[] = [
     { value: '', label: 'All platforms' },
@@ -366,6 +369,37 @@ export class ProductManagerPage {
     if (path) this.createForm.imageFolder = path;
   }
 
+  selectImageHostRoot(path: string): void {
+    if (path) this.imageHostPath.set(path);
+  }
+
+  async browseImageHost(path = this.imageHostPath()): Promise<void> {
+    const trimmed = path.trim();
+    if (!trimmed) return this.showNotice('Enter or choose an image host folder first.');
+
+    await this.perform(async () => {
+      const result = await this.api.browseImageHost(trimmed);
+      this.imageHost.set(result);
+      this.imageHostPath.set(result.path);
+      this.showNotice(`${result.folders.length} folder(s), ${result.images.length} image(s) loaded.`);
+    });
+  }
+
+  async openImageHostFolder(path: string): Promise<void> {
+    await this.browseImageHost(path);
+  }
+
+  imageDownloadUrl(path: string): string {
+    return this.api.imageDownloadUrl(path);
+  }
+
+  fileSize(size: number | null): string {
+    if (size === null) return '';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  }
+
   async loadProducts(): Promise<void> {
     await this.perform(async () => {
       this.products.set(await this.api.search(this.search(), this.platformFilter()));
@@ -486,6 +520,8 @@ export class ProductManagerPage {
       const root = await this.api.addImageStorageRoot(path);
       this.newImageRoot.set('');
       await this.loadImageStorageRoots();
+      this.imageHostPath.set(root.path);
+      if (root.available) await this.browseImageHost(root.path);
       this.showNotice(root.available
         ? 'Image folder added and is accessible.'
         : 'Image folder added, but the server cannot currently access it.');

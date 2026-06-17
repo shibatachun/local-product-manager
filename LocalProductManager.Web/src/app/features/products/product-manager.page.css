@@ -130,6 +130,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 
 .storage-page { max-width: 980px; border: 1px solid #dce2e7; border-radius: 8px; background: #fff; }
 .storage-intro { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px; border-bottom: 1px solid #e2e7ea; }
+.storage-intro.compact { padding: 0 0 14px; border-bottom: 0; }
 .storage-intro p { margin: 5px 0 0; color: #74818b; font-size: 13px; }
 .add-root { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 10px; padding: 18px 22px; border-bottom: 1px solid #e2e7ea; background: #fafbfc; }
 .add-root label { display: grid; gap: 6px; color: #55646f; font-size: 12px; font-weight: 700; }
@@ -144,6 +145,27 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .root-status.available { color: #287050; }.root-status.available i { background: #3c9b70; box-shadow: 0 0 0 3px #dff3e9; }
 .root-row .danger-link { min-height: 32px; border: 0; background: transparent; font-size: 11px; font-weight: 700; }
 .root-empty { padding: 36px 0; color: #84919b; text-align: center; }
+.image-host-panel { margin: 22px; padding: 18px; border: 1px solid #dce2e7; border-radius: 8px; background: #fbfcfd; }
+.image-host-controls { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(220px,.8fr) auto; gap: 10px; align-items: end; }
+.image-host-controls label { display: grid; gap: 6px; color: #55646f; font-size: 12px; font-weight: 700; }
+.image-host-browser { margin-top: 16px; border-top: 1px solid #e2e7ea; padding-top: 14px; }
+.image-host-current { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; margin-bottom: 12px; }
+.image-host-current button { min-height: 32px; padding: 0 10px; border: 1px solid #cbd4da; border-radius: 5px; background: #fff; font-size: 12px; font-weight: 750; }
+.image-host-current code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.image-host-current span { color: #72808b; font-size: 11px; font-weight: 750; }
+.host-folder-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 8px; margin-bottom: 14px; }
+.host-folder-grid button { min-width: 0; padding: 12px; border: 1px solid #d6dee3; border-radius: 7px; background: #fff; text-align: left; }
+.host-folder-grid button:hover { border-color: #8fb7c3; background: #edf7f9; }
+.host-folder-grid span { display: inline-block; margin-bottom: 8px; padding: 3px 6px; border-radius: 4px; color: #176b87; background: #e8f3f6; font-size: 10px; font-weight: 850; }
+.host-folder-grid strong,.host-folder-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-folder-grid small { margin-top: 5px; color: #7d8993; font-size: 11px; }
+.host-image-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 10px; max-height: 560px; overflow: auto; padding-right: 3px; }
+.host-image-card { display: grid; grid-template-rows: 128px auto auto; min-width: 0; padding: 8px; border: 1px solid #d6dee3; border-radius: 7px; color: #17212b; background: #fff; text-decoration: none; }
+.host-image-card:hover { border-color: #2783a0; box-shadow: 0 4px 12px rgba(24,40,52,.10); }
+.host-image-card img { width: 100%; height: 128px; object-fit: contain; border-radius: 5px; background: #fff; }
+.host-image-card strong,.host-image-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-image-card strong { margin-top: 7px; font-size: 12px; }
+.host-image-card small { margin-top: 4px; color: #7d8993; font-size: 10px; }
 .storage-note { margin: 20px 22px 22px; padding: 14px; border-left: 3px solid #2783a0; background: #eef7f9; }
 .storage-note strong { font-size: 12px; }.storage-note p { margin: 5px 0 0; color: #61717c; font-size: 12px; line-height: 1.6; }
 
@@ -226,6 +248,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .store-band { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .pricing-page { grid-template-columns:1fr; }
   .marketing-layout { grid-template-columns:260px minmax(0,1fr); }.channel-grid { grid-template-columns:1fr; }
+  .image-host-controls { grid-template-columns: 1fr; }
   th:nth-child(6),td:nth-child(6){display:none}
 }
 
@@ -242,6 +265,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .marketing-layout { grid-template-columns:1fr; height:auto; max-height:none; overflow:visible; }.marketing-list { max-height: 360px; border-right:0;border-bottom:1px solid #e2e7ea; }.marketing-workspace { overflow: visible; padding:16px; }
   .folder-import { grid-template-columns: 1fr; margin: -16px -16px 18px; padding: 14px 16px; }
   .add-root { grid-template-columns: 1fr; }.root-header { display:none; }.root-row { grid-template-columns:minmax(0,1fr) auto; padding:10px 0; }.root-row .danger-link { grid-column:2; }
+  .image-host-current { grid-template-columns: 1fr; }.image-host-panel { margin: 16px 12px; }.host-image-grid { grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); }
   .form-grid,.image-results { grid-template-columns:1fr; }.form-grid .wide { grid-column:auto; }.platform-choices > div { grid-template-columns:1fr; }
   .import-options { grid-template-columns: 1fr; }
   .steps li { font-size:0; }.steps li span { font-size:12px; }

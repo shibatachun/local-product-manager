@@ -73,6 +73,35 @@ public sealed class ImageMatcherController(
         }
     }
 
+    [HttpGet("host/browse")]
+    public ActionResult<ImageHostBrowseResult> BrowseHost([FromQuery] string path)
+    {
+        try
+        {
+            return Ok(imageFiles.BrowseDirectory(path));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = ex.Message,
+                allowedRoots = imageFiles.GetRoots().Select(root => root.Path)
+            });
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (IOException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image host folder is temporarily unavailable.");
+        }
+    }
+
     [HttpPost("from-listing")]
     public async Task<ActionResult<ListingImageLookupResult>> FromListing(
         ListingImageLookupRequest request,
@@ -99,7 +128,7 @@ public sealed class ImageMatcherController(
     }
 
     [HttpGet("preview")]
-    public IActionResult Preview([FromQuery] string path)
+    public IActionResult Preview([FromQuery] string path, [FromQuery] bool download)
     {
         try
         {
@@ -113,7 +142,9 @@ public sealed class ImageMatcherController(
                 useAsync: true);
 
             Response.Headers.CacheControl = "private, max-age=300";
-            return File(stream, image.ContentType, enableRangeProcessing: true);
+            return download
+                ? File(stream, image.ContentType, image.FileName, enableRangeProcessing: true)
+                : File(stream, image.ContentType, enableRangeProcessing: true);
         }
         catch (ArgumentException ex)
         {

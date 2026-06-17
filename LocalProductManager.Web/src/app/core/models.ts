@@ -67,6 +67,21 @@ export interface ImageStorageRoot {
   available: boolean;
 }
 
+export interface ImageHostEntry {
+  name: string;
+  path: string;
+  type: 'folder' | 'image';
+  size: number | null;
+  modifiedAt: string | null;
+}
+
+export interface ImageHostBrowseResult {
+  path: string;
+  parentPath: string | null;
+  folders: ImageHostEntry[];
+  images: ImageHostEntry[];
+}
+
 export interface StoreLink {
   platform: Platform;
   label: string;

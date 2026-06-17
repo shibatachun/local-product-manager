@@ -301,9 +301,54 @@
           <div class="root-empty" *ngIf="!imageStorageRoots().length">No image folders are currently allowed.</div>
         </div>
 
+        <div class="image-host-panel">
+          <div class="storage-intro compact">
+            <div>
+              <h2>Image host</h2>
+              <p>Browse folders and serve images through this website so client computers do not need access to the original share.</p>
+            </div>
+          </div>
+          <div class="image-host-controls">
+            <label>
+              Host folder
+              <input [ngModel]="imageHostPath()" (ngModelChange)="imageHostPath.set($event)" placeholder="\\IMAGE-PC\ProductImages" />
+            </label>
+            <label>
+              Configured root
+              <select [ngModel]="''" (ngModelChange)="selectImageHostRoot($event)">
+                <option value="">Choose a root</option>
+                <option *ngFor="let root of imageStorageRoots()" [value]="root.path" [disabled]="!root.available">{{ root.path }}{{ root.available ? '' : ' (unavailable)' }}</option>
+              </select>
+            </label>
+            <button class="primary" type="button" (click)="browseImageHost()">Load images</button>
+          </div>
+          <div class="image-host-browser" *ngIf="imageHost() as host">
+            <div class="image-host-current">
+              <button type="button" *ngIf="host.parentPath" (click)="openImageHostFolder(host.parentPath)">Up</button>
+              <code>{{ host.path }}</code>
+              <span>{{ host.folders.length }} folder(s) · {{ host.images.length }} image(s)</span>
+            </div>
+            <div class="host-folder-grid" *ngIf="host.folders.length">
+              <button type="button" *ngFor="let folder of host.folders" (click)="openImageHostFolder(folder.path)">
+                <span>Folder</span>
+                <strong>{{ folder.name }}</strong>
+                <small>{{ folder.modifiedAt | date:'MMM d, y, h:mm a' }}</small>
+              </button>
+            </div>
+            <div class="host-image-grid" *ngIf="host.images.length">
+              <a class="host-image-card" *ngFor="let image of host.images" [href]="imageDownloadUrl(image.path)" [title]="image.path">
+                <img [src]="imagePreviewUrl(image.path)" [alt]="image.name" (error)="hideBrokenImage($event)" />
+                <strong>{{ image.name }}</strong>
+                <small>{{ fileSize(image.size) }} · {{ image.modifiedAt | date:'MMM d, y' }}</small>
+              </a>
+            </div>
+            <div class="root-empty" *ngIf="!host.folders.length && !host.images.length">This folder does not contain subfolders or supported image files.</div>
+          </div>
+        </div>
+
         <div class="storage-note">
           <strong>Network share permissions</strong>
-          <p>For UNC paths, the Windows account running this server must have read permission on the remote share. Use paths such as <code>\\IMAGE-PC\ProductImages</code>, not mapped drives such as <code>Z:\</code>.</p>
+          <p>For UNC paths, the Windows account running this server must have read permission on the remote share. Visitors only access the server API; they do not need permission to the original share. Use paths such as <code>\\IMAGE-PC\ProductImages</code>, not mapped drives such as <code>Z:\</code>.</p>
         </div>
       </section>
     </ng-template>
