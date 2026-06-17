@@ -27,6 +27,7 @@ builder.Services.AddScoped<AmazonBusinessReportImportService>();
 builder.Services.AddScoped<BulkAttributionImportService>();
 builder.Services.AddScoped<AttributionFolderImportService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
+builder.Services.AddHttpClient<PinterestOAuthService>();
 builder.Services.AddHostedService<YouTubeDailyMetricsHostedService>();
 builder.Services.AddHttpClient<AmazonImageLookupService>();
 builder.Services.AddHttpClient<RemoteImageProxyService>();
@@ -48,7 +49,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-const string appVersion = "2026-06-16-social-platform-content-v2";
+const string appVersion = "2026-06-17-pinterest-oauth-v1";
 var angularRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",

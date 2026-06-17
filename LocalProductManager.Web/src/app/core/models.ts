@@ -156,6 +156,17 @@ export interface YouTubeAuthStatus {
   isAdminHost: boolean;
 }
 
+export interface PinterestAuthStatus {
+  isConfigured: boolean;
+  isConnected: boolean;
+  accountId: string | null;
+  accountName: string | null;
+  accountThumbnailUrl: string | null;
+  message: string | null;
+  redirectUri: string;
+  isAdminHost: boolean;
+}
+
 export interface YouTubeDebugSnapshot {
   channel: {
     id: string;

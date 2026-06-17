@@ -36,6 +36,7 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .connect-card.pending { opacity:.82; }
 .platform-mark { display:grid; grid-row:1/3; place-items:center; width:38px; height:38px; border-radius:7px; color:#fff; font-size:12px; font-weight:850; }
 .platform-mark.youtube { background:#d92727; }
+.platform-mark.pinterest { background:#bd081c; }
 .platform-mark.muted { background:#7b8790; }
 .channel-avatar { grid-row:1/3; width:38px; height:38px; border-radius:7px; object-fit:cover; background:#dce2e7; }
 .manual-divider { display:flex; align-items:center; gap:10px; margin:14px 0 0; color:#8a969f; font-size:11px; font-weight:800; text-transform:uppercase; }

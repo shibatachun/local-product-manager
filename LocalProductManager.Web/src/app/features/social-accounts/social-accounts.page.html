@@ -41,7 +41,7 @@
           </select>
         </label>
 
-        <div class="connect-card" *ngIf="accountForm.platform === 'youtube'; else disabledConnect">
+        <div class="connect-card" *ngIf="accountForm.platform === 'youtube'; else nonYoutubeConnect">
           <div class="connect-identity">
             <img class="channel-avatar" *ngIf="youtubeStatus()?.channelThumbnailUrl; else youtubeMark" [src]="youtubeStatus()?.channelThumbnailUrl || ''" alt="" />
             <ng-template #youtubeMark><span class="platform-mark youtube">YT</span></ng-template>
@@ -63,6 +63,28 @@
             </button>
           </div>
         </div>
+
+        <ng-template #nonYoutubeConnect>
+          <div class="connect-card" *ngIf="accountForm.platform === 'pinterest'; else disabledConnect">
+            <div class="connect-identity">
+              <img class="channel-avatar" *ngIf="pinterestStatus()?.accountThumbnailUrl; else pinterestMark" [src]="pinterestStatus()?.accountThumbnailUrl || ''" alt="" />
+              <ng-template #pinterestMark><span class="platform-mark pinterest">P</span></ng-template>
+              <strong>{{ pinterestStatus()?.isConnected ? 'Pinterest connected' : 'Connect Pinterest' }}</strong>
+              <small>{{ pinterestHelperText() }}</small>
+            </div>
+            <div class="connect-actions">
+              <button type="button" *ngIf="!pinterestStatus()?.isConnected" (click)="connectPinterest()" [disabled]="loading()">
+                Connect
+              </button>
+              <button class="primary" type="button" (click)="syncPinterest()" [disabled]="!pinterestStatus()?.isConnected || loading()">
+                Sync
+              </button>
+              <button type="button" (click)="disconnectPinterest()" [disabled]="!pinterestStatus()?.isConnected || loading()">
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </ng-template>
 
         <ng-template #disabledConnect>
           <div class="connect-card pending">
@@ -101,7 +123,7 @@
             <em>{{ totalFor(account, selectedMetric()) | number }}</em>
           </button>
           <button class="disconnect-account" *ngIf="youtubeStatus()?.isAdminHost" type="button" (click)="deleteAccount(account)">
-            {{ account.platform === 'youtube' ? 'Disconnect' : 'Delete' }}
+            {{ account.platform === 'youtube' || account.platform === 'pinterest' ? 'Disconnect' : 'Delete' }}
           </button>
         </div>
       </section>

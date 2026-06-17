@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, PinterestAuthStatus, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -73,6 +73,22 @@ export class SocialApiService {
 
   youtubeStoredVideos(): Promise<YouTubeDebugSnapshot> {
     return firstValueFrom(this.http.get<YouTubeDebugSnapshot>(`${this.baseUrl}/youtube/videos`));
+  }
+
+  pinterestStatus(): Promise<PinterestAuthStatus> {
+    return firstValueFrom(this.http.get<PinterestAuthStatus>(`${this.baseUrl}/pinterest/auth/status`));
+  }
+
+  pinterestAuthStart(): Promise<{ authorizationUrl: string; redirectUri: string }> {
+    return firstValueFrom(this.http.get<{ authorizationUrl: string; redirectUri: string }>(`${this.baseUrl}/pinterest/auth/start`));
+  }
+
+  pinterestSync(): Promise<SocialSyncResult> {
+    return firstValueFrom(this.http.post<SocialSyncResult>(`${this.baseUrl}/pinterest/sync`, {}));
+  }
+
+  pinterestDisconnect(): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/pinterest/auth/disconnect`, {}));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {

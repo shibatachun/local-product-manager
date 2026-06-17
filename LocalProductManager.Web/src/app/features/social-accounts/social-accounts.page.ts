@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { PinterestAuthStatus, SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -19,6 +19,7 @@ export class SocialAccountsPage {
   readonly notice = signal('');
   readonly loading = signal(false);
   readonly youtubeStatus = signal<YouTubeAuthStatus | null>(null);
+  readonly pinterestStatus = signal<PinterestAuthStatus | null>(null);
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
@@ -37,6 +38,7 @@ export class SocialAccountsPage {
   readonly chartTop = 26;
   readonly chartBottom = 272;
   private youtubePollTimer: number | null = null;
+  private pinterestPollTimer: number | null = null;
 
   readonly range = {
     from: this.toDateInput(this.addDays(new Date(), -30)),
@@ -203,7 +205,7 @@ export class SocialAccountsPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.load(), this.loadYouTubeStatus()]);
+    await Promise.all([this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
     await this.loadStoredYouTubeVideos();
   }
 
@@ -259,8 +261,30 @@ export class SocialAccountsPage {
 
   async deleteAccount(account: SocialAccount): Promise<void> {
     if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Account editing is only available on the host computer.');
-    const action = account.platform === 'youtube' ? 'Disconnect' : 'Delete';
+    const action = account.platform === 'youtube' || account.platform === 'pinterest' ? 'Disconnect' : 'Delete';
     if (!confirm(`${action} ${account.accountName}? Metrics for this account will be removed.`)) return;
+    if (account.platform === 'youtube') {
+      await this.perform(async () => {
+        await this.api.youtubeDisconnect();
+        this.youtubeSnapshot.set(null);
+        this.selectedYouTubeVideoId.set(null);
+        this.selectedAccountId.set(null);
+        await this.loadYouTubeStatus();
+        await this.load();
+        this.showNotice('YouTube authorization disconnected.');
+      });
+      return;
+    }
+    if (account.platform === 'pinterest') {
+      await this.perform(async () => {
+        await this.api.pinterestDisconnect();
+        this.selectedAccountId.set(null);
+        await this.loadPinterestStatus();
+        await this.load();
+        this.showNotice('Pinterest authorization disconnected.');
+      });
+      return;
+    }
     await this.perform(async () => {
       await this.api.deleteAccount(account.id);
       if (this.selectedAccountId() === account.id) this.selectedAccountId.set(null);
@@ -312,6 +336,14 @@ export class SocialAccountsPage {
       this.youtubeStatus.set(await this.api.youtubeStatus());
     } catch {
       this.youtubeStatus.set(null);
+    }
+  }
+
+  async loadPinterestStatus(): Promise<void> {
+    try {
+      this.pinterestStatus.set(await this.api.pinterestStatus());
+    } catch {
+      this.pinterestStatus.set(null);
     }
   }
 
@@ -381,6 +413,51 @@ export class SocialAccountsPage {
       await this.load();
       await this.loadFetchLogs(false);
       this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
+    });
+  }
+
+  async connectPinterest(): Promise<void> {
+    const status = this.pinterestStatus();
+    if (status?.isAdminHost === false) {
+      return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
+    }
+    if (status?.isConfigured === false) {
+      return this.showNotice(status.message || 'Set Pinterest OAuth ClientId and ClientSecret first.');
+    }
+    if (this.runningOnLanHost) {
+      return this.showNotice('Open http://localhost:5077/social-accounts on the server computer to connect Pinterest.');
+    }
+
+    await this.perform(async () => {
+      const result = await this.api.pinterestAuthStart();
+      const popup = window.open(result.authorizationUrl, 'pinterestOAuth', 'width=720,height=760');
+      if (!popup) {
+        location.href = result.authorizationUrl;
+        return;
+      }
+      this.startPinterestStatusPolling(popup);
+      this.showNotice('Complete Pinterest authorization in the popup, then click Sync Pinterest.');
+    });
+  }
+
+  async syncPinterest(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Sync is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.pinterestSync();
+      await Promise.all([this.load(), this.loadPinterestStatus()]);
+      await this.loadFetchLogs(false);
+      this.showNotice(result.status);
+    });
+  }
+
+  async disconnectPinterest(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Disconnect is only available on the host computer.');
+    if (!confirm('Disconnect Pinterest authorization on this server?')) return;
+    await this.perform(async () => {
+      await this.api.pinterestDisconnect();
+      await this.loadPinterestStatus();
+      await this.load();
+      this.showNotice('Pinterest authorization disconnected.');
     });
   }
 
@@ -489,6 +566,15 @@ export class SocialAccountsPage {
     return status.message || 'Open Google authorization';
   }
 
+  pinterestHelperText(): string {
+    const status = this.pinterestStatus();
+    if (!status) return 'Checking Pinterest connection...';
+    if (!status.isAdminHost) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
+    if (status.isConnected) return status.accountName || 'Pinterest Account';
+    if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
+    return status.message || 'Open Pinterest authorization';
+  }
+
   private startYouTubeStatusPolling(popup: Window): void {
     if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
     this.youtubePollTimer = window.setInterval(async () => {
@@ -496,6 +582,18 @@ export class SocialAccountsPage {
       if (this.youtubeStatus()?.isConnected || popup.closed) {
         if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
         this.youtubePollTimer = null;
+        await this.load();
+      }
+    }, 1200);
+  }
+
+  private startPinterestStatusPolling(popup: Window): void {
+    if (this.pinterestPollTimer) window.clearInterval(this.pinterestPollTimer);
+    this.pinterestPollTimer = window.setInterval(async () => {
+      await this.loadPinterestStatus();
+      if (this.pinterestStatus()?.isConnected || popup.closed) {
+        if (this.pinterestPollTimer) window.clearInterval(this.pinterestPollTimer);
+        this.pinterestPollTimer = null;
         await this.load();
       }
     }, 1200);
