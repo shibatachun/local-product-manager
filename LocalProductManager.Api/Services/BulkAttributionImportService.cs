@@ -55,6 +55,12 @@ public sealed class BulkAttributionImportService(
             }
 
             matchedProducts++;
+            var clickThroughUrl = FindClickThroughValue(row);
+            if (!string.IsNullOrWhiteSpace(clickThroughUrl))
+            {
+                await UpsertAmazonListingAsync(product.Id, clickThroughUrl, cancellationToken);
+            }
+
             foreach (var platform in AllowedValues.AttributionPlatforms)
             {
                 var value = FindPlatformValue(row, platform);
@@ -100,6 +106,36 @@ public sealed class BulkAttributionImportService(
         var column = row.Keys.FirstOrDefault(key =>
             key.Contains(platform, StringComparison.OrdinalIgnoreCase));
         return column is null ? null : row[column].Trim();
+    }
+
+    private static string? FindClickThroughValue(Dictionary<string, string> row)
+    {
+        var column = row.Keys.FirstOrDefault(AmazonAttributionImportService.IsClickThroughHeader);
+        return column is null ? null : AmazonAttributionImportService.CleanUrl(row[column]);
+    }
+
+    private async Task UpsertAmazonListingAsync(
+        int productId,
+        string listingUrl,
+        CancellationToken cancellationToken)
+    {
+        var listing = await db.ProductListings.FirstOrDefaultAsync(
+            item => item.ProductId == productId && item.Platform == "amazon",
+            cancellationToken);
+        if (listing is null)
+        {
+            db.ProductListings.Add(new ProductListing
+            {
+                ProductId = productId,
+                Platform = "amazon",
+                ListingUrl = listingUrl
+            });
+        }
+        else
+        {
+            listing.ListingUrl = listingUrl;
+            listing.UpdatedAt = DateTimeOffset.UtcNow;
+        }
     }
 
     private async Task<Product?> MatchProductBySkuAsync(string sku, CancellationToken cancellationToken)

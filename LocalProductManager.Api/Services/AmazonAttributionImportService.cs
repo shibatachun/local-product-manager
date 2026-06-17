@@ -47,6 +47,12 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         }
 
         var imported = new List<AmazonAttributionLink>();
+        var clickThroughUrl = ExtractClickThroughUrl(rows);
+        if (!string.IsNullOrWhiteSpace(clickThroughUrl))
+        {
+            await UpsertAmazonListingAsync(productId, clickThroughUrl, cancellationToken);
+        }
+
         var links = ExtractPlatformLinks(rows, csv);
         foreach (var (platform, url) in links)
         {
@@ -132,7 +138,43 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         return link;
     }
 
-    private static string NormalizeHeader(string value) => value.Trim().ToLowerInvariant().Replace(" ", "");
+    private async Task UpsertAmazonListingAsync(
+        int productId,
+        string listingUrl,
+        CancellationToken cancellationToken)
+    {
+        var listing = await db.ProductListings.FirstOrDefaultAsync(
+            existing => existing.ProductId == productId && existing.Platform == "amazon",
+            cancellationToken);
+        if (listing is null)
+        {
+            db.ProductListings.Add(new ProductListing
+            {
+                ProductId = productId,
+                Platform = "amazon",
+                ListingUrl = listingUrl
+            });
+        }
+        else
+        {
+            listing.ListingUrl = listingUrl;
+            listing.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    internal static string NormalizeHeader(string value) => value
+        .Trim()
+        .ToLowerInvariant()
+        .Replace(" ", "")
+        .Replace("-", "")
+        .Replace("_", "");
+
+    internal static bool IsClickThroughHeader(string header)
+    {
+        var normalized = NormalizeHeader(header);
+        return normalized.Contains("clickthrough", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("clickthru", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string? PlatformFromHeader(string header)
     {
@@ -153,6 +195,28 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
     {
         var links = ExtractFromHeaderRows(rows);
         return links.Count > 0 ? links : ExtractFromLooseRows(rows, rawCsv);
+    }
+
+    internal static string? ExtractClickThroughUrl(IReadOnlyList<List<string>> rows)
+    {
+        for (var headerIndex = 0; headerIndex < Math.Min(rows.Count, 12); headerIndex++)
+        {
+            var header = rows[headerIndex];
+            var clickThroughColumn = header.FindIndex(IsClickThroughHeader);
+            if (clickThroughColumn < 0) continue;
+
+            var candidates = rows
+                .Skip(headerIndex + 1)
+                .Where(row => clickThroughColumn < row.Count)
+                .Select(row => CleanUrl(row[clickThroughColumn]))
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Cast<string>()
+                .ToArray();
+
+            return candidates.FirstOrDefault(IsAmazonUrl) ?? candidates.FirstOrDefault();
+        }
+
+        return null;
     }
 
     private static List<(string Platform, string Url)> ExtractFromHeaderRows(IReadOnlyList<List<string>> rows)
@@ -308,7 +372,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         return null;
     }
 
-    private static string? CleanUrl(string value)
+    internal static string? CleanUrl(string value)
     {
         var match = UrlRegex.Match(value.Trim());
         if (!match.Success) return null;
@@ -317,6 +381,10 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
             .Trim()
             .TrimEnd('.', ',', ';', ')', ']', '}');
     }
+
+    private static bool IsAmazonUrl(string url) =>
+        url.Contains("amazon.", StringComparison.OrdinalIgnoreCase) ||
+        url.Contains("amzn.", StringComparison.OrdinalIgnoreCase);
 
     private static List<(string Platform, string Url)> Deduplicate(
         IEnumerable<(string Platform, string Url)> links) => links
