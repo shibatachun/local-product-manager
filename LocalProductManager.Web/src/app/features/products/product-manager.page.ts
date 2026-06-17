@@ -23,6 +23,44 @@ interface PricingStep {
   note: string;
 }
 
+interface PricingEstimate {
+  platform: Platform;
+  logistics: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  cubicInches: number;
+  dimensionalWeight: number;
+  billableWeight: number;
+  shippingCost: number;
+  breakEvenPrice: number;
+  suggestedPrice: number;
+  estimatedProfit: number;
+  steps: PricingStep[];
+}
+
+interface LogisticsOption {
+  value: string;
+  label: string;
+  note: string;
+  dimDivisor: number;
+  tiers: { max: number; cost: number }[];
+  overflowPerLb: number;
+}
+
+interface PricingPlatformConfig {
+  label: string;
+  defaultLogistics: string;
+  referralRate: number;
+  processingRate: number;
+  fixedFee: number;
+  listingFee: number;
+  marginPercent: number;
+  bufferPercent: number;
+  note: string;
+  logistics: LogisticsOption[];
+}
+
 interface PlatformChoice {
   platform: Platform;
   label: string;
@@ -119,7 +157,8 @@ export class ProductManagerPage {
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
   readonly pricingForm = {
     platform: 'walmart' as Platform,
-    logistics: 'usps',
+    logistics: 'usps-ground',
+    quantity: 1,
     productCost: 0,
     weight: 1,
     length: 6,
@@ -129,13 +168,74 @@ export class ProductManagerPage {
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
-  readonly pricingPlatformOptions = [
-    { value: 'walmart' as Platform, label: 'Walmart', disabled: false },
-    { value: 'amazon' as Platform, label: 'Amazon', disabled: true },
-    { value: 'ebay' as Platform, label: 'eBay', disabled: true },
-    { value: 'etsy' as Platform, label: 'Etsy', disabled: true },
-  ];
-  readonly pricingEstimate = computed(() => this.calculatePricingEstimate());
+  readonly pricingConfigs: Record<Platform, PricingPlatformConfig> = {
+    walmart: {
+      label: 'Walmart',
+      defaultLogistics: 'usps-ground',
+      referralRate: 0.15,
+      processingRate: 0.029,
+      fixedFee: 0.3,
+      listingFee: 0,
+      marginPercent: 20,
+      bufferPercent: 5,
+      note: 'Seller-fulfilled Walmart estimate with a general referral fee assumption.',
+      logistics: [
+        this.logistics('usps-ground', 'USPS Ground Advantage', 'Common light parcel option for seller-fulfilled orders.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
+        this.logistics('ups-ground', 'UPS Ground', 'Useful for heavier boxes and commercial pickups.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
+        this.logistics('fedex-ground', 'FedEx Ground', 'Similar ground parcel planning tier.', 139, [[1, 9.25], [5, 14.25], [10, 19.5], [20, 32.5], [40, 57]], 1.3),
+      ],
+    },
+    amazon: {
+      label: 'Amazon',
+      defaultLogistics: 'amazon-fba',
+      referralRate: 0.15,
+      processingRate: 0,
+      fixedFee: 0.3,
+      listingFee: 0,
+      marginPercent: 20,
+      bufferPercent: 6,
+      note: 'Amazon estimate defaults to FBA-style fulfillment plus the common 15% referral assumption.',
+      logistics: [
+        this.logistics('amazon-fba', 'Amazon FBA estimate', 'Simplified FBA fulfillment tier for small parcel planning.', 139, [[1, 4.2], [2, 5.35], [3, 6.25], [5, 7.85], [10, 10.95], [20, 17.5], [40, 34]], 1.1),
+        this.logistics('usps-ground', 'FBM USPS Ground Advantage', 'Merchant-fulfilled Amazon order shipped by USPS.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
+        this.logistics('ups-ground', 'FBM UPS Ground', 'Merchant-fulfilled Amazon order shipped by UPS.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
+      ],
+    },
+    ebay: {
+      label: 'eBay',
+      defaultLogistics: 'ebay-usps',
+      referralRate: 0.1325,
+      processingRate: 0,
+      fixedFee: 0.4,
+      listingFee: 0,
+      marginPercent: 18,
+      bufferPercent: 5,
+      note: 'General eBay final value fee estimate. Category fees can differ.',
+      logistics: [
+        this.logistics('ebay-usps', 'eBay USPS label', 'Common eBay label flow for light parcels.', 139, [[1, 5.55], [2, 8.15], [3, 10.25], [5, 12.95], [10, 19.25], [20, 33.5]], 1.4),
+        this.logistics('ebay-ups', 'eBay UPS Ground label', 'Often better for heavier packages.', 139, [[1, 8.6], [5, 13.35], [10, 18.35], [20, 30.95], [40, 54]], 1.2),
+      ],
+    },
+    etsy: {
+      label: 'Etsy',
+      defaultLogistics: 'etsy-usps',
+      referralRate: 0.065,
+      processingRate: 0.03,
+      fixedFee: 0.25,
+      listingFee: 0.2,
+      marginPercent: 22,
+      bufferPercent: 5,
+      note: 'Etsy estimate includes listing, transaction, and US payment processing assumptions.',
+      logistics: [
+        this.logistics('etsy-usps', 'Etsy USPS label', 'Common Etsy seller label for handmade and small parcels.', 139, [[1, 5.55], [2, 8.15], [3, 10.25], [5, 12.95], [10, 19.25], [20, 33.5]], 1.4),
+        this.logistics('etsy-ups', 'Etsy UPS Ground label', 'Planning option for larger boxes.', 139, [[1, 8.6], [5, 13.35], [10, 18.35], [20, 30.95], [40, 54]], 1.2),
+      ],
+    },
+  };
+  readonly pricingPlatformOptions = this.listingOptions;
+  readonly pricingLogisticsOptions = computed(() => this.pricingConfigs[this.pricingForm.platform].logistics);
+  readonly pricingDerived = computed(() => this.calculatePricingEstimate());
+  readonly pricingResult = signal<PricingEstimate | null>(null);
 
   readonly stats = computed(() => {
     const products = this.products();
@@ -231,6 +331,24 @@ export class ProductManagerPage {
       storage: 'Image storage',
     };
     return labels[this.view()];
+  }
+
+  onPricingPlatformChanged(platform: Platform): void {
+    const config = this.pricingConfigs[platform];
+    this.pricingForm.platform = platform;
+    this.pricingForm.logistics = config.defaultLogistics;
+    this.pricingForm.targetMarginPercent = config.marginPercent;
+    this.pricingForm.bufferPercent = config.bufferPercent;
+    this.pricingResult.set(null);
+  }
+
+  adjustPricingQuantity(delta: number): void {
+    this.pricingForm.quantity = Math.max(1, Math.round(this.safeNumber(this.pricingForm.quantity) + delta));
+    this.pricingResult.set(null);
+  }
+
+  calculatePricing(): void {
+    this.pricingResult.set(this.calculatePricingEstimate());
   }
 
   async selectMarketingProduct(productId: number): Promise<void> {
@@ -616,42 +734,40 @@ export class ProductManagerPage {
     return this.selectedProduct()?.amazonAttributionLinks.find((item) => item.platform === platform)?.attributionUrl ?? '';
   }
 
-  private calculatePricingEstimate(): {
-    cubicInches: number;
-    dimensionalWeight: number;
-    billableWeight: number;
-    shippingCost: number;
-    breakEvenPrice: number;
-    suggestedPrice: number;
-    estimatedProfit: number;
-    steps: PricingStep[];
-  } {
-    const cost = this.safeNumber(this.pricingForm.productCost);
-    const weight = Math.max(0, this.safeNumber(this.pricingForm.weight));
+  private calculatePricingEstimate(): PricingEstimate {
+    const config = this.pricingConfigs[this.pricingForm.platform];
+    const logistics = config.logistics.find((item) => item.value === this.pricingForm.logistics) ?? config.logistics[0];
+    const quantity = Math.max(1, Math.round(this.safeNumber(this.pricingForm.quantity)));
+    const unitCost = this.safeNumber(this.pricingForm.productCost);
+    const totalCost = unitCost * quantity;
+    const unitWeight = Math.max(0, this.safeNumber(this.pricingForm.weight));
+    const totalWeight = unitWeight * quantity;
     const length = Math.max(0, this.safeNumber(this.pricingForm.length));
     const width = Math.max(0, this.safeNumber(this.pricingForm.width));
     const height = Math.max(0, this.safeNumber(this.pricingForm.height));
     const packaging = this.safeNumber(this.pricingForm.packagingCost);
     const marginRate = this.safePercent(this.pricingForm.targetMarginPercent);
     const bufferRate = this.safePercent(this.pricingForm.bufferPercent);
-    const walmartReferralRate = 0.15;
-    const processingRate = 0.029;
-    const processingFixed = 0.3;
     const cubicInches = length * width * height;
-    const dimensionalWeight = cubicInches > 0 ? cubicInches / 166 : 0;
-    const billableWeight = Math.max(1, Math.ceil(Math.max(weight, dimensionalWeight)));
-    const shippingCost = this.estimateUspsCost(billableWeight);
-    const fixedCost = cost + shippingCost + packaging + processingFixed;
-    const breakEvenVariableRate = walmartReferralRate + processingRate + bufferRate;
+    const dimensionalWeight = cubicInches > 0 ? cubicInches / logistics.dimDivisor : 0;
+    const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight)));
+    const shippingCost = this.estimateLogisticsCost(billableWeight, logistics);
+    const fixedCost = totalCost + shippingCost + packaging + config.fixedFee + config.listingFee;
+    const breakEvenVariableRate = config.referralRate + config.processingRate + bufferRate;
     const suggestedVariableRate = breakEvenVariableRate + marginRate;
     const breakEvenPrice = fixedCost / Math.max(0.01, 1 - breakEvenVariableRate);
     const suggestedPrice = fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
-    const walmartFee = suggestedPrice * walmartReferralRate;
-    const processingFee = suggestedPrice * processingRate + processingFixed;
+    const platformFee = suggestedPrice * config.referralRate;
+    const processingFee = suggestedPrice * config.processingRate + config.fixedFee;
     const buffer = suggestedPrice * bufferRate;
-    const estimatedProfit = suggestedPrice - cost - shippingCost - packaging - walmartFee - processingFee - buffer;
+    const estimatedProfit = suggestedPrice - totalCost - shippingCost - packaging - platformFee - processingFee - config.listingFee - buffer;
 
     return {
+      platform: this.pricingForm.platform,
+      logistics: logistics.label,
+      quantity,
+      unitCost,
+      totalCost,
       cubicInches,
       dimensionalWeight,
       billableWeight,
@@ -660,27 +776,36 @@ export class ProductManagerPage {
       suggestedPrice,
       estimatedProfit,
       steps: [
-        { label: 'Product cost', value: this.currency(cost), note: 'Your item cost before shipping and marketplace fees.' },
-        { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / 166 = ${this.number(dimensionalWeight)} lb.` },
-        { label: 'USPS billable weight', value: `${billableWeight} lb`, note: `The estimate uses the higher of actual weight and dimensional weight, rounded up.` },
-        { label: 'Estimated USPS shipping', value: this.currency(shippingCost), note: 'Local planning estimate only; real label prices can vary by zone, service, and account rate.' },
+        { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} unit cost x ${quantity} = ${this.currency(totalCost)} product cost.` },
+        { label: 'Total weight', value: `${this.number(totalWeight)} lb`, note: `${this.number(unitWeight)} lb per unit x ${quantity}.` },
+        { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / ${logistics.dimDivisor} = ${this.number(dimensionalWeight)} lb.` },
+        { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight, rounded up.` },
+        { label: logistics.label, value: this.currency(shippingCost), note: logistics.note },
         { label: 'Packaging reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
-        { label: 'Walmart referral fee', value: `${this.number(walmartReferralRate * 100)}%`, note: `${this.currency(walmartFee)} at the suggested price. Default assumes a general 15% category fee.` },
-        { label: 'Processing reserve', value: `2.9% + ${this.currency(processingFixed)}`, note: `${this.currency(processingFee)} at the suggested price.` },
+        { label: `${config.label} platform fee`, value: `${this.number(config.referralRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${config.note}` },
+        { label: 'Processing/fixed fees', value: `${this.number(config.processingRate * 100)}% + ${this.currency(config.fixedFee + config.listingFee)}`, note: `${this.currency(processingFee + config.listingFee)} at the suggested price.` },
         { label: 'Risk buffer', value: `${this.number(bufferRate * 100)}%`, note: `${this.currency(buffer)} reserve for returns, price changes, and small fee drift.` },
         { label: 'Target margin', value: `${this.number(marginRate * 100)}%`, note: `${this.currency(estimatedProfit)} estimated profit at the suggested price.` },
       ],
     };
   }
 
-  private estimateUspsCost(weightLb: number): number {
-    if (weightLb <= 1) return 5.25;
-    if (weightLb <= 2) return 7.85;
-    if (weightLb <= 3) return 9.95;
-    if (weightLb <= 5) return 12.75;
-    if (weightLb <= 10) return 18.95;
-    if (weightLb <= 20) return 32.95;
-    return 32.95 + (weightLb - 20) * 1.35;
+  private estimateLogisticsCost(weightLb: number, logistics: LogisticsOption): number {
+    const tier = logistics.tiers.find((item) => weightLb <= item.max);
+    if (tier) return tier.cost;
+    const last = logistics.tiers[logistics.tiers.length - 1];
+    return last.cost + (weightLb - last.max) * logistics.overflowPerLb;
+  }
+
+  private logistics(
+    value: string,
+    label: string,
+    note: string,
+    dimDivisor: number,
+    tiers: [number, number][],
+    overflowPerLb: number,
+  ): LogisticsOption {
+    return { value, label, note, dimDivisor, tiers: tiers.map(([max, cost]) => ({ max, cost })), overflowPerLb };
   }
 
   private safeNumber(value: number | null | undefined): number {

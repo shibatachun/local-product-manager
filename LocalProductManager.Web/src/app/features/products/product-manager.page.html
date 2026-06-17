@@ -167,27 +167,35 @@
           <div class="pricing-panel">
             <div class="section-heading">
               <div>
-                <h2>Walmart price planner</h2>
-                <p>Estimate a listing price from product cost, USPS shipping, and marketplace fees.</p>
+                <h2>Marketplace price planner</h2>
+                <p>Estimate listing prices from quantity, package size, platform fees, and typical shipping tiers.</p>
               </div>
             </div>
             <div class="pricing-form">
               <label>Platform
-                <select [(ngModel)]="pricingForm.platform">
-                  <option *ngFor="let option of pricingPlatformOptions" [ngValue]="option.value" [disabled]="option.disabled">
-                    {{ option.label }}{{ option.disabled ? ' - later' : '' }}
+                <select [ngModel]="pricingForm.platform" (ngModelChange)="onPricingPlatformChanged($event)">
+                  <option *ngFor="let option of pricingPlatformOptions" [ngValue]="option.value">
+                    {{ option.label }}
                   </option>
                 </select>
               </label>
               <label>Logistics
-                <select [(ngModel)]="pricingForm.logistics">
-                  <option value="usps">USPS</option>
+                <select [(ngModel)]="pricingForm.logistics" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of pricingLogisticsOptions()" [value]="option.value">{{ option.label }}</option>
                 </select>
               </label>
-              <label>Product cost
+              <div class="quantity-control">
+                <span>Quantity</span>
+                <div>
+                  <button type="button" (click)="adjustPricingQuantity(-1)">-</button>
+                  <input type="number" min="1" step="1" [(ngModel)]="pricingForm.quantity" (ngModelChange)="pricingResult.set(null)" />
+                  <button type="button" (click)="adjustPricingQuantity(1)">+</button>
+                </div>
+              </div>
+              <label>Unit product cost
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" placeholder="0.00" />
               </label>
-              <label>Actual weight (lb)
+              <label>Unit weight (lb)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" placeholder="1.00" />
               </label>
               <label>Length (in)
@@ -209,28 +217,49 @@
                 <input type="number" min="0" max="30" step="1" [(ngModel)]="pricingForm.bufferPercent" />
               </label>
             </div>
+            <div class="pricing-live-summary">
+              <span>Total cost <strong>{{ currency(pricingDerived().totalCost) }}</strong></span>
+              <span>Total weight <strong>{{ number(pricingDerived().quantity * pricingForm.weight) }} lb</strong></span>
+              <span>Billable weight <strong>{{ pricingDerived().billableWeight }} lb</strong></span>
+            </div>
+            <button class="primary calculate-button" type="button" (click)="calculatePricing()">Calculate price</button>
           </div>
 
-          <div class="estimate-panel">
+          <div class="estimate-panel" *ngIf="pricingResult() as estimate; else pricingEmpty">
             <div class="estimate-summary">
-              <div><span>Suggested listing price</span><strong>{{ currency(pricingEstimate().suggestedPrice) }}</strong></div>
-              <div><span>Break-even price</span><strong>{{ currency(pricingEstimate().breakEvenPrice) }}</strong></div>
-              <div><span>Estimated profit</span><strong>{{ currency(pricingEstimate().estimatedProfit) }}</strong></div>
-              <div><span>USPS estimate</span><strong>{{ currency(pricingEstimate().shippingCost) }}</strong></div>
+              <div><span>Suggested listing price</span><strong>{{ currency(estimate.suggestedPrice) }}</strong></div>
+              <div><span>Break-even price</span><strong>{{ currency(estimate.breakEvenPrice) }}</strong></div>
+              <div><span>Estimated profit</span><strong>{{ currency(estimate.estimatedProfit) }}</strong></div>
+              <div><span>Shipping estimate</span><strong>{{ currency(estimate.shippingCost) }}</strong></div>
             </div>
             <div class="estimate-meta">
-              <span>Billable weight: {{ pricingEstimate().billableWeight }} lb</span>
-              <span>Dimensional weight: {{ number(pricingEstimate().dimensionalWeight) }} lb</span>
+              <span>{{ platformLabel(estimate.platform) }}</span>
+              <span>{{ estimate.logistics }}</span>
+              <span>{{ estimate.quantity }} unit(s)</span>
+              <span>Billable weight: {{ estimate.billableWeight }} lb</span>
+              <span>Dimensional weight: {{ number(estimate.dimensionalWeight) }} lb</span>
             </div>
             <div class="estimate-steps">
-              <div class="estimate-step" *ngFor="let step of pricingEstimate().steps">
+              <div class="estimate-step" *ngFor="let step of estimate.steps">
                 <span>{{ step.label }}</span>
                 <strong>{{ step.value }}</strong>
                 <p>{{ step.note }}</p>
               </div>
             </div>
-            <p class="estimate-note">This is a planning estimate. Confirm final Walmart category fees and USPS label rates before publishing prices.</p>
+            <p class="estimate-note">This is a planning estimate. Confirm the exact category fee, seller program, carrier zone, and label rate before publishing prices.</p>
           </div>
+          <ng-template #pricingEmpty>
+            <div class="estimate-panel estimate-empty">
+              <h2>Ready to calculate</h2>
+              <p>Set quantity, dimensions, platform, and logistics, then click Calculate price to lock an estimate.</p>
+              <div class="estimate-meta">
+                <span>{{ platformLabel(pricingForm.platform) }}</span>
+                <span>{{ pricingDerived().logistics }}</span>
+                <span>Total cost: {{ currency(pricingDerived().totalCost) }}</span>
+                <span>Billable weight: {{ pricingDerived().billableWeight }} lb</span>
+              </div>
+            </div>
+          </ng-template>
         </section>
       </ng-container>
     </ng-template>
