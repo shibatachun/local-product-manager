@@ -233,8 +233,6 @@ export class ProductManagerPage {
     },
   };
   readonly pricingPlatformOptions = this.listingOptions;
-  readonly pricingLogisticsOptions = computed(() => this.pricingConfigs[this.pricingForm.platform].logistics);
-  readonly pricingDerived = computed(() => this.calculatePricingEstimate());
   readonly pricingResult = signal<PricingEstimate | null>(null);
 
   readonly stats = computed(() => {
@@ -349,6 +347,14 @@ export class ProductManagerPage {
 
   calculatePricing(): void {
     this.pricingResult.set(this.calculatePricingEstimate());
+  }
+
+  pricingLogisticsOptions(): LogisticsOption[] {
+    return this.pricingConfigs[this.pricingForm.platform].logistics;
+  }
+
+  pricingDerived(): PricingEstimate {
+    return this.calculatePricingEstimate();
   }
 
   async selectMarketingProduct(productId: number): Promise<void> {
