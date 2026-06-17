@@ -28,6 +28,10 @@ public sealed class DatabaseSchemaService
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN ImageSource TEXT NOT NULL DEFAULT 'local'");
         }
+        if (!columns.Contains("Category"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Category TEXT NULL");
+        }
         if (!columns.Contains("Weight"))
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Weight TEXT NULL");

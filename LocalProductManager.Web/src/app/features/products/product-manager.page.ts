@@ -71,6 +71,21 @@ interface PricingCategory {
   note: string;
 }
 
+interface PricingInput {
+  platform: Platform;
+  category: string;
+  logistics: string;
+  quantity: number;
+  unitCost: number | null;
+  unitWeight: number | null;
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  packagingCost: number | null;
+  targetMarginPercent: number | null;
+  bufferPercent: number | null;
+}
+
 interface PlatformChoice {
   platform: Platform;
   label: string;
@@ -131,6 +146,7 @@ export class ProductManagerPage {
   readonly createForm = {
     sku: '',
     productName: '',
+    category: '',
     cost: null as number | null,
     weight: null as number | null,
     length: null as number | null,
@@ -155,6 +171,7 @@ export class ProductManagerPage {
   readonly editForm = {
     sku: '',
     productName: '',
+    category: '',
     cost: null as number | null,
     weight: null as number | null,
     length: null as number | null,
@@ -175,6 +192,15 @@ export class ProductManagerPage {
     length: 6,
     width: 4,
     height: 2,
+    packagingCost: 0.65,
+    targetMarginPercent: 20,
+    bufferPercent: 5,
+  };
+  readonly detailPricingForm = {
+    platform: 'walmart' as Platform,
+    category: 'general',
+    logistics: 'usps-ground',
+    quantity: 1,
     packagingCost: 0.65,
     targetMarginPercent: 20,
     bufferPercent: 5,
@@ -279,6 +305,7 @@ export class ProductManagerPage {
   };
   readonly pricingPlatformOptions = this.listingOptions;
   readonly pricingResult = signal<PricingEstimate | null>(null);
+  readonly detailPricingResult = signal<PricingEstimate | null>(null);
 
   readonly stats = computed(() => {
     const products = this.products();
@@ -395,12 +422,48 @@ export class ProductManagerPage {
     this.pricingResult.set(this.calculatePricingEstimate());
   }
 
+  calculateDetailPricing(): void {
+    const product = this.selectedProduct();
+    if (!product) return;
+    this.detailPricingResult.set(this.calculatePricingEstimateForProduct(product));
+  }
+
   pricingLogisticsOptions(): LogisticsOption[] {
     return this.pricingConfigs[this.pricingForm.platform].logistics;
   }
 
   pricingCategoryOptions(): PricingCategory[] {
     return this.pricingConfigs[this.pricingForm.platform].categories;
+  }
+
+  detailPricingLogisticsOptions(): LogisticsOption[] {
+    return this.pricingConfigs[this.detailPricingForm.platform].logistics;
+  }
+
+  detailPricingCategoryOptions(): PricingCategory[] {
+    return this.pricingConfigs[this.detailPricingForm.platform].categories;
+  }
+
+  onDetailPricingPlatformChanged(platform: Platform): void {
+    const config = this.pricingConfigs[platform];
+    this.detailPricingForm.platform = platform;
+    this.detailPricingForm.category = this.selectedProduct()?.category || config.defaultCategory;
+    if (!config.categories.some(category => category.value === this.detailPricingForm.category)) {
+      this.detailPricingForm.category = config.defaultCategory;
+    }
+    this.detailPricingForm.logistics = config.defaultLogistics;
+    this.detailPricingForm.targetMarginPercent = config.marginPercent;
+    this.detailPricingForm.bufferPercent = config.bufferPercent;
+    this.detailPricingResult.set(null);
+  }
+
+  adjustDetailPricingQuantity(delta: number): void {
+    this.detailPricingForm.quantity = Math.max(1, Math.round(this.safeNumber(this.detailPricingForm.quantity) + delta));
+    this.detailPricingResult.set(null);
+  }
+
+  detailPricingDerived(product: ProductDetail): PricingEstimate {
+    return this.calculatePricingEstimateForProduct(product);
   }
 
   pricingDerived(): PricingEstimate {
@@ -598,6 +661,7 @@ export class ProductManagerPage {
       const product = await this.api.createProduct({
         sku: this.createForm.sku,
         productName: this.createForm.productName,
+        category: this.createForm.category || null,
         cost: this.createForm.cost,
         weight: this.createForm.weight,
         length: this.createForm.length,
@@ -633,6 +697,7 @@ export class ProductManagerPage {
       this.selectedProduct.set(product);
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
+      this.editForm.category = product.category ?? '';
       this.editForm.cost = product.cost;
       this.editForm.weight = product.weight;
       this.editForm.length = product.length;
@@ -642,6 +707,7 @@ export class ProductManagerPage {
       this.syncListingDrafts(product);
       this.detailOpen.set(true);
       this.detailMatchedImages.set(product.imagePath ? [product.imagePath] : []);
+      this.syncDetailPricing(product);
     }, false);
   }
 
@@ -656,6 +722,7 @@ export class ProductManagerPage {
       await this.api.updateProduct(product.id, {
         sku: this.editForm.sku,
         productName: this.editForm.productName,
+        category: this.editForm.category || null,
         cost: this.editForm.cost,
         weight: this.editForm.weight,
         length: this.editForm.length,
@@ -791,20 +858,54 @@ export class ProductManagerPage {
   }
 
   private calculatePricingEstimate(): PricingEstimate {
-    const config = this.pricingConfigs[this.pricingForm.platform];
-    const logistics = config.logistics.find((item) => item.value === this.pricingForm.logistics) ?? config.logistics[0];
-    const category = config.categories.find((item) => item.value === this.pricingForm.category) ?? config.categories[0];
-    const quantity = Math.max(1, Math.round(this.safeNumber(this.pricingForm.quantity)));
-    const unitCost = this.safeNumber(this.pricingForm.productCost);
+    return this.buildPricingEstimate({
+      platform: this.pricingForm.platform,
+      category: this.pricingForm.category,
+      logistics: this.pricingForm.logistics,
+      quantity: this.pricingForm.quantity,
+      unitCost: this.pricingForm.productCost,
+      unitWeight: this.pricingForm.weight,
+      length: this.pricingForm.length,
+      width: this.pricingForm.width,
+      height: this.pricingForm.height,
+      packagingCost: this.pricingForm.packagingCost,
+      targetMarginPercent: this.pricingForm.targetMarginPercent,
+      bufferPercent: this.pricingForm.bufferPercent,
+    });
+  }
+
+  private calculatePricingEstimateForProduct(product: ProductDetail): PricingEstimate {
+    return this.buildPricingEstimate({
+      platform: this.detailPricingForm.platform,
+      category: this.detailPricingForm.category,
+      logistics: this.detailPricingForm.logistics,
+      quantity: this.detailPricingForm.quantity,
+      unitCost: product.cost,
+      unitWeight: product.weight,
+      length: product.length,
+      width: product.width,
+      height: product.height,
+      packagingCost: this.detailPricingForm.packagingCost,
+      targetMarginPercent: this.detailPricingForm.targetMarginPercent,
+      bufferPercent: this.detailPricingForm.bufferPercent,
+    });
+  }
+
+  private buildPricingEstimate(input: PricingInput): PricingEstimate {
+    const config = this.pricingConfigs[input.platform];
+    const logistics = config.logistics.find((item) => item.value === input.logistics) ?? config.logistics[0];
+    const category = config.categories.find((item) => item.value === input.category) ?? config.categories[0];
+    const quantity = Math.max(1, Math.round(this.safeNumber(input.quantity)));
+    const unitCost = this.safeNumber(input.unitCost);
     const totalCost = unitCost * quantity;
-    const unitWeight = Math.max(0, this.safeNumber(this.pricingForm.weight));
+    const unitWeight = Math.max(0, this.safeNumber(input.unitWeight));
     const totalWeight = unitWeight * quantity;
-    const length = Math.max(0, this.safeNumber(this.pricingForm.length));
-    const width = Math.max(0, this.safeNumber(this.pricingForm.width));
-    const height = Math.max(0, this.safeNumber(this.pricingForm.height));
-    const packaging = this.safeNumber(this.pricingForm.packagingCost);
-    const marginRate = this.safePercent(this.pricingForm.targetMarginPercent);
-    const bufferRate = this.safePercent(this.pricingForm.bufferPercent);
+    const length = Math.max(0, this.safeNumber(input.length));
+    const width = Math.max(0, this.safeNumber(input.width));
+    const height = Math.max(0, this.safeNumber(input.height));
+    const packaging = this.safeNumber(input.packagingCost);
+    const marginRate = this.safePercent(input.targetMarginPercent);
+    const bufferRate = this.safePercent(input.bufferPercent);
     const cubicInches = length * width * height;
     const dimensionalWeight = cubicInches > 0 ? cubicInches / logistics.dimDivisor : 0;
     const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight)));
@@ -820,7 +921,7 @@ export class ProductManagerPage {
     const estimatedProfit = suggestedPrice - totalCost - shippingCost - packaging - platformFee - processingFee - config.listingFee - buffer;
 
     return {
-      platform: this.pricingForm.platform,
+      platform: input.platform,
       logistics: logistics.label,
       category: category.label,
       categoryRate: category.feeRate,
@@ -989,10 +1090,26 @@ export class ProductManagerPage {
     }
   }
 
+  private syncDetailPricing(product: ProductDetail): void {
+    const platform = (product.listings[0]?.platform ?? this.detailPricingForm.platform) as Platform;
+    const config = this.pricingConfigs[platform];
+    this.detailPricingForm.platform = platform;
+    this.detailPricingForm.category = product.category || config.defaultCategory;
+    if (!config.categories.some(category => category.value === this.detailPricingForm.category)) {
+      this.detailPricingForm.category = config.defaultCategory;
+    }
+    this.detailPricingForm.logistics = config.defaultLogistics;
+    this.detailPricingForm.quantity = 1;
+    this.detailPricingForm.targetMarginPercent = config.marginPercent;
+    this.detailPricingForm.bufferPercent = config.bufferPercent;
+    this.detailPricingResult.set(null);
+  }
+
   private resetWizard(): void {
     Object.assign(this.createForm, {
       sku: '',
       productName: '',
+      category: '',
       cost: null,
       weight: null,
       length: null,

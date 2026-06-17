@@ -3,6 +3,7 @@ namespace LocalProductManager.Api.Dtos;
 public sealed record CreateProductRequest(
     string Sku,
     string ProductName,
+    string? Category,
     decimal? Cost,
     decimal? Weight,
     decimal? Length,
@@ -14,6 +15,7 @@ public sealed record CreateProductRequest(
 public sealed record UpdateProductRequest(
     string Sku,
     string ProductName,
+    string? Category,
     decimal? Cost,
     decimal? Weight,
     decimal? Length,
@@ -26,6 +28,7 @@ public sealed record ProductListItemDto(
     int Id,
     string Sku,
     string ProductName,
+    string? Category,
     decimal? Cost,
     decimal? Weight,
     decimal? Length,
@@ -48,6 +51,7 @@ public sealed record ProductDetailDto(
     int Id,
     string Sku,
     string ProductName,
+    string? Category,
     decimal? Cost,
     decimal? Weight,
     decimal? Length,

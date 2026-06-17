@@ -354,6 +354,12 @@
     <div class="form-grid">
       <label>SKU number<input [(ngModel)]="createForm.sku" placeholder="e.g. 123456-BLACK" /></label>
       <label>Product name<input [(ngModel)]="createForm.productName" placeholder="Product display name" /></label>
+      <label>Category
+        <select [(ngModel)]="createForm.category">
+          <option value="">Choose later</option>
+          <option *ngFor="let option of pricingConfigs.walmart.categories" [value]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
       <label>Cost<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
       <label>Weight<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
@@ -442,6 +448,12 @@
       <div class="form-grid">
         <label>SKU<input [(ngModel)]="editForm.sku" /></label>
         <label>Name<input [(ngModel)]="editForm.productName" /></label>
+        <label>Category
+          <select [(ngModel)]="editForm.category">
+            <option value="">Choose by pricing platform</option>
+            <option *ngFor="let option of detailPricingCategoryOptions()" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
         <label>Cost<input type="number" step="0.01" [(ngModel)]="editForm.cost" /></label>
         <label>Weight<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
@@ -456,6 +468,49 @@
         <strong>{{ option.label }}</strong><input [(ngModel)]="listingDrafts[option.value]" placeholder="Listing URL" />
         <button (click)="saveListing(option.value)">Save</button>
         <button class="danger-link" *ngIf="listingFor(product, option.value) as listing" (click)="removeListing(listing)">Remove</button>
+      </div>
+    </section>
+    <section>
+      <div class="section-heading"><div><h3>Suggested pricing</h3><p>Uses saved cost, weight, dimensions, category, and logistics.</p></div></div>
+      <div class="detail-pricing-grid">
+        <label>Platform
+          <select [ngModel]="detailPricingForm.platform" (ngModelChange)="onDetailPricingPlatformChanged($event)">
+            <option *ngFor="let option of listingOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <label>Category
+          <select [(ngModel)]="detailPricingForm.category" (ngModelChange)="detailPricingResult.set(null)">
+            <option *ngFor="let option of detailPricingCategoryOptions()" [value]="option.value">{{ option.label }} - {{ number(option.feeRate * 100) }}%</option>
+          </select>
+        </label>
+        <label>Logistics
+          <select [(ngModel)]="detailPricingForm.logistics" (ngModelChange)="detailPricingResult.set(null)">
+            <option *ngFor="let option of detailPricingLogisticsOptions()" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <div class="quantity-control">
+          <span>Quantity</span>
+          <div>
+            <button type="button" (click)="adjustDetailPricingQuantity(-1)">-</button>
+            <input type="number" min="1" step="1" [(ngModel)]="detailPricingForm.quantity" (ngModelChange)="detailPricingResult.set(null)" />
+            <button type="button" (click)="adjustDetailPricingQuantity(1)">+</button>
+          </div>
+        </div>
+        <label>Packaging reserve<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingCost" /></label>
+        <label>Target margin %<input type="number" min="0" max="80" step="1" [(ngModel)]="detailPricingForm.targetMarginPercent" /></label>
+        <label>Risk buffer %<input type="number" min="0" max="30" step="1" [(ngModel)]="detailPricingForm.bufferPercent" /></label>
+        <button class="primary" type="button" (click)="calculateDetailPricing()">Calculate suggested price</button>
+      </div>
+      <div class="detail-pricing-summary">
+        <span>Total cost <strong>{{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
+        <span>Billable weight <strong>{{ detailPricingDerived(product).billableWeight }} lb</strong></span>
+        <span *ngIf="detailPricingResult() as estimate">Suggested <strong>{{ currency(estimate.suggestedPrice) }}</strong></span>
+        <span *ngIf="detailPricingResult() as estimate">Break-even <strong>{{ currency(estimate.breakEvenPrice) }}</strong></span>
+      </div>
+      <div class="estimate-steps compact" *ngIf="detailPricingResult() as estimate">
+        <div class="estimate-step" *ngFor="let step of estimate.steps">
+          <span>{{ step.label }}</span><strong>{{ step.value }}</strong><p>{{ step.note }}</p>
+        </div>
       </div>
     </section>
     <section *ngIf="listingFor(product, 'amazon')">

@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(product => product.Sku).IsUnique();
             entity.Property(product => product.Sku).HasMaxLength(128).IsRequired();
             entity.Property(product => product.ProductName).HasMaxLength(256).IsRequired();
+            entity.Property(product => product.Category).HasMaxLength(80);
             entity.Property(product => product.Cost).HasPrecision(10, 2);
             entity.Property(product => product.Weight).HasPrecision(10, 2);
             entity.Property(product => product.Length).HasPrecision(10, 2);

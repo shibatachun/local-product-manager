@@ -5,6 +5,7 @@ export interface ProductListItem {
   id: number;
   sku: string;
   productName: string;
+  category: string | null;
   cost: number | null;
   weight: number | null;
   length: number | null;

@@ -5,6 +5,7 @@ public sealed class Product
     public int Id { get; set; }
     public required string Sku { get; set; }
     public required string ProductName { get; set; }
+    public string? Category { get; set; }
     public decimal? Cost { get; set; }
     public decimal? Weight { get; set; }
     public decimal? Length { get; set; }

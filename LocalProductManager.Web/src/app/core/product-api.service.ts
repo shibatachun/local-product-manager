@@ -38,6 +38,7 @@ export class ProductApiService {
   createProduct(body: {
     sku: string;
     productName: string;
+    category?: string | null;
     cost: number | null;
     weight?: number | null;
     length?: number | null;
@@ -52,6 +53,7 @@ export class ProductApiService {
   updateProduct(id: number, body: {
     sku: string;
     productName: string;
+    category?: string | null;
     cost: number | null;
     weight?: number | null;
     length?: number | null;

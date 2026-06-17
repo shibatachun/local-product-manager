@@ -77,6 +77,7 @@ public sealed class ProductService(AppDbContext db)
         {
             Sku = NormalizeSku(request.Sku),
             ProductName = request.ProductName.Trim(),
+            Category = NormalizeOptional(request.Category),
             Cost = request.Cost,
             Weight = request.Weight,
             Length = request.Length,
@@ -104,6 +105,7 @@ public sealed class ProductService(AppDbContext db)
 
         product.Sku = NormalizeSku(request.Sku);
         product.ProductName = request.ProductName.Trim();
+        product.Category = NormalizeOptional(request.Category);
         product.Cost = request.Cost;
         product.Weight = request.Weight;
         product.Length = request.Length;
