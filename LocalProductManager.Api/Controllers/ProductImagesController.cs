@@ -146,7 +146,7 @@ public sealed class ProductImagesController(
 
         try
         {
-            var imageUrl = await amazonImages.FindImageUrlAsync(listingUrl, cancellationToken);
+            var imageUrl = await amazonImages.FindImageUrlAsync(listingUrl, platform, cancellationToken);
             product.ImagePath = imageUrl;
             product.ImageSource = "remote";
             product.UpdatedAt = DateTimeOffset.UtcNow;

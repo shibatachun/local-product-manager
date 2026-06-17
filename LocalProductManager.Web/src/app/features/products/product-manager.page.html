@@ -121,6 +121,7 @@
             <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></span>
             <span><strong>{{ product.productName }}</strong><small>{{ product.sku }}<ng-container *ngIf="product.amazonAsinValues.length"> · {{ product.amazonAsinValues[0] }}</ng-container></small></span>
             <em>{{ product.asinCount }} ASIN</em>
+            <i class="marketing-detail-button" title="Open product details" (click)="$event.stopPropagation(); openDetail(product.id)">Details</i>
           </button>
           <div class="mini-empty" *ngIf="!amazonProducts().length">No Amazon products match.</div>
           </div>

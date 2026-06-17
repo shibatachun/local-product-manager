@@ -163,6 +163,24 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         for (var headerIndex = 0; headerIndex < Math.Min(rows.Count, 12); headerIndex++)
         {
             var header = rows[headerIndex].Select(NormalizeHeader).ToArray();
+            var publisherColumn = FindHeaderIndex(header, "publisher", "platform", "adgroup", "adgroupname");
+            var attributionColumn = FindHeaderIndex(header, "attributiontags", "attributiontag", "attributionlink", "attributionurl");
+            if (publisherColumn >= 0 && attributionColumn >= 0)
+            {
+                foreach (var row in rows.Skip(headerIndex + 1))
+                {
+                    if (publisherColumn >= row.Count || attributionColumn >= row.Count) continue;
+                    var platform = PlatformFromText(row[publisherColumn]);
+                    var url = CleanUrl(row[attributionColumn]);
+                    if (platform is not null && !string.IsNullOrWhiteSpace(url))
+                    {
+                        imported.Add((platform, url));
+                    }
+                }
+
+                if (imported.Count > 0) return Deduplicate(imported);
+            }
+
             var platformColumns = header
                 .Select((value, index) => new { Platform = PlatformFromHeader(value), Index = index })
                 .Where(item => item.Platform is not null)
@@ -184,6 +202,19 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         }
 
         return imported;
+    }
+
+    private static int FindHeaderIndex(IReadOnlyList<string> header, params string[] names)
+    {
+        for (var index = 0; index < header.Count; index++)
+        {
+            if (names.Any(name => header[index].Contains(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static List<(string Platform, string Url)> ExtractFromLooseRows(
@@ -285,8 +316,15 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
     private static List<(string Platform, string Url)> Deduplicate(
         IEnumerable<(string Platform, string Url)> links) => links
             .GroupBy(link => link.Platform, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.Last())
+            .Select(group => group
+                .OrderByDescending(link => IsAttributionUrl(link.Url))
+                .First())
             .ToList();
+
+    private static bool IsAttributionUrl(string url) =>
+        url.Contains("maas=", StringComparison.OrdinalIgnoreCase) ||
+        url.Contains("tag=maas", StringComparison.OrdinalIgnoreCase) ||
+        url.Contains("ref_=aa_maas", StringComparison.OrdinalIgnoreCase);
 
     private static List<List<string>> ParseCsv(string csv)
     {

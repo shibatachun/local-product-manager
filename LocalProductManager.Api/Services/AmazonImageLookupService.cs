@@ -48,6 +48,7 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
 
     public async Task<string> FindImageUrlAsync(
         string listingUrl,
+        string? platform,
         CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(listingUrl, UriKind.Absolute, out var uri) ||
@@ -69,13 +70,15 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         response.EnsureSuccessStatusCode();
 
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
-        var imageUrl = FindMetaImage(html) ??
-            FindJsonLdImage(html) ??
-            FindLandingImage(html) ??
-            FindDataOldHiresImage(html) ??
-            FindDynamicImage(html) ??
-            FindPreferredRemoteImage(html) ??
-            FindGenericRemoteImage(html);
+        var strategy = NormalizePlatform(platform) ?? PlatformFromHost(uri.Host);
+        var imageUrl = strategy switch
+        {
+            "amazon" => FindAmazonImage(html),
+            "walmart" => FindMarketplaceImage(html, ["i5.walmartimages.com", "i5-qa.walmartimages.com"]),
+            "ebay" => FindMarketplaceImage(html, ["i.ebayimg.com", "thumbs.ebaystatic.com"]),
+            "etsy" => FindMarketplaceImage(html, ["i.etsystatic.com", "i.etsystatic.com"]),
+            _ => FindMarketplaceImage(html, PreferredImageHosts)
+        };
         if (string.IsNullOrWhiteSpace(imageUrl))
         {
             throw new InvalidOperationException("Could not find a product image on the listing page.");
@@ -83,6 +86,27 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
 
         return NormalizeImageUrl(imageUrl, uri);
     }
+
+    public Task<string> FindImageUrlAsync(
+        string listingUrl,
+        CancellationToken cancellationToken) =>
+        FindImageUrlAsync(listingUrl, platform: null, cancellationToken);
+
+    private static string? FindAmazonImage(string html) =>
+        FindMetaImage(html) ??
+        FindLandingImage(html) ??
+        FindDataOldHiresImage(html) ??
+        FindDynamicImage(html) ??
+        FindAmazonMediaImage(html) ??
+        FindJsonLdImage(html) ??
+        FindPreferredRemoteImage(html, ["m.media-amazon.com"]) ??
+        FindGenericRemoteImage(html);
+
+    private static string? FindMarketplaceImage(string html, IReadOnlyList<string> preferredHosts) =>
+        FindMetaImage(html) ??
+        FindJsonLdImage(html) ??
+        FindPreferredRemoteImage(html, preferredHosts) ??
+        FindGenericRemoteImage(html);
 
     private static string? FindMetaImage(string html)
     {
@@ -212,7 +236,21 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         }
     }
 
-    private static string? FindPreferredRemoteImage(string html)
+    private static string? FindAmazonMediaImage(string html)
+    {
+        var matches = AmazonMediaRegex.Matches(html)
+            .Select(match => NormalizeImageUrl(match.Value))
+            .Where(IsUsefulImage)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return matches
+            .OrderByDescending(url => url.Contains("images/I/", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(url => url.Length)
+            .FirstOrDefault();
+    }
+
+    private static string? FindPreferredRemoteImage(string html, IReadOnlyList<string> preferredHosts)
     {
         var images = GenericImageRegex.Matches(html)
             .Select(match => NormalizeImageUrl(match.Value))
@@ -221,8 +259,8 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
             .ToArray();
 
         return images
-            .Where(url => PreferredImageHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase)))
-            .OrderByDescending(ScoreImageUrl)
+            .Where(url => preferredHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(url => ScoreImageUrl(url, preferredHosts))
             .FirstOrDefault();
     }
 
@@ -235,7 +273,7 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
             .ToArray();
 
         return matches
-            .OrderByDescending(ScoreImageUrl)
+            .OrderByDescending(url => ScoreImageUrl(url, PreferredImageHosts))
             .FirstOrDefault();
     }
 
@@ -246,15 +284,31 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         !url.Contains("logo", StringComparison.OrdinalIgnoreCase) &&
         !url.Contains("loading", StringComparison.OrdinalIgnoreCase);
 
-    private static int ScoreImageUrl(string url)
+    private static int ScoreImageUrl(string url, IReadOnlyList<string> preferredHosts)
     {
         var score = url.Length;
-        if (PreferredImageHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase))) score += 1000;
+        if (preferredHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase))) score += 1000;
         if (url.Contains("product", StringComparison.OrdinalIgnoreCase)) score += 200;
         if (url.Contains("images/I/", StringComparison.OrdinalIgnoreCase)) score += 200;
         if (url.Contains("s-l1600", StringComparison.OrdinalIgnoreCase)) score += 200;
         if (url.Contains("odnHeight", StringComparison.OrdinalIgnoreCase)) score += 150;
         return score;
+    }
+
+    private static string? NormalizePlatform(string? platform)
+    {
+        var normalized = platform?.Trim().ToLowerInvariant();
+        return normalized is "amazon" or "walmart" or "ebay" or "etsy" ? normalized : null;
+    }
+
+    private static string? PlatformFromHost(string host)
+    {
+        var normalized = host.ToLowerInvariant();
+        if (normalized.Contains("amazon.")) return "amazon";
+        if (normalized.Contains("walmart.")) return "walmart";
+        if (normalized.Contains("ebay.")) return "ebay";
+        if (normalized.Contains("etsy.")) return "etsy";
+        return null;
     }
 
     private static string NormalizeImageUrl(string url, Uri? baseUri = null)

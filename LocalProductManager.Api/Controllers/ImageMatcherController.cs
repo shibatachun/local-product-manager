@@ -84,7 +84,7 @@ public sealed class ImageMatcherController(
 
         try
         {
-            var imageUrl = await listingImages.FindImageUrlAsync(request.ListingUrl, cancellationToken);
+            var imageUrl = await listingImages.FindImageUrlAsync(request.ListingUrl, request.Platform, cancellationToken);
             return Ok(new ListingImageLookupResult(imageUrl));
         }
         catch (HttpRequestException ex)
