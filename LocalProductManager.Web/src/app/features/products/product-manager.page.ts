@@ -779,7 +779,9 @@ export class ProductManagerPage {
     const listingUrl = platform ? this.listingDrafts[platform] : null;
 
     await this.perform(async () => {
-      await this.api.useListingImage(product.id, listingUrl || null, platform);
+      const result = await this.api.useListingImage(product.id, listingUrl || null, platform);
+      this.editForm.imagePath = result.imageUrl;
+      this.detailMatchedImages.set([result.imageUrl]);
       await this.refreshSelected(product.id);
       this.showNotice('Listing image connected.');
     });
@@ -1144,6 +1146,10 @@ export class ProductManagerPage {
   private async refreshSelected(id: number): Promise<void> {
     const product = await this.api.getProduct(id);
     this.selectedProduct.set(product);
+    this.editForm.imagePath = product.imagePath ?? '';
+    if (product.imagePath && !this.detailMatchedImages().includes(product.imagePath)) {
+      this.detailMatchedImages.update(images => [product.imagePath!, ...images]);
+    }
     this.syncListingDrafts(product);
     await this.loadProducts();
   }
