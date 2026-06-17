@@ -122,6 +122,18 @@ export interface SocialSyncResult {
   status: string;
 }
 
+export interface SocialFetchLogEntry {
+  timestamp: string;
+  source: string;
+  status: string;
+  metricsImported: number;
+  message: string;
+}
+
+export interface ArchiveLogResult {
+  path: string;
+}
+
 export interface YouTubeAuthStatus {
   isConfigured: boolean;
   isConnected: boolean;

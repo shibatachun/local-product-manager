@@ -57,7 +57,9 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
 .section-heading p { margin:5px 0 0; color:#7a8791; font-size:12px; }
 .chart-legend { display:flex; flex-wrap:wrap; gap:8px; margin:-2px 0 12px; }
-.chart-legend span { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:0 9px; border:1px solid #e1e7eb; border-radius:6px; background:#fafbfc; color:#465764; font-size:11px; font-weight:800; }
+.chart-legend button { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:0 9px; border:1px solid #e1e7eb; border-radius:6px; background:#fafbfc; color:#93a0aa; font-size:11px; font-weight:800; opacity:.5; }
+.chart-legend button.active { color:#465764; opacity:1; box-shadow:0 1px 4px rgba(25,40,50,.08); }
+.chart-legend button:hover { border-color:#b7c5cc; opacity:1; }
 .chart-legend i { width:18px; height:3px; border-radius:3px; }
 .chart-legend em { color:#7f8c96; font-style:normal; font-weight:750; }
 .market-chart { width:100%; height:330px; overflow:visible; cursor:crosshair; user-select:none; }
@@ -77,6 +79,15 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .chart-tooltip .tooltip-total { text-anchor:end; font-weight:850; }
 .chart-tooltip .tooltip-name { fill:#dbe5eb; font-weight:750; }
 .chart-tooltip .tooltip-value { text-anchor:end; font-weight:850; }
+.fetch-log-panel { margin-top:14px; padding-top:14px; border-top:1px solid #e2e8ec; }
+.fetch-log-panel .section-heading button { min-height:32px; padding:0 10px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-size:12px; font-weight:750; }
+.fetch-log-list { display:grid; gap:7px; max-height:210px; overflow:auto; }
+.fetch-log-list > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:10px; border:1px solid #e1e7eb; border-radius:6px; background:#fafbfc; }
+.fetch-log-list > div.failed { border-color:#efc7c2; background:#fff7f6; }
+.fetch-log-list strong,.fetch-log-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fetch-log-list strong { font-size:12px; }.fetch-log-list small { margin-top:3px; color:#73818c; font-size:11px; }
+.fetch-log-list em { color:#4d5d68; font-size:11px; font-style:normal; font-weight:850; text-transform:capitalize; }
+.fetch-log-list p { margin:0; padding:16px; color:#84919b; text-align:center; }
 .platform-content { grid-column:2; }
 .platform-content .section-heading button { min-height:34px; padding:0 11px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-weight:750; }
 .content-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:-2px 0 14px; }

@@ -45,6 +45,7 @@ export class ProductManagerPage {
   readonly wizardStep = signal(1);
   readonly notice = signal('');
   readonly matchedImages = signal<string[]>([]);
+  readonly detailMatchedImages = signal<string[]>([]);
   readonly importFile = signal<File | null>(null);
   readonly businessReportFile = signal<File | null>(null);
   readonly bulkAttributionFile = signal<File | null>(null);
@@ -365,6 +366,7 @@ export class ProductManagerPage {
       this.editForm.imagePath = product.imagePath ?? '';
       this.syncListingDrafts(product);
       this.detailOpen.set(true);
+      this.detailMatchedImages.set(product.imagePath ? [product.imagePath] : []);
     }, false);
   }
 
@@ -419,6 +421,23 @@ export class ProductManagerPage {
       await this.refreshSelected(product.id);
       this.showNotice('Amazon image connected.');
     });
+  }
+
+  async loadDetailImageFolder(): Promise<void> {
+    const product = this.selectedProduct();
+    const folder = this.folderFromPath(this.editForm.imagePath || product?.imagePath || '');
+    if (!product || !folder) return this.showNotice('Enter an image path first.');
+
+    await this.perform(async () => {
+      const result = await this.api.matchImages(product.sku, folder, 'folder');
+      this.detailMatchedImages.set(result.matchedImages);
+      if (!this.editForm.imagePath && result.matchedImages[0]) this.editForm.imagePath = result.matchedImages[0];
+      this.showNotice(`${result.matchedImages.length} image(s) loaded from the product folder.`);
+    });
+  }
+
+  chooseDetailImage(path: string): void {
+    this.editForm.imagePath = path;
   }
 
   async removeListing(listing: ProductListing): Promise<void> {
@@ -524,6 +543,19 @@ export class ProductManagerPage {
 
   productImageUrl(productId: number, download = false): string {
     return this.api.productImageUrl(productId, download);
+  }
+
+  imagePreviewUrl(path: string): string {
+    if (/^https?:\/\//i.test(path.trim())) return path;
+    return this.api.imagePreviewUrl(path);
+  }
+
+  fileLocationUrl(path: string): string {
+    if (/^https?:\/\//i.test(path.trim())) return path;
+    const normalized = path.trim().replaceAll('\\', '/');
+    if (normalized.startsWith('//')) return `file:${normalized}`;
+    if (/^[a-zA-Z]:\//.test(normalized)) return `file:///${normalized}`;
+    return path;
   }
 
   hideBrokenImage(event: Event): void {

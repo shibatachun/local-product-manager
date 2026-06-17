@@ -10,7 +10,8 @@ namespace LocalProductManager.Api.Controllers;
 [Route("api/youtube")]
 public sealed class YouTubeAuthController(
     AppDbContext db,
-    YouTubeOAuthService youtube) : ControllerBase
+    YouTubeOAuthService youtube,
+    SocialFetchLogService fetchLogs) : ControllerBase
 {
     [HttpGet("auth/status")]
     public ActionResult<YouTubeAuthStatusDto> Status() => Ok(youtube.GetStatus(IsAdminHost()));
@@ -90,14 +91,22 @@ public sealed class YouTubeAuthController(
         try
         {
             var imported = await youtube.SyncChannelMetricsAsync(db, cancellationToken);
+            await fetchLogs.RecordAsync(
+                "youtube-manual-sync",
+                "success",
+                imported,
+                "YouTube channel metrics synced.",
+                cancellationToken);
             return Ok(new SocialSyncResult(1, imported, "YouTube channel metrics synced."));
         }
         catch (InvalidOperationException ex)
         {
+            await fetchLogs.RecordAsync("youtube-manual-sync", "failed", 0, ex.Message, cancellationToken);
             return BadRequest(ex.Message);
         }
         catch (HttpRequestException ex)
         {
+            await fetchLogs.RecordAsync("youtube-manual-sync", "failed", 0, ex.Message, cancellationToken);
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
         }
     }
@@ -108,14 +117,23 @@ public sealed class YouTubeAuthController(
         if (!IsAdminHost()) return AdminOnly();
         try
         {
-            return Ok(await youtube.GetDebugSnapshotAsync(db, cancellationToken));
+            var snapshot = await youtube.GetDebugSnapshotAsync(db, cancellationToken);
+            await fetchLogs.RecordAsync(
+                "youtube-fetch-videos",
+                "success",
+                snapshot.Videos.Count + 1,
+                $"Fetched {snapshot.Videos.Count} videos for {snapshot.Channel.Title}.",
+                cancellationToken);
+            return Ok(snapshot);
         }
         catch (InvalidOperationException ex)
         {
+            await fetchLogs.RecordAsync("youtube-fetch-videos", "failed", 0, ex.Message, cancellationToken);
             return BadRequest(ex.Message);
         }
         catch (HttpRequestException ex)
         {
+            await fetchLogs.RecordAsync("youtube-fetch-videos", "failed", 0, ex.Message, cancellationToken);
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
         }
     }

@@ -286,16 +286,31 @@
       <div class="section-heading">
         <div><h3>Basic information</h3></div>
         <div class="section-actions">
+          <button type="button" (click)="loadDetailImageFolder()" [disabled]="!editForm.imagePath || loading()">Load folder</button>
           <button type="button" (click)="useAmazonImage()" [disabled]="!listingDrafts.amazon || loading()">Use Amazon image</button>
           <button type="button" (click)="updateProduct()">Save</button>
         </div>
       </div>
-      <div class="image-preview" *ngIf="product.imagePath">
-        <div><span>{{ productInitial(product) }}</span><img [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></div>
-        <span><strong>{{ product.imageSource === 'remote' ? 'Amazon image URL' : 'Server image' }}</strong><small>{{ product.imagePath }}</small></span>
-        <button (click)="copyImage(product.id)">Copy image</button>
-        <button (click)="copyImageLink(product.id)">Copy link</button>
-        <a [href]="productImageUrl(product.id, true)">Download</a>
+      <div class="detail-image-panel">
+        <div class="detail-image-toolbar">
+          <span><strong>Product images</strong><small>{{ detailMatchedImages().length ? detailMatchedImages().length + ' image(s) loaded' : 'Load a folder to show every image for this product.' }}</small></span>
+          <div>
+            <button *ngIf="product.imagePath" (click)="copyImage(product.id)">Copy image</button>
+            <button *ngIf="product.imagePath" (click)="copyImageLink(product.id)">Copy link</button>
+            <a *ngIf="product.imagePath" [href]="productImageUrl(product.id, true)">Download</a>
+          </div>
+        </div>
+        <div class="detail-image-strip">
+          <a class="detail-image-card" *ngFor="let path of detailMatchedImages()" [class.selected]="editForm.imagePath === path" [href]="fileLocationUrl(path)" target="_blank" rel="noreferrer" [title]="path">
+            <img [src]="imagePreviewUrl(path)" [alt]="product.productName" (error)="hideBrokenImage($event)" />
+            <span>{{ path }}</span>
+            <button type="button" (click)="$event.preventDefault(); chooseDetailImage(path)">Use</button>
+          </a>
+          <div class="detail-image-empty" *ngIf="!detailMatchedImages().length">
+            <strong>No folder images loaded</strong>
+            <small>Enter or keep an image path, then click Load folder.</small>
+          </div>
+        </div>
       </div>
       <div class="form-grid"><label>SKU<input [(ngModel)]="editForm.sku" /></label><label>Name<input [(ngModel)]="editForm.productName" /></label><label>Cost<input type="number" [(ngModel)]="editForm.cost" /></label><label>Image path<input [(ngModel)]="editForm.imagePath" placeholder="Local path or https:// image URL" /></label></div>
     </section>

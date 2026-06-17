@@ -70,6 +70,45 @@ public sealed class ImageMatcherController(
             return NotFound(ex.Message);
         }
     }
+
+    [HttpGet("preview")]
+    public IActionResult Preview([FromQuery] string path)
+    {
+        try
+        {
+            var image = imageFiles.GetImage(path);
+            var stream = new FileStream(
+                image.FullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize: 64 * 1024,
+                useAsync: true);
+
+            Response.Headers.CacheControl = "private, max-age=300";
+            return File(stream, image.ContentType, enableRangeProcessing: true);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound("The image file was not found by the server.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+        }
+        catch (IOException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image share is temporarily unavailable.");
+        }
+    }
 }
 
 public sealed record AddImageStorageRootRequest(string Path);

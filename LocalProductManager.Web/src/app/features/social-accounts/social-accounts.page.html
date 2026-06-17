@@ -5,7 +5,11 @@
       <h1>Social Accounts</h1>
       <small class="version-tag">{{ appVersion }}</small>
     </div>
-    <nav><a routerLink="/">Product manager</a><button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button></nav>
+    <nav>
+      <a routerLink="/">Product manager</a>
+      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="loadFetchLogs()">Fetch logs</button>
+      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button>
+    </nav>
   </header>
 
   <section class="readonly-banner" *ngIf="youtubeStatus() && !youtubeStatus()?.isAdminHost">
@@ -109,11 +113,11 @@
         <strong>{{ maxMetricValue() | number }}</strong>
       </div>
       <div class="chart-legend">
-        <span *ngFor="let platform of chartPlatforms">
+        <button *ngFor="let platform of chartPlatforms" type="button" [class.active]="selectedChartPlatforms().has(platform.value)" (click)="toggleChartPlatform(platform.value)">
           <i [style.background]="platform.color"></i>
           {{ platform.label }}
           <em>{{ platformMetricTotal(platform.value) | number }}</em>
-        </span>
+        </button>
       </div>
       <svg class="market-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" (mousemove)="updateChartHover($event)" (mouseleave)="clearChartHover()">
         <defs>
@@ -135,7 +139,7 @@
         <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartBottom" [attr.x2]="chartRight" [attr.y2]="chartBottom"></line>
         <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartTop" [attr.x2]="chartLeft" [attr.y2]="chartBottom"></line>
         <text *ngFor="let tick of xAxisTicks()" class="date-label" [attr.x]="tick.x" [attr.y]="chartBottom + 24">{{ tick.label }}</text>
-        <polyline *ngFor="let platform of chartPlatforms" class="trend-line" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
+        <polyline *ngFor="let platform of visibleChartPlatforms()" class="trend-line" [attr.points]="platformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
         <ng-container *ngIf="chartHover() as hover">
           <line class="crosshair" [attr.x1]="hover.x" [attr.y1]="chartTop" [attr.x2]="hover.x" [attr.y2]="chartBottom"></line>
           <g *ngFor="let row of hover.rows">
@@ -154,6 +158,19 @@
           </g>
         </ng-container>
       </svg>
+      <div class="fetch-log-panel" *ngIf="logsOpen() && youtubeStatus()?.isAdminHost">
+        <div class="section-heading">
+          <div><h2>Daily fetch log</h2><p>Saved under the server logging folder.</p></div>
+          <button type="button" (click)="archiveFetchLogs()">Archive</button>
+        </div>
+        <div class="fetch-log-list">
+          <div *ngFor="let log of fetchLogs()" [class.failed]="log.status !== 'success'">
+            <span><strong>{{ log.timestamp | date:'MMM d, y, h:mm a' }}</strong><small>{{ log.source }} · {{ log.message }}</small></span>
+            <em>{{ log.status }} · {{ log.metricsImported | number }}</em>
+          </div>
+          <p *ngIf="!fetchLogs().length">No fetch logs recorded yet.</p>
+        </div>
+      </div>
     </section>
 
     <section class="panel platform-content">

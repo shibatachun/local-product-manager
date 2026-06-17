@@ -32,6 +32,7 @@ builder.Services.AddHttpClient<AmazonImageLookupService>();
 builder.Services.AddHttpClient<RemoteImageProxyService>();
 builder.Services.AddSingleton<ImageMatcherService>();
 builder.Services.AddSingleton<ImageFileService>();
+builder.Services.AddSingleton<SocialFetchLogService>();
 builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { SocialAccount, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -24,6 +24,9 @@ export class SocialAccountsPage {
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
   readonly selectedRangePreset = signal<RangePreset>('month');
+  readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
+  readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
+  readonly logsOpen = signal(false);
   readonly appVersion = 'social-platform-content-v2';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
@@ -97,8 +100,11 @@ export class SocialAccountsPage {
   readonly selectedAccount = computed(() =>
     this.accounts().find(account => account.id === this.selectedAccountId()) ?? this.accounts()[0] ?? null,
   );
+  readonly visibleChartPlatforms = computed(() =>
+    this.chartPlatforms.filter(platform => this.selectedChartPlatforms().has(platform.value)),
+  );
   readonly maxMetricValue = computed(() =>
-    Math.max(1, ...this.chartPlatforms.flatMap(platform =>
+    Math.max(1, ...this.visibleChartPlatforms().flatMap(platform =>
       this.chartDates().map(date => this.platformMetricValue(platform.value, date)),
     )),
   );
@@ -177,7 +183,7 @@ export class SocialAccountsPage {
     const dates = this.chartDates();
     if (index === null || !dates[index]) return null;
     const date = dates[index];
-    const rows = this.chartPlatforms.map(platform => {
+    const rows = this.visibleChartPlatforms().map(platform => {
       const value = this.platformMetricValue(platform.value, date);
       return {
         ...platform,
@@ -278,7 +284,26 @@ export class SocialAccountsPage {
     if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('API sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.sync();
+      await this.loadFetchLogs(false);
       this.showNotice(result.status);
+    });
+  }
+
+  async loadFetchLogs(showNotice = true): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return;
+    await this.perform(async () => {
+      this.fetchLogs.set(await this.api.fetchLogs());
+      this.logsOpen.set(true);
+      if (showNotice) this.showNotice('Fetch logs loaded.');
+    });
+  }
+
+  async archiveFetchLogs(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return;
+    await this.perform(async () => {
+      const result = await this.api.archiveLogs();
+      await this.loadFetchLogs(false);
+      this.showNotice(`Logs archived to ${result.path}`);
     });
   }
 
@@ -319,6 +344,7 @@ export class SocialAccountsPage {
     await this.perform(async () => {
       const result = await this.api.youtubeSync();
       await Promise.all([this.load(), this.loadYouTubeStatus()]);
+      await this.loadFetchLogs(false);
       this.showNotice(result.status);
     });
   }
@@ -353,6 +379,7 @@ export class SocialAccountsPage {
       })));
       console.log('YouTube raw debug snapshot', snapshot);
       await this.load();
+      await this.loadFetchLogs(false);
       this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
     });
   }
@@ -414,6 +441,16 @@ export class SocialAccountsPage {
 
   clearChartHover(): void {
     this.hoveredChartIndex.set(null);
+  }
+
+  toggleChartPlatform(platform: SocialPlatform): void {
+    this.selectedChartPlatforms.update(current => {
+      const next = new Set(current);
+      if (next.has(platform) && next.size > 1) next.delete(platform);
+      else next.add(platform);
+      return next;
+    });
+    this.clearChartHover();
   }
 
   platformMetricTotal(platform: SocialPlatform): number {

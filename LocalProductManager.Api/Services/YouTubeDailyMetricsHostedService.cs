@@ -4,7 +4,8 @@ namespace LocalProductManager.Api.Services;
 
 public sealed class YouTubeDailyMetricsHostedService(
     IServiceScopeFactory scopeFactory,
-    ILogger<YouTubeDailyMetricsHostedService> logger) : BackgroundService
+    ILogger<YouTubeDailyMetricsHostedService> logger,
+    SocialFetchLogService fetchLogs) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -28,6 +29,12 @@ public sealed class YouTubeDailyMetricsHostedService(
                 var youtube = scope.ServiceProvider.GetRequiredService<YouTubeOAuthService>();
                 var imported = await youtube.RecordDailySnapshotAsync(db, stoppingToken);
                 logger.LogInformation("YouTube daily metrics fetch completed. Imported {Count} snapshots.", imported);
+                await fetchLogs.RecordAsync(
+                    "youtube-daily",
+                    "success",
+                    imported,
+                    $"Daily YouTube metrics fetch completed. Imported {imported} snapshots.",
+                    stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -36,6 +43,12 @@ public sealed class YouTubeDailyMetricsHostedService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "YouTube daily metrics fetch failed.");
+                await fetchLogs.RecordAsync(
+                    "youtube-daily",
+                    "failed",
+                    0,
+                    ex.Message,
+                    stoppingToken);
             }
         }
     }

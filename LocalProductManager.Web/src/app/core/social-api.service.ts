@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { SocialAccount, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -73,5 +73,13 @@ export class SocialApiService {
 
   youtubeStoredVideos(): Promise<YouTubeDebugSnapshot> {
     return firstValueFrom(this.http.get<YouTubeDebugSnapshot>(`${this.baseUrl}/youtube/videos`));
+  }
+
+  fetchLogs(): Promise<SocialFetchLogEntry[]> {
+    return firstValueFrom(this.http.get<SocialFetchLogEntry[]>(`${this.baseUrl}/social-fetch-logs`));
+  }
+
+  archiveLogs(): Promise<ArchiveLogResult> {
+    return firstValueFrom(this.http.post<ArchiveLogResult>(`${this.baseUrl}/social-fetch-logs/archive`, {}));
   }
 }

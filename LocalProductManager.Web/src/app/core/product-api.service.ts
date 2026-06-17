@@ -123,6 +123,10 @@ export class ProductApiService {
     return firstValueFrom(this.http.post<ImageMatchResult>(`${this.baseUrl}/images/match`, { sku, folderPath, mode }));
   }
 
+  imagePreviewUrl(path: string): string {
+    return `${this.baseUrl}/images/preview?path=${encodeURIComponent(path)}`;
+  }
+
   imageStorageRoots(): Promise<ImageStorageRoot[]> {
     return firstValueFrom(this.http.get<ImageStorageRoot[]>(`${this.baseUrl}/images/roots`));
   }
