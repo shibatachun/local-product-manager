@@ -163,7 +163,11 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         for (var headerIndex = 0; headerIndex < Math.Min(rows.Count, 12); headerIndex++)
         {
             var header = rows[headerIndex].Select(NormalizeHeader).ToArray();
-            var publisherColumn = FindHeaderIndex(header, "publisher", "platform", "adgroup", "adgroupname");
+            var publisherColumn = FindHeaderIndex(header, "publisher", "platform");
+            if (publisherColumn < 0)
+            {
+                publisherColumn = FindHeaderIndex(header, "adgroup", "adgroupname");
+            }
             var attributionColumn = FindHeaderIndex(header, "attributiontags", "attributiontag", "attributionlink", "attributionurl");
             if (publisherColumn >= 0 && attributionColumn >= 0)
             {
@@ -286,6 +290,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         if (normalized.Contains("fb", StringComparison.OrdinalIgnoreCase)) return "facebook";
         if (normalized.Contains("pin", StringComparison.OrdinalIgnoreCase)) return "pinterest";
         if (normalized.Contains("ig", StringComparison.OrdinalIgnoreCase)) return "instagram";
+        if (normalized.Contains("ins", StringComparison.OrdinalIgnoreCase)) return "instagram";
         if (normalized.Contains("tt", StringComparison.OrdinalIgnoreCase)) return "tiktok";
         if (normalized.Contains("yt", StringComparison.OrdinalIgnoreCase)) return "youtube";
         return null;
