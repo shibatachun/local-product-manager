@@ -26,6 +26,8 @@ interface PricingStep {
 interface PricingEstimate {
   platform: Platform;
   logistics: string;
+  category: string;
+  categoryRate: number;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -51,14 +53,22 @@ interface LogisticsOption {
 interface PricingPlatformConfig {
   label: string;
   defaultLogistics: string;
-  referralRate: number;
+  defaultCategory: string;
   processingRate: number;
   fixedFee: number;
   listingFee: number;
   marginPercent: number;
   bufferPercent: number;
   note: string;
+  categories: PricingCategory[];
   logistics: LogisticsOption[];
+}
+
+interface PricingCategory {
+  value: string;
+  label: string;
+  feeRate: number;
+  note: string;
 }
 
 interface PlatformChoice {
@@ -157,6 +167,7 @@ export class ProductManagerPage {
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
   readonly pricingForm = {
     platform: 'walmart' as Platform,
+    category: 'general',
     logistics: 'usps-ground',
     quantity: 1,
     productCost: 0,
@@ -172,13 +183,21 @@ export class ProductManagerPage {
     walmart: {
       label: 'Walmart',
       defaultLogistics: 'usps-ground',
-      referralRate: 0.15,
+      defaultCategory: 'general',
       processingRate: 0.029,
       fixedFee: 0.3,
       listingFee: 0,
       marginPercent: 20,
       bufferPercent: 5,
       note: 'Seller-fulfilled Walmart estimate with a general referral fee assumption.',
+      categories: [
+        this.category('general', 'General merchandise', 0.15, 'Common Walmart Marketplace planning rate for many categories.'),
+        this.category('apparel', 'Apparel and accessories', 0.15, 'Typical soft goods planning rate.'),
+        this.category('electronics', 'Consumer electronics', 0.08, 'Lower electronics-style referral estimate.'),
+        this.category('home', 'Home, kitchen, garden', 0.15, 'General home and kitchen planning rate.'),
+        this.category('jewelry', 'Jewelry and watches', 0.20, 'Higher-risk accessory category estimate.'),
+        this.category('media', 'Media, books, games', 0.15, 'General media planning rate.'),
+      ],
       logistics: [
         this.logistics('usps-ground', 'USPS Ground Advantage', 'Common light parcel option for seller-fulfilled orders.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
         this.logistics('ups-ground', 'UPS Ground', 'Useful for heavier boxes and commercial pickups.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
@@ -188,13 +207,24 @@ export class ProductManagerPage {
     amazon: {
       label: 'Amazon',
       defaultLogistics: 'amazon-fba',
-      referralRate: 0.15,
+      defaultCategory: 'home-kitchen',
       processingRate: 0,
       fixedFee: 0.3,
       listingFee: 0,
       marginPercent: 20,
       bufferPercent: 6,
       note: 'Amazon estimate defaults to FBA-style fulfillment plus the common 15% referral assumption.',
+      categories: [
+        this.category('home-kitchen', 'Home and Kitchen', 0.15, 'Amazon commonly lists Home and Kitchen at 15%.'),
+        this.category('clothing-low', 'Clothing <= $15', 0.05, 'Amazon clothing tier for lower-priced items.'),
+        this.category('clothing-mid', 'Clothing $15.01-$20', 0.10, 'Amazon clothing mid-price tier.'),
+        this.category('clothing-high', 'Clothing > $20', 0.17, 'Amazon clothing higher-price tier.'),
+        this.category('electronics', 'Consumer Electronics', 0.08, 'Amazon electronics planning rate.'),
+        this.category('beauty-low', 'Beauty/Health <= $10', 0.08, 'Amazon low-price beauty and health tier.'),
+        this.category('beauty-high', 'Beauty/Health > $10', 0.15, 'Amazon beauty and health higher-price tier.'),
+        this.category('jewelry', 'Jewelry <= $250', 0.20, 'Amazon jewelry first-tier estimate.'),
+        this.category('everything-else', 'Everything Else', 0.15, 'Fallback Amazon category rate.'),
+      ],
       logistics: [
         this.logistics('amazon-fba', 'Amazon FBA estimate', 'Simplified FBA fulfillment tier for small parcel planning.', 139, [[1, 4.2], [2, 5.35], [3, 6.25], [5, 7.85], [10, 10.95], [20, 17.5], [40, 34]], 1.1),
         this.logistics('usps-ground', 'FBM USPS Ground Advantage', 'Merchant-fulfilled Amazon order shipped by USPS.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
@@ -204,13 +234,21 @@ export class ProductManagerPage {
     ebay: {
       label: 'eBay',
       defaultLogistics: 'ebay-usps',
-      referralRate: 0.1325,
+      defaultCategory: 'general',
       processingRate: 0,
       fixedFee: 0.4,
       listingFee: 0,
       marginPercent: 18,
       bufferPercent: 5,
       note: 'General eBay final value fee estimate. Category fees can differ.',
+      categories: [
+        this.category('general', 'General goods', 0.1325, 'Common eBay final value planning rate.'),
+        this.category('fashion', 'Fashion', 0.1325, 'Common fashion estimate; exact seller/account rules can vary.'),
+        this.category('electronics', 'Consumer electronics', 0.10, 'Lower electronics-style final value estimate.'),
+        this.category('media', 'Books, movies, music', 0.1455, 'Media categories can run higher than general goods.'),
+        this.category('jewelry', 'Jewelry and watches', 0.15, 'Accessory category planning estimate.'),
+        this.category('collectibles', 'Collectibles', 0.1325, 'General collectibles planning rate.'),
+      ],
       logistics: [
         this.logistics('ebay-usps', 'eBay USPS label', 'Common eBay label flow for light parcels.', 139, [[1, 5.55], [2, 8.15], [3, 10.25], [5, 12.95], [10, 19.25], [20, 33.5]], 1.4),
         this.logistics('ebay-ups', 'eBay UPS Ground label', 'Often better for heavier packages.', 139, [[1, 8.6], [5, 13.35], [10, 18.35], [20, 30.95], [40, 54]], 1.2),
@@ -219,13 +257,20 @@ export class ProductManagerPage {
     etsy: {
       label: 'Etsy',
       defaultLogistics: 'etsy-usps',
-      referralRate: 0.065,
+      defaultCategory: 'standard',
       processingRate: 0.03,
       fixedFee: 0.25,
       listingFee: 0.2,
       marginPercent: 22,
       bufferPercent: 5,
       note: 'Etsy estimate includes listing, transaction, and US payment processing assumptions.',
+      categories: [
+        this.category('standard', 'Standard Etsy sale', 0.065, 'Etsy transaction fee estimate before payment processing.'),
+        this.category('handmade', 'Handmade goods', 0.065, 'Same Etsy transaction fee model; useful for tracking category.'),
+        this.category('vintage', 'Vintage goods', 0.065, 'Same Etsy transaction fee model; category kept for planning.'),
+        this.category('craft-supplies', 'Craft supplies', 0.065, 'Same Etsy transaction fee model; category kept for planning.'),
+        this.category('offsite-ad', 'Offsite ad sale', 0.185, 'Adds a 12% offsite ads reserve on top of the 6.5% transaction fee.'),
+      ],
       logistics: [
         this.logistics('etsy-usps', 'Etsy USPS label', 'Common Etsy seller label for handmade and small parcels.', 139, [[1, 5.55], [2, 8.15], [3, 10.25], [5, 12.95], [10, 19.25], [20, 33.5]], 1.4),
         this.logistics('etsy-ups', 'Etsy UPS Ground label', 'Planning option for larger boxes.', 139, [[1, 8.6], [5, 13.35], [10, 18.35], [20, 30.95], [40, 54]], 1.2),
@@ -334,6 +379,7 @@ export class ProductManagerPage {
   onPricingPlatformChanged(platform: Platform): void {
     const config = this.pricingConfigs[platform];
     this.pricingForm.platform = platform;
+    this.pricingForm.category = config.defaultCategory;
     this.pricingForm.logistics = config.defaultLogistics;
     this.pricingForm.targetMarginPercent = config.marginPercent;
     this.pricingForm.bufferPercent = config.bufferPercent;
@@ -351,6 +397,10 @@ export class ProductManagerPage {
 
   pricingLogisticsOptions(): LogisticsOption[] {
     return this.pricingConfigs[this.pricingForm.platform].logistics;
+  }
+
+  pricingCategoryOptions(): PricingCategory[] {
+    return this.pricingConfigs[this.pricingForm.platform].categories;
   }
 
   pricingDerived(): PricingEstimate {
@@ -743,6 +793,7 @@ export class ProductManagerPage {
   private calculatePricingEstimate(): PricingEstimate {
     const config = this.pricingConfigs[this.pricingForm.platform];
     const logistics = config.logistics.find((item) => item.value === this.pricingForm.logistics) ?? config.logistics[0];
+    const category = config.categories.find((item) => item.value === this.pricingForm.category) ?? config.categories[0];
     const quantity = Math.max(1, Math.round(this.safeNumber(this.pricingForm.quantity)));
     const unitCost = this.safeNumber(this.pricingForm.productCost);
     const totalCost = unitCost * quantity;
@@ -759,11 +810,11 @@ export class ProductManagerPage {
     const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight)));
     const shippingCost = this.estimateLogisticsCost(billableWeight, logistics);
     const fixedCost = totalCost + shippingCost + packaging + config.fixedFee + config.listingFee;
-    const breakEvenVariableRate = config.referralRate + config.processingRate + bufferRate;
+    const breakEvenVariableRate = category.feeRate + config.processingRate + bufferRate;
     const suggestedVariableRate = breakEvenVariableRate + marginRate;
     const breakEvenPrice = fixedCost / Math.max(0.01, 1 - breakEvenVariableRate);
     const suggestedPrice = fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
-    const platformFee = suggestedPrice * config.referralRate;
+    const platformFee = suggestedPrice * category.feeRate;
     const processingFee = suggestedPrice * config.processingRate + config.fixedFee;
     const buffer = suggestedPrice * bufferRate;
     const estimatedProfit = suggestedPrice - totalCost - shippingCost - packaging - platformFee - processingFee - config.listingFee - buffer;
@@ -771,6 +822,8 @@ export class ProductManagerPage {
     return {
       platform: this.pricingForm.platform,
       logistics: logistics.label,
+      category: category.label,
+      categoryRate: category.feeRate,
       quantity,
       unitCost,
       totalCost,
@@ -788,7 +841,7 @@ export class ProductManagerPage {
         { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight, rounded up.` },
         { label: logistics.label, value: this.currency(shippingCost), note: logistics.note },
         { label: 'Packaging reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
-        { label: `${config.label} platform fee`, value: `${this.number(config.referralRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${config.note}` },
+        { label: `${config.label} category fee`, value: `${this.number(category.feeRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${category.note}` },
         { label: 'Processing/fixed fees', value: `${this.number(config.processingRate * 100)}% + ${this.currency(config.fixedFee + config.listingFee)}`, note: `${this.currency(processingFee + config.listingFee)} at the suggested price.` },
         { label: 'Risk buffer', value: `${this.number(bufferRate * 100)}%`, note: `${this.currency(buffer)} reserve for returns, price changes, and small fee drift.` },
         { label: 'Target margin', value: `${this.number(marginRate * 100)}%`, note: `${this.currency(estimatedProfit)} estimated profit at the suggested price.` },
@@ -812,6 +865,10 @@ export class ProductManagerPage {
     overflowPerLb: number,
   ): LogisticsOption {
     return { value, label, note, dimDivisor, tiers: tiers.map(([max, cost]) => ({ max, cost })), overflowPerLb };
+  }
+
+  private category(value: string, label: string, feeRate: number, note: string): PricingCategory {
+    return { value, label, feeRate, note };
   }
 
   private safeNumber(value: number | null | undefined): number {

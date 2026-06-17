@@ -179,6 +179,13 @@
                   </option>
                 </select>
               </label>
+              <label>Category
+                <select [(ngModel)]="pricingForm.category" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of pricingCategoryOptions()" [value]="option.value">
+                    {{ option.label }} - {{ number(option.feeRate * 100) }}%
+                  </option>
+                </select>
+              </label>
               <label>Logistics
                 <select [(ngModel)]="pricingForm.logistics" (ngModelChange)="pricingResult.set(null)">
                   <option *ngFor="let option of pricingLogisticsOptions()" [value]="option.value">{{ option.label }}</option>
@@ -234,6 +241,7 @@
             </div>
             <div class="estimate-meta">
               <span>{{ platformLabel(estimate.platform) }}</span>
+              <span>{{ estimate.category }}: {{ number(estimate.categoryRate * 100) }}%</span>
               <span>{{ estimate.logistics }}</span>
               <span>{{ estimate.quantity }} unit(s)</span>
               <span>Billable weight: {{ estimate.billableWeight }} lb</span>
@@ -254,6 +262,7 @@
               <p>Set quantity, dimensions, platform, and logistics, then click Calculate price to lock an estimate.</p>
               <div class="estimate-meta">
                 <span>{{ platformLabel(pricingForm.platform) }}</span>
+                <span>{{ pricingDerived().category }}: {{ number(pricingDerived().categoryRate * 100) }}%</span>
                 <span>{{ pricingDerived().logistics }}</span>
                 <span>Total cost: {{ currency(pricingDerived().totalCost) }}</span>
                 <span>Billable weight: {{ pricingDerived().billableWeight }} lb</span>
