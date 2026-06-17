@@ -42,11 +42,21 @@ public sealed class ProductService(AppDbContext db)
 
         if (hasAmazon is true)
         {
-            query = query.Where(product => product.Listings.Any(listing => listing.Platform == "amazon"));
+            query = query.Where(product =>
+                product.Listings.Any(listing => listing.Platform == "amazon") ||
+                product.AmazonAsins.Any() ||
+                product.ChildProducts.Any(child =>
+                    child.Listings.Any(listing => listing.Platform == "amazon") ||
+                    child.AmazonAsins.Any()));
         }
         else if (hasAmazon is false)
         {
-            query = query.Where(product => !product.Listings.Any(listing => listing.Platform == "amazon"));
+            query = query.Where(product =>
+                !product.Listings.Any(listing => listing.Platform == "amazon") &&
+                !product.AmazonAsins.Any() &&
+                !product.ChildProducts.Any(child =>
+                    child.Listings.Any(listing => listing.Platform == "amazon") ||
+                    child.AmazonAsins.Any()));
         }
 
         var products = await query

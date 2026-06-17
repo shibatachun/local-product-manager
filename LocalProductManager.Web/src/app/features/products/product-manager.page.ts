@@ -33,6 +33,7 @@ export class ProductManagerPage {
   readonly api = inject(ProductApiService);
 
   readonly products = signal<ProductListItem[]>([]);
+  readonly marketingProducts = signal<ProductListItem[]>([]);
   readonly selectedProduct = signal<ProductDetail | null>(null);
   readonly search = signal('');
   readonly marketingSearch = signal('');
@@ -107,7 +108,7 @@ export class ProductManagerPage {
   });
   readonly amazonProducts = computed(() => {
     const keyword = this.marketingSearch().trim().toLowerCase();
-    const products = this.products()
+    const products = this.marketingProducts()
       .flatMap((product) => [product, ...product.children])
       .filter((product) => this.hasAmazon(product));
     if (!keyword) return products;
@@ -137,9 +138,16 @@ export class ProductManagerPage {
     }, false);
   }
 
+  async loadMarketingProducts(): Promise<void> {
+    await this.perform(async () => {
+      this.marketingProducts.set(await this.api.search('', '', true));
+    }, false);
+  }
+
   changeView(view: ViewMode): void {
     this.view.set(view);
     this.detailOpen.set(false);
+    if (view === 'marketing') void this.loadMarketingProducts();
   }
 
   async selectMarketingProduct(productId: number): Promise<void> {
@@ -205,6 +213,7 @@ export class ProductManagerPage {
       this.importOpen.set(false);
       this.expandedParents.set(new Set());
       await this.loadProducts();
+      await this.loadMarketingProducts();
       this.showNotice(
         `Imported ${result.rowsRead} rows: ${result.variationGroups} variations, ` +
         `${result.childProductsCreated + result.standaloneProductsCreated} products created.`,
@@ -220,6 +229,7 @@ export class ProductManagerPage {
       const result = await this.api.importBulkAttributions(file);
       this.importOpen.set(false);
       await this.loadProducts();
+      await this.loadMarketingProducts();
       const unmatched = result.unmatchedSkus.length
         ? ` ${result.unmatchedSkus.length} SKU(s) were not found.`
         : '';
@@ -516,7 +526,7 @@ export class ProductManagerPage {
   }
 
   hasAmazon(product: ProductListItem): boolean {
-    return product.platforms.includes('amazon');
+    return product.platforms.includes('amazon') || product.asinCount > 0 || product.amazonAsinValues.length > 0;
   }
 
   matchesMarketingSearch(product: ProductListItem, keyword: string): boolean {

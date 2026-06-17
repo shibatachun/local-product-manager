@@ -21,10 +21,11 @@ export class ProductApiService {
   private readonly http = inject(HttpClient);
   readonly baseUrl = `http://${globalThis.location?.hostname || 'localhost'}:5077/api`;
 
-  search(keyword = '', platform = ''): Promise<ProductListItem[]> {
+  search(keyword = '', platform = '', hasAmazon?: boolean): Promise<ProductListItem[]> {
     const query = new URLSearchParams();
     if (keyword.trim()) query.set('keyword', keyword.trim());
     if (platform) query.set('platform', platform);
+    if (hasAmazon !== undefined) query.set('hasAmazon', String(hasAmazon));
     const suffix = query.size ? `?${query}` : '';
     return firstValueFrom(this.http.get<ProductListItem[]>(`${this.baseUrl}/products${suffix}`));
   }
