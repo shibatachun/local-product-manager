@@ -125,6 +125,29 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .channel button, .section-heading button { min-height: 34px; padding: 0 10px; border: 1px solid #c9d2d8; border-radius: 5px; background: #fff; font-weight: 700; }
 .channel .copy { color: #fff; border-color: #176b87; background: #176b87; }
 
+.pricing-page { display: grid; grid-template-columns: minmax(360px, 460px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.pricing-panel, .estimate-panel { border: 1px solid #dce2e7; border-radius: 8px; background: #fff; }
+.pricing-panel { padding: 22px; }
+.pricing-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.pricing-form label { display: grid; gap: 6px; color: #55646f; font-size: 12px; font-weight: 750; }
+.pricing-form label:nth-child(-n+2) { grid-column: 1/-1; }
+.estimate-panel { overflow: hidden; }
+.estimate-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-bottom: 1px solid #e2e7ea; }
+.estimate-summary div { padding: 18px; border-right: 1px solid #edf0f2; }
+.estimate-summary div:last-child { border-right: 0; }
+.estimate-summary span, .estimate-summary strong { display: block; }
+.estimate-summary span { color: #75828c; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.estimate-summary strong { margin-top: 7px; color: #17212b; font-size: 25px; line-height: 1.1; }
+.estimate-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 18px; border-bottom: 1px solid #e2e7ea; background: #f8fafb; }
+.estimate-meta span { padding: 5px 8px; border-radius: 5px; color: #40505d; background: #edf2f4; font-size: 11px; font-weight: 750; }
+.estimate-steps { display: grid; gap: 0; padding: 4px 18px; }
+.estimate-step { display: grid; grid-template-columns: 160px 110px minmax(0,1fr); gap: 12px; align-items: start; padding: 13px 0; border-bottom: 1px solid #edf0f2; }
+.estimate-step:last-child { border-bottom: 0; }
+.estimate-step span { color: #65737e; font-size: 12px; font-weight: 750; }
+.estimate-step strong { font-size: 13px; }
+.estimate-step p { margin: 0; color: #73808a; font-size: 12px; line-height: 1.45; }
+.estimate-note { margin: 0; padding: 13px 18px; border-top: 1px solid #e2e7ea; color: #6a7782; background: #fafbfc; font-size: 12px; }
+
 .storage-page { max-width: 980px; border: 1px solid #dce2e7; border-radius: 8px; background: #fff; }
 .storage-intro { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px; border-bottom: 1px solid #e2e7ea; }
 .storage-intro p { margin: 5px 0 0; color: #74818b; font-size: 13px; }
@@ -219,6 +242,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .connection div { display:none; }.connection { justify-content:center; }
   .stats-band { grid-template-columns:repeat(2,1fr); }.stats-band div:nth-child(2){border-right:0}.stats-band div:nth-child(-n+2){border-bottom:1px solid #e6eaed}
   .store-band { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .pricing-page { grid-template-columns:1fr; }
   .marketing-layout { grid-template-columns:260px minmax(0,1fr); }.channel-grid { grid-template-columns:1fr; }
   th:nth-child(6),td:nth-child(6){display:none}
 }
@@ -229,6 +253,9 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .content { padding:18px 12px 28px; }.page-header { align-items:center; }.page-header h1 { font-size:22px; }
   .stats-band { grid-template-columns:repeat(2,1fr); }.toolbar { grid-template-columns:1fr 1fr 40px; }.search-box { grid-column:1/-1; }
   .store-band { grid-template-columns:1fr; }
+  .pricing-form, .estimate-summary, .estimate-step { grid-template-columns:1fr; }
+  .pricing-form label:nth-child(-n+2) { grid-column:auto; }
+  .estimate-summary div { border-right:0;border-bottom:1px solid #edf0f2; }
   .table-wrap { overflow-x:auto; } table { min-width:850px; }
   .marketing-layout { grid-template-columns:1fr; height:auto; max-height:none; overflow:visible; }.marketing-list { max-height: 360px; border-right:0;border-bottom:1px solid #e2e7ea; }.marketing-workspace { overflow: visible; padding:16px; }
   .folder-import { grid-template-columns: 1fr; margin: -16px -16px 18px; padding: 14px 16px; }

@@ -15,7 +15,13 @@ import {
 } from '../../core/models';
 import { ProductApiService } from '../../core/product-api.service';
 
-type ViewMode = 'products' | 'marketing' | 'storage';
+type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage';
+
+interface PricingStep {
+  label: string;
+  value: string;
+  note: string;
+}
 
 interface PlatformChoice {
   platform: Platform;
@@ -111,6 +117,25 @@ export class ProductManagerPage {
   readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
   readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
+  readonly pricingForm = {
+    platform: 'walmart' as Platform,
+    logistics: 'usps',
+    productCost: 0,
+    weight: 1,
+    length: 6,
+    width: 4,
+    height: 2,
+    packagingCost: 0.65,
+    targetMarginPercent: 20,
+    bufferPercent: 5,
+  };
+  readonly pricingPlatformOptions = [
+    { value: 'walmart' as Platform, label: 'Walmart', disabled: false },
+    { value: 'amazon' as Platform, label: 'Amazon', disabled: true },
+    { value: 'ebay' as Platform, label: 'eBay', disabled: true },
+    { value: 'etsy' as Platform, label: 'Etsy', disabled: true },
+  ];
+  readonly pricingEstimate = computed(() => this.calculatePricingEstimate());
 
   readonly stats = computed(() => {
     const products = this.products();
@@ -186,6 +211,26 @@ export class ProductManagerPage {
     this.view.set(view);
     this.detailOpen.set(false);
     if (view === 'marketing') void this.loadMarketingProducts();
+  }
+
+  pageEyebrow(): string {
+    const labels: Record<ViewMode, string> = {
+      products: 'Catalog',
+      pricing: 'Cost planning',
+      marketing: 'Amazon Attribution',
+      storage: 'Server settings',
+    };
+    return labels[this.view()];
+  }
+
+  pageTitle(): string {
+    const labels: Record<ViewMode, string> = {
+      products: 'Product management',
+      pricing: 'Pricing estimator',
+      marketing: 'Marketing links',
+      storage: 'Image storage',
+    };
+    return labels[this.view()];
   }
 
   async selectMarketingProduct(productId: number): Promise<void> {
@@ -569,6 +614,89 @@ export class ProductManagerPage {
 
   attributionUrl(platform: AttributionPlatform): string {
     return this.selectedProduct()?.amazonAttributionLinks.find((item) => item.platform === platform)?.attributionUrl ?? '';
+  }
+
+  private calculatePricingEstimate(): {
+    cubicInches: number;
+    dimensionalWeight: number;
+    billableWeight: number;
+    shippingCost: number;
+    breakEvenPrice: number;
+    suggestedPrice: number;
+    estimatedProfit: number;
+    steps: PricingStep[];
+  } {
+    const cost = this.safeNumber(this.pricingForm.productCost);
+    const weight = Math.max(0, this.safeNumber(this.pricingForm.weight));
+    const length = Math.max(0, this.safeNumber(this.pricingForm.length));
+    const width = Math.max(0, this.safeNumber(this.pricingForm.width));
+    const height = Math.max(0, this.safeNumber(this.pricingForm.height));
+    const packaging = this.safeNumber(this.pricingForm.packagingCost);
+    const marginRate = this.safePercent(this.pricingForm.targetMarginPercent);
+    const bufferRate = this.safePercent(this.pricingForm.bufferPercent);
+    const walmartReferralRate = 0.15;
+    const processingRate = 0.029;
+    const processingFixed = 0.3;
+    const cubicInches = length * width * height;
+    const dimensionalWeight = cubicInches > 0 ? cubicInches / 166 : 0;
+    const billableWeight = Math.max(1, Math.ceil(Math.max(weight, dimensionalWeight)));
+    const shippingCost = this.estimateUspsCost(billableWeight);
+    const fixedCost = cost + shippingCost + packaging + processingFixed;
+    const breakEvenVariableRate = walmartReferralRate + processingRate + bufferRate;
+    const suggestedVariableRate = breakEvenVariableRate + marginRate;
+    const breakEvenPrice = fixedCost / Math.max(0.01, 1 - breakEvenVariableRate);
+    const suggestedPrice = fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
+    const walmartFee = suggestedPrice * walmartReferralRate;
+    const processingFee = suggestedPrice * processingRate + processingFixed;
+    const buffer = suggestedPrice * bufferRate;
+    const estimatedProfit = suggestedPrice - cost - shippingCost - packaging - walmartFee - processingFee - buffer;
+
+    return {
+      cubicInches,
+      dimensionalWeight,
+      billableWeight,
+      shippingCost,
+      breakEvenPrice,
+      suggestedPrice,
+      estimatedProfit,
+      steps: [
+        { label: 'Product cost', value: this.currency(cost), note: 'Your item cost before shipping and marketplace fees.' },
+        { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / 166 = ${this.number(dimensionalWeight)} lb.` },
+        { label: 'USPS billable weight', value: `${billableWeight} lb`, note: `The estimate uses the higher of actual weight and dimensional weight, rounded up.` },
+        { label: 'Estimated USPS shipping', value: this.currency(shippingCost), note: 'Local planning estimate only; real label prices can vary by zone, service, and account rate.' },
+        { label: 'Packaging reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
+        { label: 'Walmart referral fee', value: `${this.number(walmartReferralRate * 100)}%`, note: `${this.currency(walmartFee)} at the suggested price. Default assumes a general 15% category fee.` },
+        { label: 'Processing reserve', value: `2.9% + ${this.currency(processingFixed)}`, note: `${this.currency(processingFee)} at the suggested price.` },
+        { label: 'Risk buffer', value: `${this.number(bufferRate * 100)}%`, note: `${this.currency(buffer)} reserve for returns, price changes, and small fee drift.` },
+        { label: 'Target margin', value: `${this.number(marginRate * 100)}%`, note: `${this.currency(estimatedProfit)} estimated profit at the suggested price.` },
+      ],
+    };
+  }
+
+  private estimateUspsCost(weightLb: number): number {
+    if (weightLb <= 1) return 5.25;
+    if (weightLb <= 2) return 7.85;
+    if (weightLb <= 3) return 9.95;
+    if (weightLb <= 5) return 12.75;
+    if (weightLb <= 10) return 18.95;
+    if (weightLb <= 20) return 32.95;
+    return 32.95 + (weightLb - 20) * 1.35;
+  }
+
+  private safeNumber(value: number | null | undefined): number {
+    return Number.isFinite(Number(value)) ? Number(value) : 0;
+  }
+
+  private safePercent(value: number | null | undefined): number {
+    return Math.max(0, Math.min(95, this.safeNumber(value))) / 100;
+  }
+
+  currency(value: number): string {
+    return `$${this.safeNumber(value).toFixed(2)}`;
+  }
+
+  number(value: number): string {
+    return this.safeNumber(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
   listingFor(product: ProductDetail, platform: Platform): ProductListing | undefined {

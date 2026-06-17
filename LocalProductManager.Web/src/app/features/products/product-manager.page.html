@@ -7,6 +7,7 @@
 
     <nav aria-label="Main navigation">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> Image storage</button>
       <a routerLink="/test"><span>⌘</span> API Test</a>
@@ -21,13 +22,13 @@
   <main class="content">
     <header class="page-header">
       <div>
-        <p class="eyebrow">{{ view() === 'products' ? 'Catalog' : view() === 'marketing' ? 'Amazon Attribution' : 'Server settings' }}</p>
-        <h1>{{ view() === 'products' ? 'Product management' : view() === 'marketing' ? 'Marketing links' : 'Image storage' }}</h1>
+        <p class="eyebrow">{{ pageEyebrow() }}</p>
+        <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage'">
+      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="openImport()">Import</button>
-        <button class="primary" type="button" (click)="openWizard()"><span>+</span> Add product</button>
+        <button class="primary" type="button" *ngIf="view() === 'products'" (click)="openWizard()"><span>+</span> Add product</button>
       </div>
     </header>
 
@@ -107,7 +108,7 @@
     </ng-container>
 
     <ng-template #marketingView>
-      <ng-container *ngIf="view() === 'marketing'; else storageView">
+      <ng-container *ngIf="view() === 'marketing'; else pricingView">
       <section class="marketing-layout">
         <div class="marketing-list">
           <div class="section-heading"><div><h2>Amazon products</h2><p>Select a product to switch attribution links.</p></div></div>
@@ -157,6 +158,80 @@
           </ng-container>
         </div>
       </section>
+      </ng-container>
+    </ng-template>
+
+    <ng-template #pricingView>
+      <ng-container *ngIf="view() === 'pricing'; else storageView">
+        <section class="pricing-page">
+          <div class="pricing-panel">
+            <div class="section-heading">
+              <div>
+                <h2>Walmart price planner</h2>
+                <p>Estimate a listing price from product cost, USPS shipping, and marketplace fees.</p>
+              </div>
+            </div>
+            <div class="pricing-form">
+              <label>Platform
+                <select [(ngModel)]="pricingForm.platform">
+                  <option *ngFor="let option of pricingPlatformOptions" [ngValue]="option.value" [disabled]="option.disabled">
+                    {{ option.label }}{{ option.disabled ? ' - later' : '' }}
+                  </option>
+                </select>
+              </label>
+              <label>Logistics
+                <select [(ngModel)]="pricingForm.logistics">
+                  <option value="usps">USPS</option>
+                </select>
+              </label>
+              <label>Product cost
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" placeholder="0.00" />
+              </label>
+              <label>Actual weight (lb)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" placeholder="1.00" />
+              </label>
+              <label>Length (in)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.length" />
+              </label>
+              <label>Width (in)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.width" />
+              </label>
+              <label>Height (in)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.height" />
+              </label>
+              <label>Packaging reserve
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingCost" />
+              </label>
+              <label>Target margin %
+                <input type="number" min="0" max="80" step="1" [(ngModel)]="pricingForm.targetMarginPercent" />
+              </label>
+              <label>Risk buffer %
+                <input type="number" min="0" max="30" step="1" [(ngModel)]="pricingForm.bufferPercent" />
+              </label>
+            </div>
+          </div>
+
+          <div class="estimate-panel">
+            <div class="estimate-summary">
+              <div><span>Suggested listing price</span><strong>{{ currency(pricingEstimate().suggestedPrice) }}</strong></div>
+              <div><span>Break-even price</span><strong>{{ currency(pricingEstimate().breakEvenPrice) }}</strong></div>
+              <div><span>Estimated profit</span><strong>{{ currency(pricingEstimate().estimatedProfit) }}</strong></div>
+              <div><span>USPS estimate</span><strong>{{ currency(pricingEstimate().shippingCost) }}</strong></div>
+            </div>
+            <div class="estimate-meta">
+              <span>Billable weight: {{ pricingEstimate().billableWeight }} lb</span>
+              <span>Dimensional weight: {{ number(pricingEstimate().dimensionalWeight) }} lb</span>
+            </div>
+            <div class="estimate-steps">
+              <div class="estimate-step" *ngFor="let step of pricingEstimate().steps">
+                <span>{{ step.label }}</span>
+                <strong>{{ step.value }}</strong>
+                <p>{{ step.note }}</p>
+              </div>
+            </div>
+            <p class="estimate-note">This is a planning estimate. Confirm final Walmart category fees and USPS label rates before publishing prices.</p>
+          </div>
+        </section>
       </ng-container>
     </ng-template>
 
