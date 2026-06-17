@@ -9,6 +9,7 @@ namespace LocalProductManager.Api.Controllers;
 public sealed class ImageMatcherController(
     ImageMatcherService imageMatcher,
     ImageFileService imageFiles,
+    RemoteImageProxyService remoteImages,
     AmazonImageLookupService listingImages) : ControllerBase
 {
     [HttpGet("roots")]
@@ -133,6 +134,31 @@ public sealed class ImageMatcherController(
         catch (IOException)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image share is temporarily unavailable.");
+        }
+    }
+
+    [HttpGet("remote-preview")]
+    public async Task<IActionResult> RemotePreview(
+        [FromQuery] string url,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var remoteImage = await remoteImages.GetImageAsync(url, cancellationToken);
+            Response.Headers.CacheControl = "private, max-age=300";
+            return File(remoteImage.Stream, remoteImage.ContentType);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+        catch (IOException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The remote image is temporarily unavailable.");
         }
     }
 }

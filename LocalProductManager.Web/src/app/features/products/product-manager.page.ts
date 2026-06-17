@@ -1089,7 +1089,6 @@ export class ProductManagerPage {
   }
 
   imagePreviewUrl(path: string): string {
-    if (/^https?:\/\//i.test(path.trim())) return path;
     return this.api.imagePreviewUrl(path);
   }
 

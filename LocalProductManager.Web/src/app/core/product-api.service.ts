@@ -143,7 +143,12 @@ export class ProductApiService {
   }
 
   imagePreviewUrl(path: string): string {
-    return `${this.baseUrl}/images/preview?path=${encodeURIComponent(path)}`;
+    const trimmed = path.trim();
+    if (/^https?:\/\//i.test(trimmed)) {
+      return `${this.baseUrl}/images/remote-preview?url=${encodeURIComponent(trimmed)}`;
+    }
+
+    return `${this.baseUrl}/images/preview?path=${encodeURIComponent(trimmed)}`;
   }
 
   imageStorageRoots(): Promise<ImageStorageRoot[]> {
