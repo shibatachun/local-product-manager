@@ -121,7 +121,10 @@ public sealed class BulkAttributionImportService(
     {
         var products = await db.Products
             .Where(product => product.Sku.Contains(token))
-            .OrderBy(product => product.Sku)
+            .OrderByDescending(product => product.ParentProductId == null)
+            .ThenByDescending(product => product.ProductType == "parent")
+            .ThenBy(product => product.Sku.Length)
+            .ThenBy(product => product.Sku)
             .ToListAsync(cancellationToken);
         return products.FirstOrDefault();
     }

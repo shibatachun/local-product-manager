@@ -18,13 +18,13 @@ public sealed class AttributionFolderImportService(
     {
         var products = await db.Products
             .AsNoTracking()
-            .Where(product => product.Listings.Any(listing => listing.Platform == "amazon"))
-            .Select(product => new ProductMatch(product.Id, product.Sku, null))
+            .Select(product => new ProductMatch(product.Id, product.Sku, product.ProductType, product.ParentProductId, null))
             .ToListAsync(cancellationToken);
 
         var candidates = products
             .Select(product => product with { FiveDigitToken = ExtractFiveDigitToken(product.Sku) })
-            .OrderByDescending(product => product.Sku.Length)
+            .OrderByDescending(product => product.Score)
+            .ThenBy(product => product.Sku.Length)
             .ToArray();
         var matchedFiles = 0;
         var linksImported = 0;
@@ -72,7 +72,11 @@ public sealed class AttributionFolderImportService(
         var fileToken = ExtractFiveDigitToken(title);
         if (fileToken is not null)
         {
-            var tokenMatch = candidates.FirstOrDefault(product => product.FiveDigitToken == fileToken);
+            var tokenMatch = candidates
+                .Where(product => product.FiveDigitToken == fileToken)
+                .OrderByDescending(product => product.Score)
+                .ThenBy(product => product.Sku.Length)
+                .FirstOrDefault();
             if (tokenMatch is not null) return tokenMatch;
         }
 
@@ -85,5 +89,15 @@ public sealed class AttributionFolderImportService(
         return match.Success ? match.Value : null;
     }
 
-    private sealed record ProductMatch(int Id, string Sku, string? FiveDigitToken);
+    private sealed record ProductMatch(
+        int Id,
+        string Sku,
+        string ProductType,
+        int? ParentProductId,
+        string? FiveDigitToken)
+    {
+        public int Score =>
+            (ParentProductId is null ? 100 : 0) +
+            (string.Equals(ProductType, "parent", StringComparison.OrdinalIgnoreCase) ? 50 : 0);
+    }
 }
