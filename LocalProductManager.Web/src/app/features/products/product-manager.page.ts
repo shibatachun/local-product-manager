@@ -1151,6 +1151,9 @@ export class ProductManagerPage {
     }
     this.syncListingDrafts(product);
     await this.loadProducts();
+    if (this.view() === 'marketing') {
+      await this.loadMarketingProducts();
+    }
   }
 
   private syncListingDrafts(product: ProductDetail): void {
