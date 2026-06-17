@@ -7,7 +7,7 @@ namespace LocalProductManager.Api.Services;
 public sealed class AmazonImageLookupService(HttpClient httpClient)
 {
     private static readonly Regex OgImageRegex = new(
-        """<meta[^>]+(?:property|name)=["']og:image["'][^>]*>""",
+        """<meta[^>]+(?:property|name)=["'](?:og:image|og:image:secure_url|twitter:image|twitter:image:src)["'][^>]*>""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ContentRegex = new(
@@ -30,6 +30,22 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         """https?://[^"'\\<>\s]+?m\.media-amazon\.com/images/I/[^"'\\<>\s]+?\.(?:jpg|jpeg|png|webp)""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex JsonLdRegex = new(
+        """<script[^>]+type=["']application/ld\+json["'][^>]*>(?<json>.*?)</script>""",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly Regex GenericImageRegex = new(
+        """https?://[^"'\\<>\s]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\\<>\s]*)?""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly string[] PreferredImageHosts =
+    [
+        "i5.walmartimages.com",
+        "i.ebayimg.com",
+        "i.etsystatic.com",
+        "m.media-amazon.com"
+    ];
+
     public async Task<string> FindImageUrlAsync(
         string listingUrl,
         CancellationToken cancellationToken)
@@ -37,7 +53,7 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         if (!Uri.TryCreate(listingUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            throw new InvalidOperationException("Amazon listing URL must be an HTTP or HTTPS URL.");
+            throw new InvalidOperationException("Listing URL must be an HTTP or HTTPS URL.");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
@@ -54,16 +70,18 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
 
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
         var imageUrl = FindMetaImage(html) ??
+            FindJsonLdImage(html) ??
             FindLandingImage(html) ??
             FindDataOldHiresImage(html) ??
             FindDynamicImage(html) ??
-            FindAmazonMediaImage(html);
+            FindPreferredRemoteImage(html) ??
+            FindGenericRemoteImage(html);
         if (string.IsNullOrWhiteSpace(imageUrl))
         {
-            throw new InvalidOperationException("Could not find a product image on the Amazon page.");
+            throw new InvalidOperationException("Could not find a product image on the listing page.");
         }
 
-        return NormalizeImageUrl(imageUrl);
+        return NormalizeImageUrl(imageUrl, uri);
     }
 
     private static string? FindMetaImage(string html)
@@ -77,6 +95,74 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         var content = ContentRegex.Match(match.Value);
         return content.Success ? content.Groups["url"].Value : null;
     }
+
+    private static string? FindJsonLdImage(string html)
+    {
+        foreach (Match match in JsonLdRegex.Matches(html))
+        {
+            var decoded = WebUtility.HtmlDecode(match.Groups["json"].Value);
+            try
+            {
+                using var document = JsonDocument.Parse(decoded);
+                var image = FindImageInJson(document.RootElement);
+                if (!string.IsNullOrWhiteSpace(image))
+                {
+                    return image;
+                }
+            }
+            catch (JsonException)
+            {
+                // Keep scanning other JSON-LD blocks.
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindImageInJson(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.NameEquals("image"))
+                {
+                    var image = ReadImageValue(property.Value);
+                    if (!string.IsNullOrWhiteSpace(image))
+                    {
+                        return image;
+                    }
+                }
+
+                var nested = FindImageInJson(property.Value);
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var nested = FindImageInJson(item);
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadImageValue(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Array => element.EnumerateArray().Select(ReadImageValue).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
+        JsonValueKind.Object => element.TryGetProperty("url", out var url) ? ReadImageValue(url) : null,
+        _ => null
+    };
 
     private static string? FindLandingImage(string html)
     {
@@ -126,23 +212,52 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         }
     }
 
-    private static string? FindAmazonMediaImage(string html)
+    private static string? FindPreferredRemoteImage(string html)
     {
-        var matches = AmazonMediaRegex.Matches(html)
+        var images = GenericImageRegex.Matches(html)
             .Select(match => NormalizeImageUrl(match.Value))
-            .Where(url =>
-                !url.Contains("sprite", StringComparison.OrdinalIgnoreCase) &&
-                !url.Contains("transparent", StringComparison.OrdinalIgnoreCase))
+            .Where(IsUsefulImage)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return images
+            .Where(url => PreferredImageHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(ScoreImageUrl)
+            .FirstOrDefault();
+    }
+
+    private static string? FindGenericRemoteImage(string html)
+    {
+        var matches = GenericImageRegex.Matches(html)
+            .Select(match => NormalizeImageUrl(match.Value))
+            .Where(IsUsefulImage)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return matches
-            .OrderByDescending(url => url.Contains("images/I/", StringComparison.OrdinalIgnoreCase))
-            .ThenByDescending(url => url.Length)
+            .OrderByDescending(ScoreImageUrl)
             .FirstOrDefault();
     }
 
-    private static string NormalizeImageUrl(string url)
+    private static bool IsUsefulImage(string url) =>
+        !url.Contains("sprite", StringComparison.OrdinalIgnoreCase) &&
+        !url.Contains("transparent", StringComparison.OrdinalIgnoreCase) &&
+        !url.Contains("icon", StringComparison.OrdinalIgnoreCase) &&
+        !url.Contains("logo", StringComparison.OrdinalIgnoreCase) &&
+        !url.Contains("loading", StringComparison.OrdinalIgnoreCase);
+
+    private static int ScoreImageUrl(string url)
+    {
+        var score = url.Length;
+        if (PreferredImageHosts.Any(host => url.Contains(host, StringComparison.OrdinalIgnoreCase))) score += 1000;
+        if (url.Contains("product", StringComparison.OrdinalIgnoreCase)) score += 200;
+        if (url.Contains("images/I/", StringComparison.OrdinalIgnoreCase)) score += 200;
+        if (url.Contains("s-l1600", StringComparison.OrdinalIgnoreCase)) score += 200;
+        if (url.Contains("odnHeight", StringComparison.OrdinalIgnoreCase)) score += 150;
+        return score;
+    }
+
+    private static string NormalizeImageUrl(string url, Uri? baseUri = null)
     {
         var decoded = WebUtility.HtmlDecode(url).Replace("\\/", "/");
         try
@@ -152,6 +267,11 @@ public sealed class AmazonImageLookupService(HttpClient httpClient)
         catch (JsonException)
         {
             // Keep the decoded URL when it is not a JSON escaped string.
+        }
+
+        if (baseUri is not null && Uri.TryCreate(baseUri, decoded, out var absoluteUri))
+        {
+            return absoluteUri.ToString();
         }
 
         return decoded;

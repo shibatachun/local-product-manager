@@ -135,6 +135,13 @@ export class ProductApiService {
     return firstValueFrom(this.http.post<ImageMatchResult>(`${this.baseUrl}/images/match`, { sku, folderPath, mode }));
   }
 
+  findListingImage(listingUrl: string): Promise<{ imageUrl: string }> {
+    return firstValueFrom(this.http.post<{ imageUrl: string }>(
+      `${this.baseUrl}/images/from-listing`,
+      { listingUrl },
+    ));
+  }
+
   imagePreviewUrl(path: string): string {
     return `${this.baseUrl}/images/preview?path=${encodeURIComponent(path)}`;
   }
@@ -161,6 +168,13 @@ export class ProductApiService {
     return firstValueFrom(this.http.post<{ imageUrl: string }>(
       `${this.baseUrl}/products/${productId}/image/from-amazon`,
       { listingUrl },
+    ));
+  }
+
+  useListingImage(productId: number, listingUrl: string | null = null, platform: Platform | null = null): Promise<{ imageUrl: string }> {
+    return firstValueFrom(this.http.post<{ imageUrl: string }>(
+      `${this.baseUrl}/products/${productId}/image/from-listing`,
+      { listingUrl, platform },
     ));
   }
 

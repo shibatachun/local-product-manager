@@ -72,4 +72,8 @@ public sealed record ProductDetailDto(
 
 public sealed record AmazonImageLookupRequest(string? ListingUrl);
 
+public sealed record ListingImageLookupRequest(string? ListingUrl, string? Platform);
+
 public sealed record AmazonImageLookupResult(string ImageUrl);
+
+public sealed record ListingImageLookupResult(string ImageUrl);

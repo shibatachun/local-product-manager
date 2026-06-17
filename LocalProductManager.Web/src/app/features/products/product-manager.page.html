@@ -381,10 +381,14 @@
         <small *ngIf="createForm.imageMatchMode === 'folder'">Every image directly inside this folder will be shown.</small>
         <small *ngIf="createForm.imageMatchMode === 'sku'">Only images whose file name contains the complete SKU will be shown.</small>
       </div>
+      <label class="wide">Website product page<span class="input-action"><input [(ngModel)]="createForm.listingImageUrl" placeholder="Amazon, Walmart, eBay, Etsy, or another product page URL" /><button (click)="fetchCreateListingImage()">Find website image</button></span></label>
       <label class="wide">Product image path<span class="input-action"><input [(ngModel)]="createForm.imagePath" placeholder="Select a result or enter a path" /><button (click)="autoMatchImages()">{{ createForm.imageMatchMode === 'folder' ? 'Load folder' : 'Find by SKU' }}</button></span></label>
     </div>
     <div class="image-results" *ngIf="matchedImages().length">
-      <button *ngFor="let path of matchedImages()" [class.selected]="createForm.imagePath === path" (click)="chooseMatchedImage(path)"><span>▧</span><small>{{ path }}</small></button>
+      <button *ngFor="let path of matchedImages()" [class.selected]="createForm.imagePath === path" (click)="chooseMatchedImage(path)">
+        <span class="match-preview"><img [src]="imagePreviewUrl(path)" [alt]="createForm.productName || createForm.sku" (error)="hideBrokenImage($event)" /></span>
+        <small>{{ path }}</small>
+      </button>
     </div>
   </div>
 
@@ -420,7 +424,7 @@
         <div><h3>Basic information</h3></div>
         <div class="section-actions">
           <button type="button" (click)="loadDetailImageFolder()" [disabled]="!editForm.imagePath || loading()">Load folder</button>
-          <button type="button" (click)="useAmazonImage()" [disabled]="!listingDrafts.amazon || loading()">Use Amazon image</button>
+          <button type="button" (click)="useListingImage()" [disabled]="!canUseListingImage() || loading()">Use listing image</button>
           <button type="button" (click)="updateProduct()">Save</button>
         </div>
       </div>

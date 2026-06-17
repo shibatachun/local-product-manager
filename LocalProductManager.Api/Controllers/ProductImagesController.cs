@@ -85,6 +85,43 @@ public sealed class ProductImagesController(
         AmazonImageLookupRequest request,
         CancellationToken cancellationToken)
     {
+        var result = await UseListingImageCore(
+            productId,
+            request.ListingUrl,
+            "amazon",
+            "Add an Amazon listing URL before fetching the image.",
+            cancellationToken);
+
+        return result.Result is not null
+            ? result.Result
+            : Ok(new AmazonImageLookupResult(result.Value!.ImageUrl));
+    }
+
+    [HttpPost("from-listing")]
+    public async Task<ActionResult<ListingImageLookupResult>> UseListingImage(
+        int productId,
+        ListingImageLookupRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await UseListingImageCore(
+            productId,
+            request.ListingUrl,
+            request.Platform,
+            "Add a listing URL before fetching the image.",
+            cancellationToken);
+
+        return result.Result is not null
+            ? result.Result
+            : Ok(result.Value);
+    }
+
+    private async Task<ActionResult<ListingImageLookupResult>> UseListingImageCore(
+        int productId,
+        string? requestedListingUrl,
+        string? requestedPlatform,
+        string missingUrlMessage,
+        CancellationToken cancellationToken)
+    {
         var product = await db.Products
             .Include(item => item.Listings)
             .FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
@@ -93,17 +130,18 @@ public sealed class ProductImagesController(
             return NotFound();
         }
 
-        var listingUrl = request.ListingUrl?.Trim();
+        var platform = requestedPlatform?.Trim().ToLowerInvariant();
+        var listingUrl = requestedListingUrl?.Trim();
         if (string.IsNullOrWhiteSpace(listingUrl))
         {
-            listingUrl = product.Listings
-                .FirstOrDefault(listing => listing.Platform == "amazon")
-                ?.ListingUrl;
+            listingUrl = !string.IsNullOrWhiteSpace(platform)
+                ? product.Listings.FirstOrDefault(listing => listing.Platform == platform)?.ListingUrl
+                : product.Listings.FirstOrDefault(listing => !string.IsNullOrWhiteSpace(listing.ListingUrl))?.ListingUrl;
         }
 
         if (string.IsNullOrWhiteSpace(listingUrl))
         {
-            return BadRequest("Add an Amazon listing URL before fetching the image.");
+            return BadRequest(missingUrlMessage);
         }
 
         try
@@ -113,7 +151,7 @@ public sealed class ProductImagesController(
             product.ImageSource = "remote";
             product.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            return Ok(new AmazonImageLookupResult(imageUrl));
+            return new ListingImageLookupResult(imageUrl);
         }
         catch (HttpRequestException ex)
         {

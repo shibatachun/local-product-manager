@@ -8,7 +8,8 @@ namespace LocalProductManager.Api.Controllers;
 [Route("api/images")]
 public sealed class ImageMatcherController(
     ImageMatcherService imageMatcher,
-    ImageFileService imageFiles) : ControllerBase
+    ImageFileService imageFiles,
+    AmazonImageLookupService listingImages) : ControllerBase
 {
     [HttpGet("roots")]
     public IActionResult GetRoots() => Ok(imageFiles.GetRoots());
@@ -68,6 +69,31 @@ public sealed class ImageMatcherController(
         catch (DirectoryNotFoundException ex)
         {
             return NotFound(ex.Message);
+        }
+    }
+
+    [HttpPost("from-listing")]
+    public async Task<ActionResult<ListingImageLookupResult>> FromListing(
+        ListingImageLookupRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ListingUrl))
+        {
+            return BadRequest("Enter a listing URL before fetching the image.");
+        }
+
+        try
+        {
+            var imageUrl = await listingImages.FindImageUrlAsync(request.ListingUrl, cancellationToken);
+            return Ok(new ListingImageLookupResult(imageUrl));
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
         }
     }
 

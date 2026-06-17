@@ -154,6 +154,7 @@ export class ProductManagerPage {
     height: null as number | null,
     imagePath: '',
     imageFolder: '',
+    listingImageUrl: '',
     imageMatchMode: 'folder' as 'folder' | 'sku',
   };
   readonly platformChoices: PlatformChoice[] = [
@@ -652,6 +653,18 @@ export class ProductManagerPage {
     });
   }
 
+  async fetchCreateListingImage(): Promise<void> {
+    const listingUrl = this.createForm.listingImageUrl.trim();
+    if (!listingUrl) return this.showNotice('Enter a product page URL first.');
+
+    await this.perform(async () => {
+      const result = await this.api.findListingImage(listingUrl);
+      this.createForm.imagePath = result.imageUrl;
+      this.matchedImages.set([result.imageUrl]);
+      this.showNotice('Listing image found.');
+    });
+  }
+
   chooseMatchedImage(path: string): void {
     this.createForm.imagePath = path;
   }
@@ -759,14 +772,21 @@ export class ProductManagerPage {
     });
   }
 
-  async useAmazonImage(): Promise<void> {
+  async useListingImage(): Promise<void> {
     const product = this.selectedProduct();
     if (!product) return;
+    const platform = this.firstListingPlatformWithUrl();
+    const listingUrl = platform ? this.listingDrafts[platform] : null;
+
     await this.perform(async () => {
-      await this.api.useAmazonImage(product.id, this.listingDrafts.amazon || null);
+      await this.api.useListingImage(product.id, listingUrl || null, platform);
       await this.refreshSelected(product.id);
-      this.showNotice('Amazon image connected.');
+      this.showNotice('Listing image connected.');
     });
+  }
+
+  canUseListingImage(): boolean {
+    return this.listingOptions.some(option => !!this.listingDrafts[option.value]?.trim());
   }
 
   async loadDetailImageFolder(): Promise<void> {
@@ -1090,6 +1110,10 @@ export class ProductManagerPage {
     }
   }
 
+  private firstListingPlatformWithUrl(): Platform | null {
+    return this.listingOptions.find(option => !!this.listingDrafts[option.value]?.trim())?.value ?? null;
+  }
+
   private syncDetailPricing(product: ProductDetail): void {
     const platform = (product.listings[0]?.platform ?? this.detailPricingForm.platform) as Platform;
     const config = this.pricingConfigs[platform];
@@ -1117,6 +1141,7 @@ export class ProductManagerPage {
       height: null,
       imagePath: '',
       imageFolder: '',
+      listingImageUrl: '',
       imageMatchMode: 'folder',
     });
     for (const item of this.platformChoices) {
