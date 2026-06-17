@@ -856,9 +856,12 @@ export class ProductManagerPage {
     });
   }
 
-  onFileSelected(event: Event): void {
+  async onFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
-    this.importFile.set(input.files?.[0] ?? null);
+    const file = input.files?.[0] ?? null;
+    this.importFile.set(file);
+    input.value = '';
+    if (file) await this.importAttribution();
   }
 
   async importAttribution(): Promise<void> {

@@ -148,7 +148,6 @@
               <div><h2>{{ product.productName }}</h2><p>{{ product.sku }} · {{ product.amazonAsins.length }} ASIN</p></div>
               <label class="file-button">Import CSV<input type="file" accept=".csv" (change)="onFileSelected($event)" /></label>
             </div>
-            <button class="import-row" *ngIf="importFile()" (click)="importAttribution()">Import {{ importFile()?.name }}</button>
             <div class="channel-grid">
               <div class="channel" *ngFor="let platform of attributionPlatforms">
                 <div><span class="channel-icon">{{ platform.slice(0,1).toUpperCase() }}</span><strong>{{ platformLabel(platform) }}</strong></div>
