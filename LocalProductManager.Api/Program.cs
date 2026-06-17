@@ -33,6 +33,7 @@ builder.Services.AddHttpClient<RemoteImageProxyService>();
 builder.Services.AddSingleton<ImageMatcherService>();
 builder.Services.AddSingleton<ImageFileService>();
 builder.Services.AddSingleton<SocialFetchLogService>();
+builder.Services.AddSingleton<StoreLinkService>();
 builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {

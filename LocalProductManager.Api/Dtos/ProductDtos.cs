@@ -4,6 +4,10 @@ public sealed record CreateProductRequest(
     string Sku,
     string ProductName,
     decimal? Cost,
+    decimal? Weight,
+    decimal? Length,
+    decimal? Width,
+    decimal? Height,
     string? ImagePath,
     string? ImageSource);
 
@@ -11,6 +15,10 @@ public sealed record UpdateProductRequest(
     string Sku,
     string ProductName,
     decimal? Cost,
+    decimal? Weight,
+    decimal? Length,
+    decimal? Width,
+    decimal? Height,
     string? ImagePath,
     string? ImageSource);
 
@@ -19,6 +27,10 @@ public sealed record ProductListItemDto(
     string Sku,
     string ProductName,
     decimal? Cost,
+    decimal? Weight,
+    decimal? Length,
+    decimal? Width,
+    decimal? Height,
     string? ImagePath,
     string ImageSource,
     IReadOnlyList<string> Platforms,
@@ -37,6 +49,10 @@ public sealed record ProductDetailDto(
     string Sku,
     string ProductName,
     decimal? Cost,
+    decimal? Weight,
+    decimal? Length,
+    decimal? Width,
+    decimal? Height,
     string? ImagePath,
     string ImageSource,
     IReadOnlyList<ProductListingDto> Listings,

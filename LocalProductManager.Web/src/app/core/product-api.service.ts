@@ -14,6 +14,7 @@ import {
   ProductDetail,
   ProductListItem,
   ProductListing,
+  StoreLink,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -38,6 +39,10 @@ export class ProductApiService {
     sku: string;
     productName: string;
     cost: number | null;
+    weight?: number | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
     imagePath: string | null;
     imageSource?: 'local' | 'remote';
   }): Promise<ProductDetail> {
@@ -48,6 +53,10 @@ export class ProductApiService {
     sku: string;
     productName: string;
     cost: number | null;
+    weight?: number | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
     imagePath: string | null;
     imageSource?: 'local' | 'remote';
   }): Promise<ProductDetail> {
@@ -151,5 +160,13 @@ export class ProductApiService {
       `${this.baseUrl}/products/${productId}/image/from-amazon`,
       { listingUrl },
     ));
+  }
+
+  storeLinks(): Promise<StoreLink[]> {
+    return firstValueFrom(this.http.get<StoreLink[]>(`${this.baseUrl}/store-links`));
+  }
+
+  saveStoreLink(platform: Platform, url: string | null): Promise<StoreLink> {
+    return firstValueFrom(this.http.put<StoreLink>(`${this.baseUrl}/store-links/${platform}`, { url }));
   }
 }

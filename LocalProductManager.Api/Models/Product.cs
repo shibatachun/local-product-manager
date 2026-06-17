@@ -6,6 +6,10 @@ public sealed class Product
     public required string Sku { get; set; }
     public required string ProductName { get; set; }
     public decimal? Cost { get; set; }
+    public decimal? Weight { get; set; }
+    public decimal? Length { get; set; }
+    public decimal? Width { get; set; }
+    public decimal? Height { get; set; }
     public string? ImagePath { get; set; }
     public string ImageSource { get; set; } = "local";
     public int? ParentProductId { get; set; }

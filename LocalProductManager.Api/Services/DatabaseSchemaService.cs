@@ -28,6 +28,22 @@ public sealed class DatabaseSchemaService
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN ImageSource TEXT NOT NULL DEFAULT 'local'");
         }
+        if (!columns.Contains("Weight"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Weight TEXT NULL");
+        }
+        if (!columns.Contains("Length"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Length TEXT NULL");
+        }
+        if (!columns.Contains("Width"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Width TEXT NULL");
+        }
+        if (!columns.Contains("Height"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Height TEXT NULL");
+        }
         db.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS IX_products_ParentProductId ON products (ParentProductId)");
         db.Database.ExecuteSqlRaw(

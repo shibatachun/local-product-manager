@@ -11,6 +11,7 @@ import {
   ProductListItem,
   ProductListing,
   ImageStorageRoot,
+  StoreLink,
 } from '../../core/models';
 import { ProductApiService } from '../../core/product-api.service';
 
@@ -55,6 +56,7 @@ export class ProductManagerPage {
   readonly unmatchedAttributionFiles = signal<string[]>([]);
   readonly expandedParents = signal<Set<number>>(new Set());
   readonly imageStorageRoots = signal<ImageStorageRoot[]>([]);
+  readonly storeLinks = signal<StoreLink[]>([]);
   readonly newImageRoot = signal('');
 
   readonly platformOptions: { value: Platform | ''; label: string }[] = [
@@ -76,6 +78,10 @@ export class ProductManagerPage {
     sku: '',
     productName: '',
     cost: null as number | null,
+    weight: null as number | null,
+    length: null as number | null,
+    width: null as number | null,
+    height: null as number | null,
     imagePath: '',
     imageFolder: '',
     imageMatchMode: 'folder' as 'folder' | 'sku',
@@ -92,7 +98,17 @@ export class ProductManagerPage {
     parentAsin: '',
     amazonAttributeDone: false,
   };
-  readonly editForm = { sku: '', productName: '', cost: null as number | null, imagePath: '' };
+  readonly editForm = {
+    sku: '',
+    productName: '',
+    cost: null as number | null,
+    weight: null as number | null,
+    length: null as number | null,
+    width: null as number | null,
+    height: null as number | null,
+    imagePath: ''
+  };
+  readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
   readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
 
@@ -101,8 +117,8 @@ export class ProductManagerPage {
     const allProducts = products.flatMap((product) => [product, ...product.children]);
     return {
       total: allProducts.length,
-      amazon: allProducts.filter((item) => item.platforms.includes('amazon')).length,
-      pending: allProducts.filter((item) => item.platforms.includes('amazon') && item.asinCount === 0).length,
+      listed: allProducts.filter((item) => item.platforms.length > 0).length,
+      withImages: allProducts.filter((item) => item.imagePath).length,
       channels: new Set(allProducts.flatMap((item) => item.platforms)).size,
     };
   });
@@ -117,7 +133,29 @@ export class ProductManagerPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadProducts(), this.loadImageStorageRoots()]);
+    await Promise.all([this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks()]);
+  }
+
+  async loadStoreLinks(): Promise<void> {
+    try {
+      const links = await this.api.storeLinks();
+      this.storeLinks.set(links);
+      for (const link of links) this.storeLinkDrafts[link.platform] = link.url ?? '';
+    } catch {
+      this.storeLinks.set([]);
+    }
+  }
+
+  async saveStoreLink(platform: Platform): Promise<void> {
+    await this.perform(async () => {
+      await this.api.saveStoreLink(platform, this.storeLinkDrafts[platform] || null);
+      await this.loadStoreLinks();
+      this.showNotice(`${this.platformLabel(platform)} store link saved.`);
+    });
+  }
+
+  storeLink(platform: Platform): StoreLink | undefined {
+    return this.storeLinks().find(link => link.platform === platform);
   }
 
   async loadImageStorageRoots(): Promise<void> {
@@ -342,6 +380,10 @@ export class ProductManagerPage {
         sku: this.createForm.sku,
         productName: this.createForm.productName,
         cost: this.createForm.cost,
+        weight: this.createForm.weight,
+        length: this.createForm.length,
+        width: this.createForm.width,
+        height: this.createForm.height,
         imagePath: this.createForm.imagePath || null,
         imageSource: this.imageSourceFor(this.createForm.imagePath),
       });
@@ -373,6 +415,10 @@ export class ProductManagerPage {
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
       this.editForm.cost = product.cost;
+      this.editForm.weight = product.weight;
+      this.editForm.length = product.length;
+      this.editForm.width = product.width;
+      this.editForm.height = product.height;
       this.editForm.imagePath = product.imagePath ?? '';
       this.syncListingDrafts(product);
       this.detailOpen.set(true);
@@ -392,6 +438,10 @@ export class ProductManagerPage {
         sku: this.editForm.sku,
         productName: this.editForm.productName,
         cost: this.editForm.cost,
+        weight: this.editForm.weight,
+        length: this.editForm.length,
+        width: this.editForm.width,
+        height: this.editForm.height,
         imagePath: this.editForm.imagePath || null,
         imageSource: this.imageSourceFor(this.editForm.imagePath),
       });
@@ -628,6 +678,10 @@ export class ProductManagerPage {
       sku: '',
       productName: '',
       cost: null,
+      weight: null,
+      length: null,
+      width: null,
+      height: null,
       imagePath: '',
       imageFolder: '',
       imageMatchMode: 'folder',

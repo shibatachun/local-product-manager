@@ -22,6 +22,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(product => product.Sku).HasMaxLength(128).IsRequired();
             entity.Property(product => product.ProductName).HasMaxLength(256).IsRequired();
             entity.Property(product => product.Cost).HasPrecision(10, 2);
+            entity.Property(product => product.Weight).HasPrecision(10, 2);
+            entity.Property(product => product.Length).HasPrecision(10, 2);
+            entity.Property(product => product.Width).HasPrecision(10, 2);
+            entity.Property(product => product.Height).HasPrecision(10, 2);
             entity.Property(product => product.ImageSource).HasMaxLength(16).IsRequired();
             entity.Property(product => product.ProductType).HasMaxLength(16).IsRequired();
             entity.Property(product => product.SkuBase).HasMaxLength(64);

@@ -6,6 +6,10 @@ export interface ProductListItem {
   sku: string;
   productName: string;
   cost: number | null;
+  weight: number | null;
+  length: number | null;
+  width: number | null;
+  height: number | null;
   imagePath: string | null;
   imageSource: 'local' | 'remote';
   platforms: string[];
@@ -60,6 +64,12 @@ export interface ImageMatchResult {
 export interface ImageStorageRoot {
   path: string;
   available: boolean;
+}
+
+export interface StoreLink {
+  platform: Platform;
+  label: string;
+  url: string | null;
 }
 
 export interface BusinessReportImportResult {
