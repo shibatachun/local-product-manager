@@ -2,6 +2,7 @@ using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace LocalProductManager.Api.Services;
 
@@ -9,6 +10,8 @@ public sealed class AttributionFolderImportService(
     AppDbContext db,
     AmazonAttributionImportService attributionImporter)
 {
+    private static readonly Regex FiveDigitTokenRegex = new(@"\d{5}", RegexOptions.Compiled);
+
     public async Task<AttributionFolderImportResult> ImportAsync(
         IReadOnlyList<IFormFile> files,
         CancellationToken cancellationToken)
@@ -16,10 +19,11 @@ public sealed class AttributionFolderImportService(
         var products = await db.Products
             .AsNoTracking()
             .Where(product => product.Listings.Any(listing => listing.Platform == "amazon"))
-            .Select(product => new ProductMatch(product.Id, product.Sku))
+            .Select(product => new ProductMatch(product.Id, product.Sku, null))
             .ToListAsync(cancellationToken);
 
         var candidates = products
+            .Select(product => product with { FiveDigitToken = ExtractFiveDigitToken(product.Sku) })
             .OrderByDescending(product => product.Sku.Length)
             .ToArray();
         var matchedFiles = 0;
@@ -65,9 +69,21 @@ public sealed class AttributionFolderImportService(
         IReadOnlyList<ProductMatch> candidates)
     {
         var title = Path.GetFileNameWithoutExtension(fileName);
-        return candidates.FirstOrDefault(product =>
-            title.Contains(product.Sku, StringComparison.OrdinalIgnoreCase));
+        var fileToken = ExtractFiveDigitToken(title);
+        if (fileToken is not null)
+        {
+            var tokenMatch = candidates.FirstOrDefault(product => product.FiveDigitToken == fileToken);
+            if (tokenMatch is not null) return tokenMatch;
+        }
+
+        return candidates.FirstOrDefault(product => title.Contains(product.Sku, StringComparison.OrdinalIgnoreCase));
     }
 
-    private sealed record ProductMatch(int Id, string Sku);
+    private static string? ExtractFiveDigitToken(string value)
+    {
+        var match = FiveDigitTokenRegex.Match(value);
+        return match.Success ? match.Value : null;
+    }
+
+    private sealed record ProductMatch(int Id, string Sku, string? FiveDigitToken);
 }

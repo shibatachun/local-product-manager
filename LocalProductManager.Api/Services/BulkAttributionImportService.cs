@@ -2,11 +2,16 @@ using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace LocalProductManager.Api.Services;
 
-public sealed class BulkAttributionImportService(AppDbContext db)
+public sealed class BulkAttributionImportService(
+    AppDbContext db,
+    AmazonAttributionImportService attributionImporter)
 {
+    private static readonly Regex FiveDigitTokenRegex = new(@"\d{5}", RegexOptions.Compiled);
+
     public async Task<BulkAttributionImportResult> ImportAsync(
         IFormFile file,
         CancellationToken cancellationToken)
@@ -15,7 +20,22 @@ public sealed class BulkAttributionImportService(AppDbContext db)
         var rows = CsvFileReader.Read(stream);
         if (rows.Count == 0 || !rows[0].ContainsKey("SKU"))
         {
-            throw new InvalidOperationException("The attribution CSV must contain a SKU column.");
+            var product = await MatchProductByFileNameAsync(file.FileName, cancellationToken);
+            if (product is null)
+            {
+                throw new InvalidOperationException("The attribution CSV must contain a SKU column, or the file name must contain the product's 5-digit SKU token.");
+            }
+
+            var singleResult = await attributionImporter.ImportCsvAsync(
+                product.Id,
+                file,
+                amazonAsinId: null,
+                cancellationToken);
+            return new BulkAttributionImportResult(
+                rows.Count,
+                singleResult is null ? 0 : 1,
+                singleResult?.ImportedCount ?? 0,
+                singleResult is null ? [file.FileName] : []);
         }
 
         var matchedProducts = 0;
@@ -27,9 +47,7 @@ public sealed class BulkAttributionImportService(AppDbContext db)
             var sku = row.GetValueOrDefault("SKU")?.Trim();
             if (string.IsNullOrWhiteSpace(sku)) continue;
 
-            var product = await db.Products.FirstOrDefaultAsync(
-                item => item.Sku == sku,
-                cancellationToken);
+            var product = await MatchProductBySkuAsync(sku, cancellationToken);
             if (product is null)
             {
                 unmatched.Add(sku);
@@ -82,5 +100,35 @@ public sealed class BulkAttributionImportService(AppDbContext db)
         var column = row.Keys.FirstOrDefault(key =>
             key.Contains(platform, StringComparison.OrdinalIgnoreCase));
         return column is null ? null : row[column].Trim();
+    }
+
+    private async Task<Product?> MatchProductBySkuAsync(string sku, CancellationToken cancellationToken)
+    {
+        var product = await db.Products.FirstOrDefaultAsync(item => item.Sku == sku, cancellationToken);
+        if (product is not null) return product;
+
+        var token = ExtractFiveDigitToken(sku);
+        return token is null ? null : await MatchProductByTokenAsync(token, cancellationToken);
+    }
+
+    private async Task<Product?> MatchProductByFileNameAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var token = ExtractFiveDigitToken(Path.GetFileNameWithoutExtension(fileName));
+        return token is null ? null : await MatchProductByTokenAsync(token, cancellationToken);
+    }
+
+    private async Task<Product?> MatchProductByTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        var products = await db.Products
+            .Where(product => product.Sku.Contains(token))
+            .OrderBy(product => product.Sku)
+            .ToListAsync(cancellationToken);
+        return products.FirstOrDefault();
+    }
+
+    private static string? ExtractFiveDigitToken(string value)
+    {
+        var match = FiveDigitTokenRegex.Match(value);
+        return match.Success ? match.Value : null;
     }
 }

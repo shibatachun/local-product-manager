@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Models;
@@ -8,6 +9,10 @@ namespace LocalProductManager.Api.Services;
 
 public sealed class AmazonAttributionImportService(AppDbContext db)
 {
+    private static readonly Regex UrlRegex = new(
+        """https?://[^\s"',<>]+""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public async Task<ImportAmazonAttributionResult?> ImportCsvAsync(
         int productId,
         IFormFile file,
@@ -41,35 +46,19 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
             return new ImportAmazonAttributionResult(0, []);
         }
 
-        var header = rows[0].Select(NormalizeHeader).ToArray();
         var imported = new List<AmazonAttributionLink>();
-
-        foreach (var row in rows.Skip(1))
+        var links = ExtractPlatformLinks(rows, csv);
+        foreach (var (platform, url) in links)
         {
-            for (var columnIndex = 0; columnIndex < Math.Min(header.Length, row.Count); columnIndex++)
-            {
-                var platform = PlatformFromHeader(header[columnIndex]);
-                if (platform is null)
-                {
-                    continue;
-                }
+            var link = await UpsertLinkAsync(
+                productId,
+                amazonAsinId,
+                platform,
+                url,
+                file.FileName,
+                cancellationToken);
 
-                var url = row[columnIndex].Trim();
-                if (string.IsNullOrWhiteSpace(url))
-                {
-                    continue;
-                }
-
-                var link = await UpsertLinkAsync(
-                    productId,
-                    amazonAsinId,
-                    platform,
-                    url,
-                    file.FileName,
-                    cancellationToken);
-
-                imported.Add(link);
-            }
+            imported.Add(link);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -157,6 +146,147 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
 
         return null;
     }
+
+    private static IReadOnlyList<(string Platform, string Url)> ExtractPlatformLinks(
+        IReadOnlyList<List<string>> rows,
+        string rawCsv)
+    {
+        var links = ExtractFromHeaderRows(rows);
+        return links.Count > 0 ? links : ExtractFromLooseRows(rows, rawCsv);
+    }
+
+    private static List<(string Platform, string Url)> ExtractFromHeaderRows(IReadOnlyList<List<string>> rows)
+    {
+        var imported = new List<(string Platform, string Url)>();
+        if (rows.Count == 0) return imported;
+
+        for (var headerIndex = 0; headerIndex < Math.Min(rows.Count, 12); headerIndex++)
+        {
+            var header = rows[headerIndex].Select(NormalizeHeader).ToArray();
+            var platformColumns = header
+                .Select((value, index) => new { Platform = PlatformFromHeader(value), Index = index })
+                .Where(item => item.Platform is not null)
+                .ToArray();
+            if (platformColumns.Length == 0) continue;
+
+            foreach (var row in rows.Skip(headerIndex + 1))
+            {
+                foreach (var column in platformColumns)
+                {
+                    if (column.Index >= row.Count) continue;
+                    var url = CleanUrl(row[column.Index]);
+                    if (string.IsNullOrWhiteSpace(url)) continue;
+                    imported.Add((column.Platform!, url));
+                }
+            }
+
+            if (imported.Count > 0) return Deduplicate(imported);
+        }
+
+        return imported;
+    }
+
+    private static List<(string Platform, string Url)> ExtractFromLooseRows(
+        IReadOnlyList<List<string>> rows,
+        string rawCsv)
+    {
+        var imported = new List<(string Platform, string Url)>();
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = rows[rowIndex];
+            for (var index = 0; index < row.Count; index++)
+            {
+                var url = CleanUrl(row[index]);
+                if (string.IsNullOrWhiteSpace(url)) continue;
+
+                var context = BuildLooseContext(rows, rowIndex, index);
+                var platform = PlatformFromText(context) ?? PlatformFromUrl(url);
+                if (platform is not null) imported.Add((platform, url));
+            }
+        }
+
+        if (imported.Count > 0) return Deduplicate(imported);
+
+        foreach (Match match in UrlRegex.Matches(rawCsv))
+        {
+            var url = CleanUrl(match.Value);
+            if (string.IsNullOrWhiteSpace(url)) continue;
+            var platform = PlatformFromUrl(url);
+            if (platform is not null) imported.Add((platform, url));
+        }
+
+        return Deduplicate(imported);
+    }
+
+    private static string BuildLooseContext(
+        IReadOnlyList<List<string>> rows,
+        int rowIndex,
+        int cellIndex)
+    {
+        var values = new List<string>();
+        for (var scanRow = Math.Max(0, rowIndex - 2); scanRow <= Math.Min(rows.Count - 1, rowIndex + 2); scanRow++)
+        {
+            var row = rows[scanRow];
+            if (scanRow == rowIndex)
+            {
+                values.AddRange(row.Skip(Math.Max(0, cellIndex - 3)).Take(7));
+            }
+            else
+            {
+                values.AddRange(row);
+            }
+        }
+
+        return string.Join(" ", values);
+    }
+
+    private static string? PlatformFromText(string value)
+    {
+        var normalized = NormalizeHeader(value);
+        foreach (var platform in AllowedValues.AttributionPlatforms)
+        {
+            if (normalized.Contains(platform, StringComparison.OrdinalIgnoreCase))
+            {
+                return platform;
+            }
+        }
+
+        if (normalized.Contains("meta", StringComparison.OrdinalIgnoreCase)) return "facebook";
+        if (normalized.Contains("fb", StringComparison.OrdinalIgnoreCase)) return "facebook";
+        if (normalized.Contains("pin", StringComparison.OrdinalIgnoreCase)) return "pinterest";
+        if (normalized.Contains("ig", StringComparison.OrdinalIgnoreCase)) return "instagram";
+        if (normalized.Contains("tt", StringComparison.OrdinalIgnoreCase)) return "tiktok";
+        if (normalized.Contains("yt", StringComparison.OrdinalIgnoreCase)) return "youtube";
+        return null;
+    }
+
+    private static string? PlatformFromUrl(string url)
+    {
+        var normalized = url.ToLowerInvariant();
+        if (normalized.Contains("pinterest") || normalized.Contains("pin.it")) return "pinterest";
+        if (normalized.Contains("facebook") || normalized.Contains("fb.") || normalized.Contains("meta")) return "facebook";
+        if (normalized.Contains("instagram")) return "instagram";
+        if (normalized.Contains("tiktok")) return "tiktok";
+        if (normalized.Contains("youtube") || normalized.Contains("youtu.be")) return "youtube";
+        if (normalized.Contains("shopify")) return "shopify";
+        return null;
+    }
+
+    private static string? CleanUrl(string value)
+    {
+        var match = UrlRegex.Match(value.Trim());
+        if (!match.Success) return null;
+
+        return match.Value
+            .Trim()
+            .TrimEnd('.', ',', ';', ')', ']', '}');
+    }
+
+    private static List<(string Platform, string Url)> Deduplicate(
+        IEnumerable<(string Platform, string Url)> links) => links
+            .GroupBy(link => link.Platform, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToList();
 
     private static List<List<string>> ParseCsv(string csv)
     {
