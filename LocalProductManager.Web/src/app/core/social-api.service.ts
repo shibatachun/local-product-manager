@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, PinterestAuthStatus, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -89,6 +89,16 @@ export class SocialApiService {
 
   pinterestDisconnect(): Promise<void> {
     return firstValueFrom(this.http.post<void>(`${this.baseUrl}/pinterest/auth/disconnect`, {}));
+  }
+
+  pinterestImportReport(file: File): Promise<PinterestReportImportResult> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<PinterestReportImportResult>(`${this.baseUrl}/pinterest/report/import`, data));
+  }
+
+  pinterestPins(): Promise<PinterestContentSnapshot> {
+    return firstValueFrom(this.http.get<PinterestContentSnapshot>(`${this.baseUrl}/pinterest/pins`));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {

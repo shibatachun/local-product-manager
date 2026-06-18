@@ -197,8 +197,12 @@
 
     <section class="panel platform-content">
       <div class="section-heading">
-        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : 'Saved data and future API posts for this platform.' }}</p></div>
+        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : 'Saved data and future API posts for this platform.' }}</p></div>
         <button type="button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
+        <label class="file-button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'pinterest'">
+          Import report
+          <input type="file" accept=".csv,text/csv" (change)="onPinterestReportSelected($event)" />
+        </label>
       </div>
 
       <div class="content-tabs">
@@ -207,7 +211,7 @@
         </button>
       </div>
 
-      <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'youtube'; else platformSummary">
+      <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'youtube'; else nonYoutubeSummary">
         <div class="stat-card" *ngFor="let stat of youtubeStats()">
           <span>{{ stat.label.slice(0, 1) }}</span>
           <strong>{{ stat.value === null ? 'N/A' : (stat.value | number) }}</strong>
@@ -218,6 +222,19 @@
           <em>{{ stat.detail }}</em>
         </div>
       </div>
+      <ng-template #nonYoutubeSummary>
+        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'pinterest'; else platformSummary">
+          <div class="stat-card" *ngFor="let stat of pinterestStats()">
+            <span>{{ stat.label.slice(0, 1) }}</span>
+            <strong>{{ stat.value | number }}</strong>
+            <small>{{ stat.label }}</small>
+            <b *ngIf="stat.delta !== null" [class.positive]="stat.delta > 0" [class.flat]="stat.delta === 0">
+              {{ stat.delta > 0 ? '+' : '' }}{{ stat.delta | number }} since previous
+            </b>
+            <em>{{ stat.detail }}</em>
+          </div>
+        </div>
+      </ng-template>
       <ng-template #platformSummary>
         <div class="youtube-summary">
           <div class="stat-card" *ngFor="let stat of selectedPlatformTotals()">
@@ -229,7 +246,7 @@
         </div>
       </ng-template>
 
-      <div class="video-workspace" *ngIf="selectedContentPlatform() === 'youtube'; else genericPlatformContent">
+      <div class="video-workspace" *ngIf="selectedContentPlatform() === 'youtube'; else nonYoutubeContent">
         <div class="video-list">
           <button *ngFor="let video of youtubeSnapshot()?.videos || []" type="button" [class.active]="selectedYouTubeVideo()?.id === video.id" (click)="selectYouTubeVideo(video.id)">
             <img *ngIf="video.thumbnailUrl" [src]="video.thumbnailUrl" alt="" />
@@ -262,6 +279,41 @@
           </div>
         </ng-template>
       </div>
+      <ng-template #nonYoutubeContent>
+        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'pinterest'; else genericPlatformContent">
+          <div class="video-list">
+            <button *ngFor="let pin of pinterestSnapshot()?.pins || []" type="button" [class.active]="selectedPinterestItem()?.id === pin.id" (click)="selectPinterestItem(pin.id)">
+              <span class="pin-kind">{{ pin.kind === 'board' ? 'BD' : 'PIN' }}</span>
+              <span>
+                <strong>{{ pin.title }}</strong>
+                <small>{{ pin.views | number }} impressions - {{ pin.clicks | number }} clicks - {{ pin.likes | number }} engagement</small>
+                <em>{{ pin.metrics.length }} snapshots recorded</em>
+              </span>
+            </button>
+            <div class="empty-videos" *ngIf="!(pinterestSnapshot()?.pins?.length)">
+              <strong>No pins loaded</strong>
+              <small>{{ youtubeStatus()?.isAdminHost ? 'Import a Pinterest analytics report CSV.' : 'Waiting for the host computer to import Pinterest data.' }}</small>
+            </div>
+          </div>
+
+          <div class="video-detail" *ngIf="selectedPinterestItem() as pin; else noPinterestSelected">
+            <span class="pin-detail-mark">{{ pin.kind === 'board' ? 'Board' : 'Pin' }}</span>
+            <div>
+              <h3>{{ pin.title }}</h3>
+              <p>{{ pin.views | number }} impressions · {{ pin.clicks | number }} clicks · {{ pin.likes | number }} engagement</p>
+              <a [href]="pin.url" target="_blank" rel="noreferrer">Open {{ pin.kind }}</a>
+            </div>
+          </div>
+          <ng-template #noPinterestSelected>
+            <div class="video-detail empty">
+              <div>
+                <h3>Select a pin</h3>
+                <p>Pinterest report metrics will appear in the stat cards above.</p>
+              </div>
+            </div>
+          </ng-template>
+        </div>
+      </ng-template>
       <ng-template #genericPlatformContent>
         <div class="platform-workspace">
           <div class="platform-post-list">

@@ -11,6 +11,7 @@ namespace LocalProductManager.Api.Controllers;
 public sealed class PinterestAuthController(
     AppDbContext db,
     PinterestOAuthService pinterest,
+    PinterestReportImportService pinterestReports,
     SocialFetchLogService fetchLogs) : ControllerBase
 {
     [HttpGet("auth/status")]
@@ -109,6 +110,45 @@ public sealed class PinterestAuthController(
             await fetchLogs.RecordAsync("pinterest-manual-sync", "failed", 0, ex.Message, cancellationToken);
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
         }
+    }
+
+    [HttpPost("report/import")]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<ActionResult<PinterestReportImportResult>> ImportReport(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAdminHost()) return AdminOnly();
+        if (file.Length == 0) return BadRequest("Pinterest report file is empty.");
+
+        try
+        {
+            var result = await pinterestReports.ImportAsync(file, cancellationToken);
+            await fetchLogs.RecordAsync(
+                "pinterest-report-import",
+                "success",
+                result.DailyRowsImported + result.BoardsImported + result.PinsImported,
+                $"Imported Pinterest CSV for {result.AccountName}.",
+                cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await fetchLogs.RecordAsync("pinterest-report-import", "failed", 0, ex.Message, cancellationToken);
+            return BadRequest(ex.Message);
+        }
+        catch (IOException ex)
+        {
+            await fetchLogs.RecordAsync("pinterest-report-import", "failed", 0, ex.Message, cancellationToken);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, ex.Message);
+        }
+    }
+
+    [HttpGet("pins")]
+    public async Task<ActionResult<PinterestContentSnapshotDto>> Pins(CancellationToken cancellationToken)
+    {
+        var snapshot = await pinterestReports.GetStoredSnapshotAsync(cancellationToken);
+        return snapshot is null ? NotFound() : Ok(snapshot);
     }
 
     private bool IsAdminHost()

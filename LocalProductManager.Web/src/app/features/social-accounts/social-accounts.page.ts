@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PinterestAuthStatus, SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -21,7 +21,9 @@ export class SocialAccountsPage {
   readonly youtubeStatus = signal<YouTubeAuthStatus | null>(null);
   readonly pinterestStatus = signal<PinterestAuthStatus | null>(null);
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
+  readonly pinterestSnapshot = signal<PinterestContentSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
+  readonly selectedPinterestItemId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
   readonly selectedRangePreset = signal<RangePreset>('month');
@@ -122,6 +124,11 @@ export class SocialAccountsPage {
     if (!snapshot?.videos.length) return null;
     return snapshot.videos.find(video => video.id === this.selectedYouTubeVideoId()) ?? snapshot.videos[0];
   });
+  readonly selectedPinterestItem = computed(() => {
+    const snapshot = this.pinterestSnapshot();
+    if (!snapshot?.pins.length) return null;
+    return snapshot.pins.find(item => item.id === this.selectedPinterestItemId()) ?? snapshot.pins[0];
+  });
   readonly youtubeStats = computed(() => {
     const snapshot = this.youtubeSnapshot();
     const video = this.selectedYouTubeVideo();
@@ -133,6 +140,19 @@ export class SocialAccountsPage {
       { label: 'Comments', value: video?.comments ?? 0, delta: video && previous ? video.comments - previous.comments : null, detail: video ? 'Selected video comments' : 'Select a video' },
       { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Channel subscribers' },
       { label: 'Videos', value: snapshot?.channel.videoCount ?? snapshot?.videos.length ?? 0, delta: null, detail: 'Channel video count' },
+    ];
+  });
+  readonly pinterestStats = computed(() => {
+    const snapshot = this.pinterestSnapshot();
+    const item = this.selectedPinterestItem();
+    const previous = item?.metrics.length && item.metrics.length > 1 ? item.metrics[item.metrics.length - 2] : null;
+    return [
+      { label: 'Clicks', value: item?.clicks ?? snapshot?.channel.clicks ?? 0, delta: item && previous ? item.clicks - previous.clicks : null, detail: item ? 'Selected Pinterest item clicks' : 'Report click total' },
+      { label: 'Views', value: item?.views ?? snapshot?.channel.views ?? 0, delta: item && previous ? item.views - previous.views : null, detail: item ? 'Selected item impressions' : 'Report impressions' },
+      { label: 'Likes', value: item?.likes ?? 0, delta: item && previous ? item.likes - previous.likes : null, detail: 'Pinterest engagement mapped to likes' },
+      { label: 'Comments', value: item?.comments ?? 0, delta: item && previous ? item.comments - previous.comments : null, detail: 'Not included in this report' },
+      { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Not included in this report' },
+      { label: 'Pins', value: snapshot?.channel.pinCount ?? snapshot?.pins.length ?? 0, delta: null, detail: 'Imported pins' },
     ];
   });
   readonly selectedContentMeta = computed(() =>
@@ -207,6 +227,7 @@ export class SocialAccountsPage {
   async ngOnInit(): Promise<void> {
     await Promise.all([this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
     await this.loadStoredYouTubeVideos();
+    await this.loadStoredPinterestPins();
   }
 
   async load(): Promise<void> {
@@ -461,6 +482,25 @@ export class SocialAccountsPage {
     });
   }
 
+  async onPinterestReportSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+    await this.importPinterestReport(file);
+  }
+
+  async importPinterestReport(file: File): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Pinterest report import is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.pinterestImportReport(file);
+      await Promise.all([this.load(), this.loadStoredPinterestPins(), this.loadFetchLogs(false)]);
+      this.selectedContentPlatform.set('pinterest');
+      this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'pinterest']));
+      this.showNotice(`Imported ${result.pinsImported} pins, ${result.boardsImported} boards, and ${result.dailyRowsImported} daily rows.`);
+    });
+  }
+
   async loadStoredYouTubeVideos(): Promise<void> {
     try {
       const snapshot = await this.api.youtubeStoredVideos();
@@ -472,8 +512,23 @@ export class SocialAccountsPage {
     }
   }
 
+  async loadStoredPinterestPins(): Promise<void> {
+    try {
+      const snapshot = await this.api.pinterestPins();
+      this.pinterestSnapshot.set(snapshot);
+      this.selectedPinterestItemId.set(snapshot.pins[0]?.id ?? null);
+    } catch {
+      this.pinterestSnapshot.set(null);
+      this.selectedPinterestItemId.set(null);
+    }
+  }
+
   selectYouTubeVideo(videoId: string): void {
     this.selectedYouTubeVideoId.set(videoId);
+  }
+
+  selectPinterestItem(itemId: string): void {
+    this.selectedPinterestItemId.set(itemId);
   }
 
   selectContentPlatform(platform: SocialPlatform): void {

@@ -182,6 +182,45 @@ export interface PinterestAuthStatus {
   isAdminHost: boolean;
 }
 
+export interface PinterestReportImportResult {
+  dailyRowsImported: number;
+  boardsImported: number;
+  pinsImported: number;
+  accountName: string;
+  snapshotDate: string;
+}
+
+export interface PinterestContentSnapshot {
+  channel: {
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    followers: number;
+    views: number;
+    pinCount: number;
+    clicks: number;
+    clicksNote: string;
+  };
+  pins: {
+    id: string;
+    title: string;
+    url: string;
+    kind: 'pin' | 'board' | string;
+    publishedAt: string | null;
+    views: number;
+    likes: number;
+    clicks: number;
+    comments: number;
+    metrics: {
+      snapshotDate: string;
+      views: number;
+      likes: number;
+      comments: number;
+      clicks: number;
+    }[];
+  }[];
+}
+
 export interface YouTubeDebugSnapshot {
   channel: {
     id: string;
