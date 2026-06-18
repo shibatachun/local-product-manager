@@ -131,8 +131,13 @@
 
     <section class="panel chart-panel">
       <div class="section-heading">
-        <div><h2>Cumulative {{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Main chart rolls daily snapshots forward. The lower chart shows the single-day value.</p></div>
+        <div><h2>{{ chartTitle() }}</h2><p>{{ chartSubtitle() }}</p></div>
         <strong>{{ maxMetricValue() | number }}</strong>
+      </div>
+      <div class="chart-mode-tabs">
+        <button *ngFor="let option of chartModeOptions" type="button" [class.active]="chartMode() === option.value" (click)="chartMode.set(option.value); clearChartHover()">
+          {{ option.label }}
+        </button>
       </div>
       <div class="chart-legend">
         <button *ngFor="let platform of chartPlatforms" type="button" [class.active]="selectedChartPlatforms().has(platform.value)" (click)="toggleChartPlatform(platform.value)">
@@ -179,32 +184,9 @@
               <text class="tooltip-change" x="10" y="13">
                 {{ row.change >= 0 ? '+' : '' }}{{ row.change | number }}
                 <ng-container *ngIf="row.percent !== null">({{ row.percent >= 0 ? '+' : '' }}{{ row.percent | number:'1.1-1' }}%)</ng-container>
-                · day {{ row.dailyValue | number }}
+                - day {{ row.dailyValue | number }}
               </text>
             </g>
-          </g>
-        </ng-container>
-      </svg>
-      <div class="daily-chart-heading">
-        <strong>Daily {{ metrics.find(item => item.value === selectedMetric())?.label }}</strong>
-        <span>Only daily clicks/views can move down; cumulative totals above should not.</span>
-      </div>
-      <svg class="market-chart daily-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" (mousemove)="updateChartHover($event)" (mouseleave)="clearChartHover()">
-        <rect class="chart-bg" [attr.x]="chartLeft" [attr.y]="chartTop" [attr.width]="chartRight - chartLeft" [attr.height]="chartBottom - chartTop"></rect>
-        <g class="chart-grid">
-          <g *ngFor="let tick of dailyYAxisTicks()">
-            <line [attr.x1]="chartLeft" [attr.y1]="tick.y" [attr.x2]="chartRight" [attr.y2]="tick.y"></line>
-            <text [attr.x]="chartLeft - 10" [attr.y]="tick.y + 4">{{ tick.value | number }}</text>
-          </g>
-        </g>
-        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartBottom" [attr.x2]="chartRight" [attr.y2]="chartBottom"></line>
-        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartTop" [attr.x2]="chartLeft" [attr.y2]="chartBottom"></line>
-        <text *ngFor="let tick of xAxisTicks()" class="date-label" [attr.x]="tick.x" [attr.y]="chartBottom + 24">{{ tick.label }}</text>
-        <polyline *ngFor="let platform of visibleChartPlatforms()" class="trend-line daily-line" [attr.points]="dailyPlatformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
-        <ng-container *ngIf="chartHover() as hover">
-          <line class="crosshair" [attr.x1]="hover.x" [attr.y1]="chartTop" [attr.x2]="hover.x" [attr.y2]="chartBottom"></line>
-          <g *ngFor="let row of hover.rows">
-            <circle class="hover-dot" [attr.cx]="row.x" [attr.cy]="row.dailyY" r="4" [attr.fill]="row.color"></circle>
           </g>
         </ng-container>
       </svg>

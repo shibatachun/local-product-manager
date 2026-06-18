@@ -27,10 +27,11 @@ export class SocialAccountsPage {
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
   readonly selectedRangePreset = signal<RangePreset>('month');
+  readonly chartMode = signal<ChartMode>('cumulative');
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
   readonly logsOpen = signal(false);
-  readonly appVersion = 'cumulative-social-chart-v1';
+  readonly appVersion = 'social-chart-mode-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -109,12 +110,7 @@ export class SocialAccountsPage {
   );
   readonly maxMetricValue = computed(() =>
     Math.max(1, ...this.visibleChartPlatforms().flatMap(platform =>
-      this.chartDates().map(date => this.platformMetricValue(platform.value, date)),
-    )),
-  );
-  readonly dailyMaxMetricValue = computed(() =>
-    Math.max(1, ...this.visibleChartPlatforms().flatMap(platform =>
-      this.chartDates().map(date => this.dailyPlatformMetricValue(platform.value, date)),
+      this.chartDates().map(date => this.chartMetricValue(platform.value, date)),
     )),
   );
   readonly chartDates = computed(() => {
@@ -185,13 +181,18 @@ export class SocialAccountsPage {
       return { value, y: this.chartY(value) };
     });
   });
-  readonly dailyYAxisTicks = computed(() => {
-    const max = this.dailyMaxMetricValue();
-    return [1, 0.5, 0].map(ratio => {
-      const value = Math.round(max * ratio);
-      return { value, y: this.dailyChartY(value) };
-    });
-  });
+  readonly chartModeOptions: { value: ChartMode; label: string }[] = [
+    { value: 'cumulative', label: 'Total' },
+    { value: 'daily', label: 'Daily' },
+  ];
+  readonly chartTitle = computed(() =>
+    `${this.chartMode() === 'cumulative' ? 'Total' : 'Daily'} ${this.metrics.find(item => item.value === this.selectedMetric())?.label} trend`,
+  );
+  readonly chartSubtitle = computed(() =>
+    this.chartMode() === 'cumulative'
+      ? 'YouTube views use the fetched total snapshot. Pinterest report rows roll daily values forward.'
+      : 'Daily mode shows raw daily report values or the change between total snapshots.',
+  );
   readonly xAxisTicks = computed(() => {
     const dates = this.chartDates();
     if (!dates.length) return [];
@@ -218,8 +219,8 @@ export class SocialAccountsPage {
     if (index === null || !dates[index]) return null;
     const date = dates[index];
     const rows = this.visibleChartPlatforms().map(platform => {
-      const value = this.platformMetricValue(platform.value, date);
-      const startValue = this.platformMetricValue(platform.value, dates[0]);
+      const value = this.chartMetricValue(platform.value, date);
+      const startValue = this.chartMetricValue(platform.value, dates[0]);
       const change = value - startValue;
       return {
         ...platform,
@@ -229,7 +230,6 @@ export class SocialAccountsPage {
         x: this.chartXForDate(date),
         y: this.chartY(value),
         dailyValue: this.dailyPlatformMetricValue(platform.value, date),
-        dailyY: this.dailyChartY(this.dailyPlatformMetricValue(platform.value, date)),
       };
     });
     return {
@@ -572,21 +572,12 @@ export class SocialAccountsPage {
     const dates = this.chartDates();
     if (dates.length === 0) return '';
     const points = dates.map((date, index) => {
-      const value = this.platformMetricValue(platform, date);
+      const value = this.chartMetricValue(platform, date);
       const x = this.chartXForDate(date);
       const y = this.chartY(value);
       return `${x},${y}`;
     });
     return points.join(' ');
-  }
-
-  dailyPlatformPath(platform: SocialPlatform): string {
-    const dates = this.chartDates();
-    if (dates.length === 0) return '';
-    return dates.map(date => {
-      const value = this.dailyPlatformMetricValue(platform, date);
-      return `${this.chartXForDate(date)},${this.dailyChartY(value)}`;
-    }).join(' ');
   }
 
   chartXForDate(date: string): number {
@@ -602,10 +593,6 @@ export class SocialAccountsPage {
     return this.chartBottom - (Math.max(0, value) * (this.chartBottom - this.chartTop)) / this.maxMetricValue();
   }
 
-  dailyChartY(value: number): number {
-    return this.chartBottom - (Math.max(0, value) * (this.chartBottom - this.chartTop)) / this.dailyMaxMetricValue();
-  }
-
   updateChartHover(event: MouseEvent): void {
     const dates = this.chartDates();
     if (!dates.length) {
@@ -613,8 +600,7 @@ export class SocialAccountsPage {
       return;
     }
 
-    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-    const svgX = ((event.clientX - rect.left) / rect.width) * this.chartWidth;
+    const svgX = this.pointerSvgX(event);
     const clampedX = Math.min(this.chartRight, Math.max(this.chartLeft, svgX));
     const nearest = dates
       .map((date, index) => ({ index, distance: Math.abs(this.chartXForDate(date) - clampedX) }))
@@ -638,14 +624,20 @@ export class SocialAccountsPage {
 
   platformMetricTotal(platform: SocialPlatform): number {
     const dates = this.chartDates();
-    return dates.length ? this.platformMetricValue(platform, dates[dates.length - 1]) : 0;
+    return dates.length ? this.chartMetricValue(platform, dates[dates.length - 1]) : 0;
+  }
+
+  private chartMetricValue(platform: SocialPlatform, date: string): number {
+    return this.chartMode() === 'daily'
+      ? this.dailyPlatformMetricValue(platform, date)
+      : this.platformMetricValue(platform, date);
   }
 
   private platformMetricValue(platform: SocialPlatform, date: string): number {
     const key = this.selectedMetric();
     const target = this.dateTime(date);
     const accounts = this.accounts().filter(account => account.platform === platform);
-    if (key === 'followers') {
+    if (key === 'followers' || this.isTotalSnapshotMetric(platform, key)) {
       return accounts.reduce((sum, account) => {
         const latest = account.metrics
           .filter(metric => this.dateTime(metric.snapshotDate) <= target)
@@ -661,11 +653,43 @@ export class SocialAccountsPage {
   }
 
   private dailyPlatformMetricValue(platform: SocialPlatform, date: string): number {
-    return this.accounts()
-      .filter(account => account.platform === platform)
+    const key = this.selectedMetric();
+    const accounts = this.accounts().filter(account => account.platform === platform);
+    if (key === 'followers' || this.isTotalSnapshotMetric(platform, key)) {
+      return accounts.reduce((sum, account) => {
+        const current = account.metrics.find(metric => metric.snapshotDate === date);
+        if (!current) return sum;
+        const previous = account.metrics
+          .filter(metric => this.dateTime(metric.snapshotDate) < this.dateTime(date))
+          .sort((left, right) => this.dateTime(right.snapshotDate) - this.dateTime(left.snapshotDate))[0];
+        const currentValue = Number(current[key]) || 0;
+        const previousValue = previous ? Number(previous[key]) || 0 : 0;
+        return sum + Math.max(0, currentValue - previousValue);
+      }, 0);
+    }
+
+    return accounts
       .flatMap(account => account.metrics)
       .filter(metric => metric.snapshotDate === date)
-      .reduce((sum, metric) => sum + (Number(metric[this.selectedMetric()]) || 0), 0);
+      .reduce((sum, metric) => sum + (Number(metric[key]) || 0), 0);
+  }
+
+  private isTotalSnapshotMetric(platform: SocialPlatform, key: SocialMetricKey): boolean {
+    return platform === 'youtube' && (key === 'views' || key === 'shares');
+  }
+
+  private pointerSvgX(event: MouseEvent): number {
+    const svg = event.currentTarget as SVGSVGElement;
+    const point = svg.createSVGPoint?.();
+    if (point) {
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const matrix = svg.getScreenCTM()?.inverse();
+      if (matrix) return point.matrixTransform(matrix).x;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    return ((event.clientX - rect.left) / rect.width) * this.chartWidth;
   }
 
   private async loadSelectedAccountContent(): Promise<void> {
@@ -698,10 +722,10 @@ export class SocialAccountsPage {
   }
 
   totalFor(account: SocialAccount, key: SocialMetricKey): number {
-    if (key === 'followers') {
+    if (key === 'followers' || this.isTotalSnapshotMetric(account.platform, key)) {
       const latest = [...account.metrics]
         .sort((left, right) => this.dateTime(right.snapshotDate) - this.dateTime(left.snapshotDate))[0];
-      return latest?.followers ?? 0;
+      return latest ? Number(latest[key]) || 0 : 0;
     }
     return account.metrics.reduce((sum, metric) => sum + (Number(metric[key]) || 0), 0);
   }
@@ -831,3 +855,4 @@ export class SocialAccountsPage {
 }
 
 type RangePreset = 'day' | 'week' | 'month' | 'ytd' | '5y' | 'custom';
+type ChartMode = 'cumulative' | 'daily';
