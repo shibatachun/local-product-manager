@@ -685,9 +685,13 @@ export class ProductManagerPage {
     this.wizardOpen.set(false);
   }
 
-  nextWizardStep(): void {
+  async nextWizardStep(): Promise<void> {
     if (this.wizardStep() === 1 && (!this.createForm.sku.trim() || !this.createForm.productName.trim())) {
       return this.showNotice('SKU and product name are required.');
+    }
+
+    if (this.wizardStep() === 1 && !await this.checkCreateSkuDuplicate()) {
+      return;
     }
 
     if (this.wizardStep() === 2 && this.platformChoices.some((item) => item.platform === 'amazon' && item.selected)) {
@@ -748,6 +752,7 @@ export class ProductManagerPage {
 
   async finishCreate(): Promise<void> {
     await this.perform(async () => {
+      if (!await this.checkCreateSkuDuplicate(false)) return;
       const product = await this.api.createProduct({
         sku: this.createForm.sku,
         productName: this.createForm.productName,
@@ -809,6 +814,12 @@ export class ProductManagerPage {
     const product = this.selectedProduct();
     if (!product) return;
     await this.perform(async () => {
+      const duplicate = await this.api.checkDuplicateSku(this.editForm.sku, product.id);
+      if (duplicate.exactSkuExists) {
+        this.showNotice(`SKU "${duplicate.sku}" already exists on ${duplicate.exactProductName || 'another product'}.`);
+        return;
+      }
+
       await this.api.updateProduct(product.id, {
         sku: this.editForm.sku,
         productName: this.editForm.productName,
@@ -825,6 +836,29 @@ export class ProductManagerPage {
       await this.openDetail(product.id);
       this.showNotice('Product details saved.');
     });
+  }
+
+  private async checkCreateSkuDuplicate(showSameBaseNotice = true): Promise<boolean> {
+    const sku = this.createForm.sku.trim();
+    if (!sku) return false;
+    const duplicate = await this.api.checkDuplicateSku(sku);
+    if (duplicate.exactSkuExists) {
+      this.showNotice(`SKU "${duplicate.sku}" already exists on ${duplicate.exactProductName || 'another product'}.`);
+      if (duplicate.exactProductId) {
+        await this.openDetail(duplicate.exactProductId);
+      }
+      return false;
+    }
+
+    if (showSameBaseNotice && duplicate.sameBaseProducts.length) {
+      const related = duplicate.sameBaseProducts
+        .slice(0, 3)
+        .map((product) => product.sku)
+        .join(', ');
+      this.showNotice(`No exact duplicate. Same SKU number prefix found: ${related}.`);
+    }
+
+    return true;
   }
 
   async deleteProduct(): Promise<void> {

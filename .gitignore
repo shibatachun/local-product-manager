@@ -4,8 +4,10 @@
 **/Data/*.db-shm
 **/Data/*.db-wal
 **/Data/image-storage-roots.json
+**/Data/store-links.json
 **/Data/youtube-oauth-token.json
 **/Data/youtube-client-secret.json
+.codex/
 *.log
 *.user
 *.suo

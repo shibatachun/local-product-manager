@@ -71,8 +71,58 @@ public sealed class ProductService(AppDbContext db)
         return product is null ? null : ProductMapper.ToDetailDto(product);
     }
 
+    public async Task<ProductDuplicateCheckDto> CheckDuplicateAsync(
+        string sku,
+        int? excludeProductId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSku = NormalizeSku(sku);
+        var skuBase = GetSkuBase(normalizedSku);
+        var query = db.Products.AsNoTracking();
+        if (excludeProductId.HasValue)
+        {
+            query = query.Where(product => product.Id != excludeProductId.Value);
+        }
+
+        var exact = await query
+            .Where(product => product.Sku == normalizedSku)
+            .Select(product => new ProductDuplicateCandidateDto(
+                product.Id,
+                product.Sku,
+                product.ProductName,
+                product.SkuBase))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var sameBaseProducts = string.IsNullOrWhiteSpace(skuBase)
+            ? []
+            : await query
+                .Where(product => product.SkuBase == skuBase)
+                .OrderBy(product => product.Sku)
+                .Take(10)
+                .Select(product => new ProductDuplicateCandidateDto(
+                    product.Id,
+                    product.Sku,
+                    product.ProductName,
+                    product.SkuBase))
+                .ToListAsync(cancellationToken);
+
+        return new ProductDuplicateCheckDto(
+            normalizedSku,
+            skuBase,
+            exact is not null,
+            exact?.Id,
+            exact?.ProductName,
+            sameBaseProducts);
+    }
+
     public async Task<ProductDetailDto> CreateAsync(CreateProductRequest request, CancellationToken cancellationToken)
     {
+        var duplicate = await CheckDuplicateAsync(request.Sku, null, cancellationToken);
+        if (duplicate.ExactSkuExists)
+        {
+            throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
+        }
+
         var product = new Product
         {
             Sku = NormalizeSku(request.Sku),
@@ -101,6 +151,12 @@ public sealed class ProductService(AppDbContext db)
         if (product is null)
         {
             return null;
+        }
+
+        var duplicate = await CheckDuplicateAsync(request.Sku, productId, cancellationToken);
+        if (duplicate.ExactSkuExists)
+        {
+            throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
         }
 
         product.Sku = NormalizeSku(request.Sku);
@@ -258,4 +314,11 @@ public sealed class ProductService(AppDbContext db)
             ? "remote"
             : "local";
     }
+}
+
+public sealed class DuplicateSkuException(string sku, int? existingProductId)
+    : InvalidOperationException($"A product with SKU {sku} already exists.")
+{
+    public string Sku { get; } = sku;
+    public int? ExistingProductId { get; } = existingProductId;
 }

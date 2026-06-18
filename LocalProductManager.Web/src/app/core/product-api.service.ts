@@ -13,6 +13,7 @@ import {
   ImageStorageRoot,
   Platform,
   ProductDetail,
+  ProductDuplicateCheck,
   ProductListItem,
   ProductListing,
   StoreLink,
@@ -34,6 +35,12 @@ export class ProductApiService {
 
   getProduct(id: number): Promise<ProductDetail> {
     return firstValueFrom(this.http.get<ProductDetail>(`${this.baseUrl}/products/${id}`));
+  }
+
+  checkDuplicateSku(sku: string, excludeProductId?: number): Promise<ProductDuplicateCheck> {
+    const params: Record<string, string> = { sku };
+    if (excludeProductId !== undefined) params['excludeProductId'] = String(excludeProductId);
+    return firstValueFrom(this.http.get<ProductDuplicateCheck>(`${this.baseUrl}/products/duplicate-check`, { params }));
   }
 
   createProduct(body: {

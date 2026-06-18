@@ -12,6 +12,20 @@ public sealed record CreateProductRequest(
     string? ImagePath,
     string? ImageSource);
 
+public sealed record ProductDuplicateCheckDto(
+    string Sku,
+    string? SkuBase,
+    bool ExactSkuExists,
+    int? ExactProductId,
+    string? ExactProductName,
+    IReadOnlyList<ProductDuplicateCandidateDto> SameBaseProducts);
+
+public sealed record ProductDuplicateCandidateDto(
+    int Id,
+    string Sku,
+    string ProductName,
+    string? SkuBase);
+
 public sealed record UpdateProductRequest(
     string Sku,
     string ProductName,

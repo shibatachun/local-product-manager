@@ -27,6 +27,20 @@ public sealed class ProductsController(ProductService products) : ControllerBase
         return product is null ? NotFound() : Ok(product);
     }
 
+    [HttpGet("duplicate-check")]
+    public async Task<ActionResult<ProductDuplicateCheckDto>> DuplicateCheck(
+        [FromQuery] string sku,
+        [FromQuery] int? excludeProductId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(sku))
+        {
+            return BadRequest("SKU is required.");
+        }
+
+        return Ok(await products.CheckDuplicateAsync(sku, excludeProductId, cancellationToken));
+    }
+
     [HttpPost]
     public async Task<ActionResult<ProductDetailDto>> Create(
         CreateProductRequest request,
@@ -41,6 +55,15 @@ public sealed class ProductsController(ProductService products) : ControllerBase
         {
             var product = await products.CreateAsync(request, cancellationToken);
             return CreatedAtAction(nameof(Get), new { productId = product.Id }, product);
+        }
+        catch (DuplicateSkuException ex)
+        {
+            return Conflict(new
+            {
+                message = "A product with this SKU already exists.",
+                sku = ex.Sku,
+                existingProductId = ex.ExistingProductId
+            });
         }
         catch (DbUpdateException)
         {
@@ -63,6 +86,15 @@ public sealed class ProductsController(ProductService products) : ControllerBase
         {
             var product = await products.UpdateAsync(productId, request, cancellationToken);
             return product is null ? NotFound() : Ok(product);
+        }
+        catch (DuplicateSkuException ex)
+        {
+            return Conflict(new
+            {
+                message = "A product with this SKU already exists.",
+                sku = ex.Sku,
+                existingProductId = ex.ExistingProductId
+            });
         }
         catch (DbUpdateException)
         {

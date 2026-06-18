@@ -71,6 +71,20 @@ export interface ProductDetail extends ProductListItem {
   amazonAttributionLinks: AmazonAttributionLink[];
 }
 
+export interface ProductDuplicateCheck {
+  sku: string;
+  skuBase: string | null;
+  exactSkuExists: boolean;
+  exactProductId: number | null;
+  exactProductName: string | null;
+  sameBaseProducts: {
+    id: number;
+    sku: string;
+    productName: string;
+    skuBase: string | null;
+  }[];
+}
+
 export interface ProductListing {
   id: number;
   productId: number;
