@@ -31,7 +31,7 @@ export class SocialAccountsPage {
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
   readonly logsOpen = signal(false);
-  readonly appVersion = 'social-chart-mode-v1';
+  readonly appVersion = 'youtube-total-metrics-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -675,7 +675,7 @@ export class SocialAccountsPage {
   }
 
   private isTotalSnapshotMetric(platform: SocialPlatform, key: SocialMetricKey): boolean {
-    return platform === 'youtube' && (key === 'views' || key === 'shares');
+    return platform === 'youtube' && key !== 'clicks';
   }
 
   private pointerSvgX(event: MouseEvent): number {
