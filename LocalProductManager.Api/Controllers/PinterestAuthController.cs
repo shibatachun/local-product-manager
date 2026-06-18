@@ -142,6 +142,12 @@ public sealed class PinterestAuthController(
             await fetchLogs.RecordAsync("pinterest-report-import", "failed", 0, ex.Message, cancellationToken);
             return StatusCode(StatusCodes.Status503ServiceUnavailable, ex.Message);
         }
+        catch (DbUpdateException ex)
+        {
+            var message = ex.InnerException?.Message ?? ex.Message;
+            await fetchLogs.RecordAsync("pinterest-report-import", "failed", 0, message, cancellationToken);
+            return BadRequest($"Pinterest report import failed while saving data: {message}");
+        }
     }
 
     [HttpGet("pins")]

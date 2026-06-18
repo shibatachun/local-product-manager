@@ -199,7 +199,16 @@ public sealed class PinterestReportImportService(AppDbContext db)
         DateOnly snapshotDate,
         CancellationToken cancellationToken)
     {
-        var metric = await db.SocialMetricSnapshots.FirstOrDefaultAsync(
+        var metric = db.ChangeTracker
+            .Entries<SocialMetricSnapshot>()
+            .Select(entry => entry.Entity)
+            .FirstOrDefault(item => item.SocialAccountId == accountId && item.SnapshotDate == snapshotDate);
+        if (metric is not null)
+        {
+            return metric;
+        }
+
+        metric = await db.SocialMetricSnapshots.FirstOrDefaultAsync(
             item => item.SocialAccountId == accountId && item.SnapshotDate == snapshotDate,
             cancellationToken);
         if (metric is not null)
@@ -232,9 +241,18 @@ public sealed class PinterestReportImportService(AppDbContext db)
             return;
         }
 
-        var metric = await db.SocialVideoMetricSnapshots.FirstOrDefaultAsync(
+        var contentUrl = NormalizePinterestUrl(url);
+        var metric = db.ChangeTracker
+            .Entries<SocialVideoMetricSnapshot>()
+            .Select(entry => entry.Entity)
+            .FirstOrDefault(item =>
+                item.SocialAccountId == accountId &&
+                item.PlatformVideoId == contentUrl &&
+                item.SnapshotDate == snapshotDate);
+
+        metric ??= await db.SocialVideoMetricSnapshots.FirstOrDefaultAsync(
             item => item.SocialAccountId == accountId &&
-                item.PlatformVideoId == url &&
+                item.PlatformVideoId == contentUrl &&
                 item.SnapshotDate == snapshotDate,
             cancellationToken);
         if (metric is null)
@@ -242,7 +260,7 @@ public sealed class PinterestReportImportService(AppDbContext db)
             metric = new SocialVideoMetricSnapshot
             {
                 SocialAccountId = accountId,
-                PlatformVideoId = url,
+                PlatformVideoId = contentUrl,
                 SnapshotDate = snapshotDate
             };
             db.SocialVideoMetricSnapshots.Add(metric);
@@ -257,6 +275,19 @@ public sealed class PinterestReportImportService(AppDbContext db)
         metric.Clicks = clicks;
         metric.Comments = 0;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string NormalizePinterestUrl(string url)
+    {
+        var trimmed = url.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            return trimmed.Length <= 128 ? trimmed : trimmed[..128];
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        var normalized = $"{uri.Scheme}://{uri.Host}{path}/";
+        return normalized.Length <= 128 ? normalized : normalized[..128];
     }
 
     private static List<List<string>> ReadRows(Stream stream)
