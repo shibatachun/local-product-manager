@@ -30,7 +30,7 @@ export class SocialAccountsPage {
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
   readonly logsOpen = signal(false);
-  readonly appVersion = 'social-account-driven-content-v1';
+  readonly appVersion = 'cumulative-social-chart-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -112,6 +112,11 @@ export class SocialAccountsPage {
       this.chartDates().map(date => this.platformMetricValue(platform.value, date)),
     )),
   );
+  readonly dailyMaxMetricValue = computed(() =>
+    Math.max(1, ...this.visibleChartPlatforms().flatMap(platform =>
+      this.chartDates().map(date => this.dailyPlatformMetricValue(platform.value, date)),
+    )),
+  );
   readonly chartDates = computed(() => {
     const dates = new Set<string>();
     for (const account of this.accounts()) {
@@ -180,11 +185,18 @@ export class SocialAccountsPage {
       return { value, y: this.chartY(value) };
     });
   });
+  readonly dailyYAxisTicks = computed(() => {
+    const max = this.dailyMaxMetricValue();
+    return [1, 0.5, 0].map(ratio => {
+      const value = Math.round(max * ratio);
+      return { value, y: this.dailyChartY(value) };
+    });
+  });
   readonly xAxisTicks = computed(() => {
     const dates = this.chartDates();
     if (!dates.length) return [];
     if (dates.length === 1) {
-      return [{ label: this.formatChartDate(dates[0]), x: this.chartX(0) }];
+      return [{ label: this.formatChartDate(dates[0]), x: this.chartXForDate(dates[0]) }];
     }
 
     const tickCount = Math.min(6, dates.length);
@@ -197,7 +209,7 @@ export class SocialAccountsPage {
       .sort((left, right) => left - right)
       .map(index => ({
         label: this.formatChartDate(dates[index]),
-        x: this.chartX(index),
+        x: this.chartXForDate(dates[index]),
       }));
   });
   readonly chartHover = computed(() => {
@@ -207,20 +219,27 @@ export class SocialAccountsPage {
     const date = dates[index];
     const rows = this.visibleChartPlatforms().map(platform => {
       const value = this.platformMetricValue(platform.value, date);
+      const startValue = this.platformMetricValue(platform.value, dates[0]);
+      const change = value - startValue;
       return {
         ...platform,
         value,
-        x: this.chartX(index),
+        change,
+        percent: startValue > 0 ? (change / startValue) * 100 : null,
+        x: this.chartXForDate(date),
         y: this.chartY(value),
+        dailyValue: this.dailyPlatformMetricValue(platform.value, date),
+        dailyY: this.dailyChartY(this.dailyPlatformMetricValue(platform.value, date)),
       };
     });
     return {
       date,
       dateLabel: this.formatTooltipDate(date),
-      x: this.chartX(index),
+      x: this.chartXForDate(date),
       rows,
       total: rows.reduce((sum, row) => sum + row.value, 0),
-      tooltipX: Math.min(this.chartRight - 176, Math.max(this.chartLeft + 8, this.chartX(index) + 12)),
+      tooltipX: Math.min(this.chartRight - 224, Math.max(this.chartLeft + 8, this.chartXForDate(date) + 12)),
+      tooltipHeight: 48 + rows.length * 26,
     };
   });
 
@@ -554,21 +573,37 @@ export class SocialAccountsPage {
     if (dates.length === 0) return '';
     const points = dates.map((date, index) => {
       const value = this.platformMetricValue(platform, date);
-      const x = this.chartX(index);
+      const x = this.chartXForDate(date);
       const y = this.chartY(value);
       return `${x},${y}`;
     });
     return points.join(' ');
   }
 
-  chartX(index: number): number {
+  dailyPlatformPath(platform: SocialPlatform): string {
+    const dates = this.chartDates();
+    if (dates.length === 0) return '';
+    return dates.map(date => {
+      const value = this.dailyPlatformMetricValue(platform, date);
+      return `${this.chartXForDate(date)},${this.dailyChartY(value)}`;
+    }).join(' ');
+  }
+
+  chartXForDate(date: string): number {
     const dates = this.chartDates();
     if (dates.length <= 1) return (this.chartLeft + this.chartRight) / 2;
-    return this.chartLeft + (index * (this.chartRight - this.chartLeft)) / (dates.length - 1);
+    const min = this.dateTime(dates[0]);
+    const max = this.dateTime(dates[dates.length - 1]);
+    if (max <= min) return (this.chartLeft + this.chartRight) / 2;
+    return this.chartLeft + ((this.dateTime(date) - min) * (this.chartRight - this.chartLeft)) / (max - min);
   }
 
   chartY(value: number): number {
     return this.chartBottom - (Math.max(0, value) * (this.chartBottom - this.chartTop)) / this.maxMetricValue();
+  }
+
+  dailyChartY(value: number): number {
+    return this.chartBottom - (Math.max(0, value) * (this.chartBottom - this.chartTop)) / this.dailyMaxMetricValue();
   }
 
   updateChartHover(event: MouseEvent): void {
@@ -581,8 +616,10 @@ export class SocialAccountsPage {
     const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
     const svgX = ((event.clientX - rect.left) / rect.width) * this.chartWidth;
     const clampedX = Math.min(this.chartRight, Math.max(this.chartLeft, svgX));
-    const ratio = dates.length <= 1 ? 0 : (clampedX - this.chartLeft) / (this.chartRight - this.chartLeft);
-    this.hoveredChartIndex.set(Math.min(dates.length - 1, Math.max(0, Math.round(ratio * (dates.length - 1)))));
+    const nearest = dates
+      .map((date, index) => ({ index, distance: Math.abs(this.chartXForDate(date) - clampedX) }))
+      .sort((left, right) => left.distance - right.distance)[0];
+    this.hoveredChartIndex.set(nearest?.index ?? null);
   }
 
   clearChartHover(): void {
@@ -600,13 +637,30 @@ export class SocialAccountsPage {
   }
 
   platformMetricTotal(platform: SocialPlatform): number {
-    return this.accounts()
-      .filter(account => account.platform === platform)
-      .flatMap(account => account.metrics)
-      .reduce((sum, metric) => sum + (Number(metric[this.selectedMetric()]) || 0), 0);
+    const dates = this.chartDates();
+    return dates.length ? this.platformMetricValue(platform, dates[dates.length - 1]) : 0;
   }
 
   private platformMetricValue(platform: SocialPlatform, date: string): number {
+    const key = this.selectedMetric();
+    const target = this.dateTime(date);
+    const accounts = this.accounts().filter(account => account.platform === platform);
+    if (key === 'followers') {
+      return accounts.reduce((sum, account) => {
+        const latest = account.metrics
+          .filter(metric => this.dateTime(metric.snapshotDate) <= target)
+          .sort((left, right) => this.dateTime(right.snapshotDate) - this.dateTime(left.snapshotDate))[0];
+        return sum + (latest ? Number(latest.followers) || 0 : 0);
+      }, 0);
+    }
+
+    return accounts
+      .flatMap(account => account.metrics)
+      .filter(metric => this.dateTime(metric.snapshotDate) <= target)
+      .reduce((sum, metric) => sum + (Number(metric[key]) || 0), 0);
+  }
+
+  private dailyPlatformMetricValue(platform: SocialPlatform, date: string): number {
     return this.accounts()
       .filter(account => account.platform === platform)
       .flatMap(account => account.metrics)
@@ -644,6 +698,11 @@ export class SocialAccountsPage {
   }
 
   totalFor(account: SocialAccount, key: SocialMetricKey): number {
+    if (key === 'followers') {
+      const latest = [...account.metrics]
+        .sort((left, right) => this.dateTime(right.snapshotDate) - this.dateTime(left.snapshotDate))[0];
+      return latest?.followers ?? 0;
+    }
     return account.metrics.reduce((sum, metric) => sum + (Number(metric[key]) || 0), 0);
   }
 
@@ -737,6 +796,10 @@ export class SocialAccountsPage {
   private parseDateInput(value: string): Date {
     const [year, month, day] = value.split('-').map(Number);
     return new Date(year, month - 1, day);
+  }
+
+  private dateTime(value: string): number {
+    return this.parseDateInput(value).getTime();
   }
 
   private formatChartDate(value: string): string {

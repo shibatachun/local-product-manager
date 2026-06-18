@@ -50,7 +50,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-const string appVersion = "2026-06-18-pinterest-account-content-v1";
+const string appVersion = "2026-06-18-cumulative-social-chart-v1";
 var angularRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",

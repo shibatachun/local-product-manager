@@ -131,7 +131,7 @@
 
     <section class="panel chart-panel">
       <div class="section-heading">
-        <div><h2>{{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Each line represents one marketing platform.</p></div>
+        <div><h2>Cumulative {{ metrics.find(item => item.value === selectedMetric())?.label }} trend</h2><p>Main chart rolls daily snapshots forward. The lower chart shows the single-day value.</p></div>
         <strong>{{ maxMetricValue() | number }}</strong>
       </div>
       <div class="chart-legend">
@@ -169,14 +169,42 @@
             <circle class="hover-ring" [attr.cx]="row.x" [attr.cy]="row.y" r="7" [attr.stroke]="row.color"></circle>
           </g>
           <g class="chart-tooltip" [attr.transform]="'translate(' + hover.tooltipX + ' 38)'">
-            <rect width="168" height="154" rx="7"></rect>
+            <rect width="216" [attr.height]="hover.tooltipHeight" rx="7"></rect>
             <text class="tooltip-date" x="12" y="22">{{ hover.dateLabel }}</text>
-            <text class="tooltip-total" x="156" y="22">{{ hover.total | number }}</text>
-            <g *ngFor="let row of hover.rows; let i = index" [attr.transform]="'translate(12 ' + (44 + i * 21) + ')'">
+            <text class="tooltip-total" x="204" y="22">{{ hover.total | number }}</text>
+            <g *ngFor="let row of hover.rows; let i = index" [attr.transform]="'translate(12 ' + (44 + i * 26) + ')'">
               <circle cx="0" cy="-4" r="4" [attr.fill]="row.color"></circle>
               <text class="tooltip-name" x="10" y="0">{{ row.label }}</text>
-              <text class="tooltip-value" x="144" y="0">{{ row.value | number }}</text>
+              <text class="tooltip-value" x="192" y="0">{{ row.value | number }}</text>
+              <text class="tooltip-change" x="10" y="13">
+                {{ row.change >= 0 ? '+' : '' }}{{ row.change | number }}
+                <ng-container *ngIf="row.percent !== null">({{ row.percent >= 0 ? '+' : '' }}{{ row.percent | number:'1.1-1' }}%)</ng-container>
+                · day {{ row.dailyValue | number }}
+              </text>
             </g>
+          </g>
+        </ng-container>
+      </svg>
+      <div class="daily-chart-heading">
+        <strong>Daily {{ metrics.find(item => item.value === selectedMetric())?.label }}</strong>
+        <span>Only daily clicks/views can move down; cumulative totals above should not.</span>
+      </div>
+      <svg class="market-chart daily-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" (mousemove)="updateChartHover($event)" (mouseleave)="clearChartHover()">
+        <rect class="chart-bg" [attr.x]="chartLeft" [attr.y]="chartTop" [attr.width]="chartRight - chartLeft" [attr.height]="chartBottom - chartTop"></rect>
+        <g class="chart-grid">
+          <g *ngFor="let tick of dailyYAxisTicks()">
+            <line [attr.x1]="chartLeft" [attr.y1]="tick.y" [attr.x2]="chartRight" [attr.y2]="tick.y"></line>
+            <text [attr.x]="chartLeft - 10" [attr.y]="tick.y + 4">{{ tick.value | number }}</text>
+          </g>
+        </g>
+        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartBottom" [attr.x2]="chartRight" [attr.y2]="chartBottom"></line>
+        <line class="axis" [attr.x1]="chartLeft" [attr.y1]="chartTop" [attr.x2]="chartLeft" [attr.y2]="chartBottom"></line>
+        <text *ngFor="let tick of xAxisTicks()" class="date-label" [attr.x]="tick.x" [attr.y]="chartBottom + 24">{{ tick.label }}</text>
+        <polyline *ngFor="let platform of visibleChartPlatforms()" class="trend-line daily-line" [attr.points]="dailyPlatformPath(platform.value)" [attr.stroke]="platform.color"></polyline>
+        <ng-container *ngIf="chartHover() as hover">
+          <line class="crosshair" [attr.x1]="hover.x" [attr.y1]="chartTop" [attr.x2]="hover.x" [attr.y2]="chartBottom"></line>
+          <g *ngFor="let row of hover.rows">
+            <circle class="hover-dot" [attr.cx]="row.x" [attr.cy]="row.dailyY" r="4" [attr.fill]="row.color"></circle>
           </g>
         </ng-container>
       </svg>

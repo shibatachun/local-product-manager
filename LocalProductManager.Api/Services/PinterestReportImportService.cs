@@ -54,7 +54,6 @@ public sealed class PinterestReportImportService(AppDbContext db)
         if (boardRows.Count > 0)
         {
             var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-            metric.Views = Math.Max(metric.Views, boardTotals.Impressions);
             metric.Likes = boardTotals.Engagement;
             metric.Clicks = boardTotals.PinClicks + boardTotals.OutboundClicks;
             metric.Shares = boardTotals.Saves;
@@ -122,11 +121,14 @@ public sealed class PinterestReportImportService(AppDbContext db)
             return null;
         }
 
-        var latestMetric = await db.SocialMetricSnapshots
+        var accountMetrics = await db.SocialMetricSnapshots
             .AsNoTracking()
             .Where(item => item.SocialAccountId == account.Id)
             .OrderByDescending(item => item.SnapshotDate)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var latestMetric = accountMetrics.FirstOrDefault();
+        var totalViews = accountMetrics.Sum(item => item.Views);
+        var totalClicks = accountMetrics.Sum(item => item.Clicks);
         var contentRows = await db.SocialVideoMetricSnapshots
             .AsNoTracking()
             .Where(item => item.SocialAccountId == account.Id)
@@ -164,9 +166,9 @@ public sealed class PinterestReportImportService(AppDbContext db)
                 account.AccountName,
                 null,
                 latestMetric?.Followers ?? 0,
-                latestMetric?.Views ?? 0,
+                totalViews,
                 content.Count(item => item.Kind == "pin"),
-                latestMetric?.Clicks ?? 0,
+                totalClicks,
                 "Pinterest CSV maps impressions to views, pin/outbound clicks to clicks, engagement to likes, and saves to shares."),
             content);
     }
