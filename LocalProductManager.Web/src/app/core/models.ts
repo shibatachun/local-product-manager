@@ -156,6 +156,73 @@ export interface SocialFetchLogEntry {
   message: string;
 }
 
+export interface SocialDebugSnapshot {
+  generatedAt: string;
+  accounts: {
+    id: number;
+    platform: string;
+    accountName: string;
+    accountHandle: string | null;
+    isActive: boolean;
+  }[];
+  metricSnapshots: SocialDebugMetric[];
+  videoMetricSnapshots: SocialDebugVideoMetric[];
+  platformTotals: {
+    platform: string;
+    accounts: number;
+    metricRows: number;
+    latestViews: number;
+    latestLikes: number;
+    latestComments: number;
+    latestShares: number;
+    latestFollowers: number;
+    sumViews: number;
+    sumLikes: number;
+    sumComments: number;
+    sumClicks: number;
+  }[];
+  latestVideoTotals: {
+    platform: string;
+    socialAccountId: number;
+    accountName: string;
+    videos: number;
+    latestViews: number;
+    latestLikes: number;
+    latestComments: number;
+    latestSnapshotDate: string | null;
+  }[];
+}
+
+export interface SocialDebugMetric {
+  id: number;
+  socialAccountId: number;
+  platform: string;
+  accountName: string;
+  snapshotDate: string;
+  clicks: number;
+  likes: number;
+  views: number;
+  comments: number;
+  shares: number;
+  followers: number;
+  updatedAt: string;
+}
+
+export interface SocialDebugVideoMetric {
+  id: number;
+  socialAccountId: number;
+  platform: string;
+  accountName: string;
+  platformVideoId: string;
+  title: string;
+  snapshotDate: string;
+  views: number;
+  likes: number;
+  comments: number;
+  clicks: number;
+  updatedAt: string;
+}
+
 export interface ArchiveLogResult {
   path: string;
 }

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -30,8 +30,10 @@ export class SocialAccountsPage {
   readonly chartMode = signal<ChartMode>('cumulative');
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
+  readonly socialDebug = signal<SocialDebugSnapshot | null>(null);
   readonly logsOpen = signal(false);
-  readonly appVersion = 'youtube-total-metrics-v1';
+  readonly debugOpen = signal(false);
+  readonly appVersion = 'social-debug-panel-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -370,6 +372,15 @@ export class SocialAccountsPage {
       const result = await this.api.archiveLogs();
       await this.loadFetchLogs(false);
       this.showNotice(`Logs archived to ${result.path}`);
+    });
+  }
+
+  async loadSocialDebug(): Promise<void> {
+    if (!this.youtubeStatus()?.isAdminHost) return;
+    await this.perform(async () => {
+      this.socialDebug.set(await this.api.socialDebug());
+      this.debugOpen.set(true);
+      this.showNotice('Social debug data loaded.');
     });
   }
 

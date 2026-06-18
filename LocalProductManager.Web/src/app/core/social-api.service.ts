@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -49,6 +49,10 @@ export class SocialApiService {
 
   sync(): Promise<SocialSyncResult> {
     return firstValueFrom(this.http.post<SocialSyncResult>(`${this.baseUrl}/social-accounts/sync`, {}));
+  }
+
+  socialDebug(): Promise<SocialDebugSnapshot> {
+    return firstValueFrom(this.http.get<SocialDebugSnapshot>(`${this.baseUrl}/social-accounts/debug`));
   }
 
   youtubeStatus(): Promise<YouTubeAuthStatus> {

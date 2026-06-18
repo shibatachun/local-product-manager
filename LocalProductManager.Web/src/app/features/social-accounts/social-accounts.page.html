@@ -8,6 +8,7 @@
     <nav>
       <a routerLink="/">Product manager</a>
       <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="loadFetchLogs()">Fetch logs</button>
+      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="loadSocialDebug()">Debug data</button>
       <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button>
     </nav>
   </header>
@@ -201,6 +202,60 @@
             <em>{{ log.status }} · {{ log.metricsImported | number }}</em>
           </div>
           <p *ngIf="!fetchLogs().length">No fetch logs recorded yet.</p>
+        </div>
+      </div>
+      <div class="debug-panel" *ngIf="debugOpen() && youtubeStatus()?.isAdminHost && socialDebug() as debug">
+        <div class="section-heading">
+          <div><h2>Social debug data</h2><p>Generated {{ debug.generatedAt | date:'MMM d, y, h:mm:ss a' }}</p></div>
+          <button type="button" (click)="loadSocialDebug()">Refresh</button>
+        </div>
+
+        <h3>Platform totals</h3>
+        <div class="debug-table-wrap">
+          <table>
+            <thead><tr><th>Platform</th><th>Accounts</th><th>Rows</th><th>Latest views</th><th>Latest likes</th><th>Latest comments</th><th>Latest shares</th><th>Latest followers</th><th>Sum views</th><th>Sum likes</th><th>Sum clicks</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let row of debug.platformTotals">
+                <td>{{ row.platform }}</td><td>{{ row.accounts }}</td><td>{{ row.metricRows }}</td><td>{{ row.latestViews | number }}</td><td>{{ row.latestLikes | number }}</td><td>{{ row.latestComments | number }}</td><td>{{ row.latestShares | number }}</td><td>{{ row.latestFollowers | number }}</td><td>{{ row.sumViews | number }}</td><td>{{ row.sumLikes | number }}</td><td>{{ row.sumClicks | number }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Latest video totals</h3>
+        <div class="debug-table-wrap">
+          <table>
+            <thead><tr><th>Platform</th><th>Account</th><th>Videos</th><th>Views</th><th>Likes</th><th>Comments</th><th>Latest date</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let row of debug.latestVideoTotals">
+                <td>{{ row.platform }}</td><td>{{ row.accountName }}</td><td>{{ row.videos }}</td><td>{{ row.latestViews | number }}</td><td>{{ row.latestLikes | number }}</td><td>{{ row.latestComments | number }}</td><td>{{ row.latestSnapshotDate || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Metric snapshots</h3>
+        <div class="debug-table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Platform</th><th>Account</th><th>Views</th><th>Likes</th><th>Comments</th><th>Clicks</th><th>Shares</th><th>Followers</th><th>Updated</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let row of debug.metricSnapshots">
+                <td>{{ row.snapshotDate }}</td><td>{{ row.platform }}</td><td>{{ row.accountName }}</td><td>{{ row.views | number }}</td><td>{{ row.likes | number }}</td><td>{{ row.comments | number }}</td><td>{{ row.clicks | number }}</td><td>{{ row.shares | number }}</td><td>{{ row.followers | number }}</td><td>{{ row.updatedAt | date:'M/d HH:mm' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Video metric snapshots</h3>
+        <div class="debug-table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Platform</th><th>Account</th><th>Title</th><th>Views</th><th>Likes</th><th>Comments</th><th>Clicks</th><th>Video ID</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let row of debug.videoMetricSnapshots">
+                <td>{{ row.snapshotDate }}</td><td>{{ row.platform }}</td><td>{{ row.accountName }}</td><td>{{ row.title }}</td><td>{{ row.views | number }}</td><td>{{ row.likes | number }}</td><td>{{ row.comments | number }}</td><td>{{ row.clicks | number }}</td><td>{{ row.platformVideoId }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>

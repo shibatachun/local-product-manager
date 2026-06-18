@@ -50,7 +50,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-const string appVersion = "2026-06-18-youtube-video-total-v1";
+const string appVersion = "2026-06-18-social-debug-panel-v1";
 var angularRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",

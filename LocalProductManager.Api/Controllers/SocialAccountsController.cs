@@ -137,6 +137,139 @@ public sealed class SocialAccountsController(AppDbContext db) : ControllerBase
             "API connectors are reserved for a later integration."));
     }
 
+    [HttpGet("debug")]
+    public async Task<ActionResult<SocialDebugSnapshotDto>> Debug(CancellationToken cancellationToken)
+    {
+        if (!IsAdminHost()) return AdminOnly();
+
+        var accounts = await db.SocialAccounts
+            .AsNoTracking()
+            .OrderBy(account => account.Platform)
+            .ThenBy(account => account.AccountName)
+            .ToListAsync(cancellationToken);
+        var metrics = await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .OrderByDescending(metric => metric.SnapshotDate)
+            .ThenBy(metric => metric.SocialAccount!.Platform)
+            .ThenBy(metric => metric.SocialAccount!.AccountName)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+        var videoMetrics = await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .OrderByDescending(metric => metric.SnapshotDate)
+            .ThenBy(metric => metric.SocialAccount!.Platform)
+            .ThenByDescending(metric => metric.Views)
+            .Take(300)
+            .ToListAsync(cancellationToken);
+        var allMetrics = await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .ToListAsync(cancellationToken);
+        var allVideoMetrics = await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .ToListAsync(cancellationToken);
+
+        var latestByAccount = allMetrics
+            .GroupBy(metric => metric.SocialAccountId)
+            .Select(group => group.OrderByDescending(metric => metric.SnapshotDate).First())
+            .ToArray();
+        var platformTotals = accounts
+            .GroupBy(account => account.Platform)
+            .Select(group =>
+            {
+                var platform = group.Key;
+                var accountIds = group.Select(account => account.Id).ToHashSet();
+                var platformMetrics = allMetrics
+                    .Where(metric => accountIds.Contains(metric.SocialAccountId))
+                    .ToArray();
+                var latestMetrics = latestByAccount
+                    .Where(metric => accountIds.Contains(metric.SocialAccountId))
+                    .ToArray();
+                return new SocialDebugPlatformTotalDto(
+                    platform,
+                    group.Count(),
+                    platformMetrics.Length,
+                    latestMetrics.Sum(metric => metric.Views),
+                    latestMetrics.Sum(metric => metric.Likes),
+                    latestMetrics.Sum(metric => metric.Comments),
+                    latestMetrics.Sum(metric => metric.Shares),
+                    latestMetrics.Sum(metric => metric.Followers),
+                    platformMetrics.Sum(metric => metric.Views),
+                    platformMetrics.Sum(metric => metric.Likes),
+                    platformMetrics.Sum(metric => metric.Comments),
+                    platformMetrics.Sum(metric => metric.Clicks));
+            })
+            .OrderBy(total => total.Platform)
+            .ToArray();
+
+        var latestVideoTotals = allVideoMetrics
+            .GroupBy(metric => new
+            {
+                metric.SocialAccountId,
+                metric.SocialAccount!.Platform,
+                metric.SocialAccount.AccountName
+            })
+            .Select(group =>
+            {
+                var latestRows = group
+                    .GroupBy(metric => metric.PlatformVideoId)
+                    .Select(videoGroup => videoGroup.OrderByDescending(metric => metric.SnapshotDate).First())
+                    .ToArray();
+                return new SocialDebugVideoTotalDto(
+                    group.Key.Platform,
+                    group.Key.SocialAccountId,
+                    group.Key.AccountName,
+                    latestRows.Length,
+                    latestRows.Sum(metric => metric.Views),
+                    latestRows.Sum(metric => metric.Likes),
+                    latestRows.Sum(metric => metric.Comments),
+                    latestRows.OrderByDescending(metric => metric.SnapshotDate).FirstOrDefault()?.SnapshotDate);
+            })
+            .OrderBy(total => total.Platform)
+            .ThenBy(total => total.AccountName)
+            .ToArray();
+
+        return Ok(new SocialDebugSnapshotDto(
+            DateTimeOffset.UtcNow,
+            accounts.Select(account => new SocialDebugAccountDto(
+                account.Id,
+                account.Platform,
+                account.AccountName,
+                account.AccountHandle,
+                account.IsActive)).ToArray(),
+            metrics.Select(metric => new SocialDebugMetricDto(
+                metric.Id,
+                metric.SocialAccountId,
+                metric.SocialAccount?.Platform ?? "",
+                metric.SocialAccount?.AccountName ?? "",
+                metric.SnapshotDate,
+                metric.Clicks,
+                metric.Likes,
+                metric.Views,
+                metric.Comments,
+                metric.Shares,
+                metric.Followers,
+                metric.UpdatedAt)).ToArray(),
+            videoMetrics.Select(metric => new SocialDebugVideoMetricDto(
+                metric.Id,
+                metric.SocialAccountId,
+                metric.SocialAccount?.Platform ?? "",
+                metric.SocialAccount?.AccountName ?? "",
+                metric.PlatformVideoId,
+                metric.Title,
+                metric.SnapshotDate,
+                metric.Views,
+                metric.Likes,
+                metric.Comments,
+                metric.Clicks,
+                metric.UpdatedAt)).ToArray(),
+            platformTotals,
+            latestVideoTotals));
+    }
+
     private static SocialAccountDto ToDto(SocialAccount account, DateOnly? from, DateOnly? to)
     {
         var metrics = account.Metrics.AsEnumerable();
