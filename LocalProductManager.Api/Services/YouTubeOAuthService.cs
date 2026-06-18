@@ -148,7 +148,7 @@ public sealed class YouTubeOAuthService
         var token = LoadToken() ?? throw new InvalidOperationException("Connect YouTube before syncing.");
         token = await EnsureAccessTokenAsync(token, cancellationToken);
         var channel = await GetChannelAsync(token.AccessToken, cancellationToken);
-        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 10, cancellationToken);
+        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 50, cancellationToken);
 
         var account = await UpsertYouTubeAccountAsync(db, channel, cancellationToken);
         await UpsertChannelSnapshotAsync(db, account.Id, channel, videos, DateOnly.FromDateTime(DateTime.Now), cancellationToken);
@@ -176,7 +176,7 @@ public sealed class YouTubeOAuthService
         var channel = await GetChannelAsync(token.AccessToken, cancellationToken);
         var account = await UpsertYouTubeAccountAsync(db, channel, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.Now);
-        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 10, cancellationToken);
+        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 50, cancellationToken);
         await UpsertChannelSnapshotAsync(db, account.Id, channel, videos, today, cancellationToken);
         await UpsertVideoSnapshotsAsync(db, account.Id, videos, today, cancellationToken);
 
@@ -195,7 +195,7 @@ public sealed class YouTubeOAuthService
         var token = LoadToken() ?? throw new InvalidOperationException("Connect YouTube before fetching videos.");
         token = await EnsureAccessTokenAsync(token, cancellationToken);
         var channel = await GetChannelAsync(token.AccessToken, cancellationToken);
-        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 10, cancellationToken);
+        var videos = await GetRecentVideosAsync(token.AccessToken, channel.UploadsPlaylistId, 50, cancellationToken);
         var account = await UpsertYouTubeAccountAsync(db, channel, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.Now);
         await UpsertChannelSnapshotAsync(db, account.Id, channel, videos, today, cancellationToken);
@@ -214,7 +214,7 @@ public sealed class YouTubeOAuthService
                 channel.Title,
                 channel.ThumbnailUrl,
                 channel.SubscriberCount,
-                channel.ViewCount,
+                videos.Sum(video => video.Views),
                 channel.VideoCount,
                 null,
                 "YouTube Data API v3 does not expose marketing link click counts here; video views are logged separately."),
@@ -524,7 +524,8 @@ public sealed class YouTubeOAuthService
             db.SocialMetricSnapshots.Add(metric);
         }
 
-        metric.Views = ClampToInt(channel.ViewCount);
+        var totalVideoViews = videos.Sum(video => video.Views);
+        metric.Views = ClampToInt(totalVideoViews > 0 ? totalVideoViews : channel.ViewCount);
         metric.Likes = ClampToInt(videos.Sum(video => video.Likes));
         metric.Comments = ClampToInt(videos.Sum(video => video.Comments));
         metric.Followers = ClampToInt(channel.SubscriberCount);
