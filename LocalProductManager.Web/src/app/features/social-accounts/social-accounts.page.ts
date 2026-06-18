@@ -33,7 +33,7 @@ export class SocialAccountsPage {
   readonly socialDebug = signal<SocialDebugSnapshot | null>(null);
   readonly logsOpen = signal(false);
   readonly debugOpen = signal(false);
-  readonly appVersion = 'social-debug-panel-v1';
+  readonly appVersion = 'chart-metric-key-fix-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -653,7 +653,7 @@ export class SocialAccountsPage {
         const latest = account.metrics
           .filter(metric => this.dateTime(metric.snapshotDate) <= target)
           .sort((left, right) => this.dateTime(right.snapshotDate) - this.dateTime(left.snapshotDate))[0];
-        return sum + (latest ? Number(latest.followers) || 0 : 0);
+        return sum + (latest ? Number(latest[key]) || 0 : 0);
       }, 0);
     }
 
