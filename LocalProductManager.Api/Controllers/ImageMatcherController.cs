@@ -98,7 +98,7 @@ public sealed class ImageMatcherController(
         }
         catch (IOException)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image host folder is temporarily unavailable.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The file host folder is temporarily unavailable.");
         }
     }
 
@@ -156,7 +156,7 @@ public sealed class ImageMatcherController(
         }
         catch (FileNotFoundException)
         {
-            return NotFound("The image file was not found by the server.");
+            return NotFound("The file was not found by the server.");
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -164,7 +164,7 @@ public sealed class ImageMatcherController(
         }
         catch (IOException)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image share is temporarily unavailable.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "The file share is temporarily unavailable.");
         }
     }
 

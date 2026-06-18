@@ -17,26 +17,18 @@ public sealed record ImageHostEntry(
     string Path,
     string Type,
     long? Size,
-    DateTimeOffset? ModifiedAt);
+    DateTimeOffset? ModifiedAt,
+    string? Extension = null);
 
 public sealed record ImageHostBrowseResult(
     string Path,
     string? ParentPath,
     IReadOnlyList<ImageHostEntry> Folders,
+    IReadOnlyList<ImageHostEntry> Files,
     IReadOnlyList<ImageHostEntry> Images);
 
 public sealed class ImageFileService
 {
-    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp",
-        ".bmp",
-        ".gif"
-    };
-
     private readonly object sync = new();
     private readonly string contentRootPath;
     private readonly string storageFilePath;
@@ -70,7 +62,7 @@ public sealed class ImageFileService
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException("Image storage path is required.");
+            throw new ArgumentException("File storage path is required.");
         }
 
         var normalizedPath = NormalizePath(path, contentRootPath);
@@ -111,24 +103,18 @@ public sealed class ImageFileService
         var roots = GetRootPaths();
         if (roots.Length == 0)
         {
-            throw new InvalidOperationException("No image storage roots are configured.");
+            throw new InvalidOperationException("No file storage roots are configured.");
         }
 
         var fullPath = NormalizePath(imagePath, contentRootPath);
-        var extension = Path.GetExtension(fullPath);
-        if (!AllowedExtensions.Contains(extension))
-        {
-            throw new InvalidOperationException("The product path is not a supported image file.");
-        }
-
         if (!roots.Any(root => IsUnderRoot(fullPath, root)))
         {
-            throw new UnauthorizedAccessException("The image path is outside the configured image storage roots.");
+            throw new UnauthorizedAccessException("The file path is outside the configured file storage roots.");
         }
 
         if (!File.Exists(fullPath))
         {
-            throw new FileNotFoundException("The image file was not found.", fullPath);
+            throw new FileNotFoundException("The file was not found.", fullPath);
         }
 
         var contentTypeProvider = new FileExtensionContentTypeProvider();
@@ -151,7 +137,7 @@ public sealed class ImageFileService
     {
         if (!TryGetAllowedDirectory(folderPath, out var fullPath))
         {
-            throw new UnauthorizedAccessException("The image host folder is outside the configured image storage roots.");
+            throw new UnauthorizedAccessException("The file host folder is outside the configured file storage roots.");
         }
 
         if (!Directory.Exists(fullPath))
@@ -176,19 +162,37 @@ public sealed class ImageFileService
             .OrderBy(item => item.Name)
             .ToArray();
 
-        var images = Directory
+        var files = Directory
             .EnumerateFiles(fullPath)
-            .Where(path => AllowedExtensions.Contains(Path.GetExtension(path)))
             .Select(path =>
             {
                 var info = new FileInfo(path);
-                return new ImageHostEntry(info.Name, info.FullName, "image", info.Length, info.LastWriteTime);
+                return new ImageHostEntry(
+                    info.Name,
+                    info.FullName,
+                    "file",
+                    info.Length,
+                    info.LastWriteTime,
+                    info.Extension);
             })
             .OrderBy(item => item.Name)
             .ToArray();
+        var images = files
+            .Where(file => IsImageExtension(file.Extension))
+            .Select(file => file with { Type = "image" })
+            .ToArray();
 
-        return new ImageHostBrowseResult(fullPath, parentPath, folders, images);
+        return new ImageHostBrowseResult(fullPath, parentPath, folders, files, images);
     }
+
+    private static bool IsImageExtension(string? extension) =>
+        extension is not null &&
+        (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".bmp", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase));
 
     private List<string> LoadStoredRoots(IEnumerable<string> configuredRoots)
     {

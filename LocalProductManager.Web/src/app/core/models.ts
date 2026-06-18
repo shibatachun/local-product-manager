@@ -70,15 +70,17 @@ export interface ImageStorageRoot {
 export interface ImageHostEntry {
   name: string;
   path: string;
-  type: 'folder' | 'image';
+  type: 'folder' | 'image' | 'file';
   size: number | null;
   modifiedAt: string | null;
+  extension: string | null;
 }
 
 export interface ImageHostBrowseResult {
   path: string;
   parentPath: string | null;
   folders: ImageHostEntry[];
+  files: ImageHostEntry[];
   images: ImageHostEntry[];
 }
 

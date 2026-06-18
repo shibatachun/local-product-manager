@@ -11,6 +11,7 @@ import {
   ProductListItem,
   ProductListing,
   ImageHostBrowseResult,
+  ImageHostEntry,
   ImageStorageRoot,
   StoreLink,
 } from '../../core/models';
@@ -375,13 +376,13 @@ export class ProductManagerPage {
 
   async browseImageHost(path = this.imageHostPath()): Promise<void> {
     const trimmed = path.trim();
-    if (!trimmed) return this.showNotice('Enter or choose an image host folder first.');
+    if (!trimmed) return this.showNotice('Enter or choose a file host folder first.');
 
     await this.perform(async () => {
       const result = await this.api.browseImageHost(trimmed);
       this.imageHost.set(result);
       this.imageHostPath.set(result.path);
-      this.showNotice(`${result.folders.length} folder(s), ${result.images.length} image(s) loaded.`);
+      this.showNotice(`${result.folders.length} folder(s), ${this.hostFiles(result).length} file(s) loaded.`);
     });
   }
 
@@ -391,6 +392,20 @@ export class ProductManagerPage {
 
   imageDownloadUrl(path: string): string {
     return this.api.imageDownloadUrl(path);
+  }
+
+  hostFiles(host: ImageHostBrowseResult): ImageHostEntry[] {
+    return host.files?.length ? host.files : host.images;
+  }
+
+  isImageFile(file: ImageHostEntry): boolean {
+    const extension = (file.extension || file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '');
+    return ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'].includes(extension);
+  }
+
+  fileExtensionLabel(file: ImageHostEntry): string {
+    const extension = (file.extension || file.name.split('.').pop() || 'file').replace(/^\./, '');
+    return extension ? extension.toUpperCase() : 'FILE';
   }
 
   fileSize(size: number | null): string {
@@ -433,7 +448,7 @@ export class ProductManagerPage {
       products: 'Product management',
       pricing: 'Pricing estimator',
       marketing: 'Marketing links',
-      storage: 'Image storage',
+      storage: 'File storage',
     };
     return labels[this.view()];
   }
@@ -523,18 +538,18 @@ export class ProductManagerPage {
       this.imageHostPath.set(root.path);
       if (root.available) await this.browseImageHost(root.path);
       this.showNotice(root.available
-        ? 'Image folder added and is accessible.'
-        : 'Image folder added, but the server cannot currently access it.');
+        ? 'File folder added and is accessible.'
+        : 'File folder added, but the server cannot currently access it.');
     });
   }
 
   async removeImageRoot(root: ImageStorageRoot): Promise<void> {
-    if (!confirm(`Remove this image folder from the whitelist?\n${root.path}`)) return;
+    if (!confirm(`Remove this file folder from the whitelist?\n${root.path}`)) return;
     await this.perform(async () => {
       await this.api.deleteImageStorageRoot(root.path);
       await this.loadImageStorageRoots();
       if (this.createForm.imageFolder === root.path) this.createForm.imageFolder = '';
-      this.showNotice('Image folder removed from the whitelist.');
+      this.showNotice('File folder removed from the whitelist.');
     });
   }
 
