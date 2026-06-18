@@ -12,15 +12,17 @@ public sealed class PinterestAuthController(
     AppDbContext db,
     PinterestOAuthService pinterest,
     PinterestReportImportService pinterestReports,
-    SocialFetchLogService fetchLogs) : ControllerBase
+    SocialFetchLogService fetchLogs,
+    AuthService auth) : ControllerBase
 {
     [HttpGet("auth/status")]
-    public ActionResult<PinterestAuthStatusDto> Status() => Ok(pinterest.GetStatus(IsAdminHost()));
+    public async Task<ActionResult<PinterestAuthStatusDto>> Status(CancellationToken cancellationToken) =>
+        Ok(pinterest.GetStatus(await auth.CanManageSocialAsync(HttpContext, cancellationToken)));
 
     [HttpGet("auth/start")]
-    public ActionResult<PinterestAuthStartResult> Start()
+    public async Task<ActionResult<PinterestAuthStartResult>> Start(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             return Ok(new PinterestAuthStartResult(
@@ -36,7 +38,7 @@ public sealed class PinterestAuthController(
     [HttpPost("auth/disconnect")]
     public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         await pinterest.DisconnectAsync(cancellationToken);
         await db.SocialAccounts
             .Where(account => account.Platform == "pinterest")
@@ -51,7 +53,7 @@ public sealed class PinterestAuthController(
         [FromQuery] string? error,
         CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (!string.IsNullOrWhiteSpace(error))
         {
             return Content(
@@ -88,7 +90,7 @@ public sealed class PinterestAuthController(
     [HttpPost("sync")]
     public async Task<ActionResult<SocialSyncResult>> Sync(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             var imported = await pinterest.SyncAccountMetricsAsync(db, cancellationToken);
@@ -118,7 +120,7 @@ public sealed class PinterestAuthController(
         IFormFile file,
         CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (file.Length == 0) return BadRequest("Pinterest report file is empty.");
 
         try
@@ -159,12 +161,6 @@ public sealed class PinterestAuthController(
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
 
-    private bool IsAdminHost()
-    {
-        var remoteIp = HttpContext.Connection.RemoteIpAddress;
-        return remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
-    }
-
     private ObjectResult AdminOnly() =>
-        StatusCode(StatusCodes.Status403Forbidden, "This action is only available on the host computer through localhost.");
+        StatusCode(StatusCodes.Status403Forbidden, "Only admin can manage Pinterest authorization and imports.");
 }

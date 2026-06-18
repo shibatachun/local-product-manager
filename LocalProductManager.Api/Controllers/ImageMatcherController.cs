@@ -10,14 +10,18 @@ public sealed class ImageMatcherController(
     ImageMatcherService imageMatcher,
     ImageFileService imageFiles,
     RemoteImageProxyService remoteImages,
-    AmazonImageLookupService listingImages) : ControllerBase
+    AmazonImageLookupService listingImages,
+    AuthService auth) : ControllerBase
 {
     [HttpGet("roots")]
     public IActionResult GetRoots() => Ok(imageFiles.GetRoots());
 
     [HttpPost("roots")]
-    public ActionResult<ImageStorageRoot> AddRoot(AddImageStorageRootRequest request)
+    public async Task<ActionResult<ImageStorageRoot>> AddRoot(
+        AddImageStorageRootRequest request,
+        CancellationToken cancellationToken)
     {
+        if (!await auth.CanManageStorageAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             return Ok(imageFiles.AddRoot(request.Path));
@@ -33,8 +37,11 @@ public sealed class ImageMatcherController(
     }
 
     [HttpDelete("roots")]
-    public IActionResult RemoveRoot([FromQuery] string path)
+    public async Task<IActionResult> RemoveRoot(
+        [FromQuery] string path,
+        CancellationToken cancellationToken)
     {
+        if (!await auth.CanManageStorageAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             return imageFiles.RemoveRoot(path) ? NoContent() : NotFound();
@@ -192,6 +199,9 @@ public sealed class ImageMatcherController(
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "The remote image is temporarily unavailable.");
         }
     }
+
+    private ObjectResult AdminOnly() =>
+        StatusCode(StatusCodes.Status403Forbidden, "Only admin can change file storage roots.");
 }
 
 public sealed record AddImageStorageRootRequest(string Path);

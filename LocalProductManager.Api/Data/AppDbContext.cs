@@ -12,6 +12,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SocialAccount> SocialAccounts => Set<SocialAccount>();
     public DbSet<SocialMetricSnapshot> SocialMetricSnapshots => Set<SocialMetricSnapshot>();
     public DbSet<SocialVideoMetricSnapshot> SocialVideoMetricSnapshots => Set<SocialVideoMetricSnapshot>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -111,6 +113,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(metric => metric.SocialAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppUser>(entity =>
+        {
+            entity.ToTable("app_users");
+            entity.HasIndex(user => user.UserName).IsUnique();
+            entity.Property(user => user.UserName).HasMaxLength(80).IsRequired();
+            entity.Property(user => user.PasswordHash).HasMaxLength(128).IsRequired();
+            entity.Property(user => user.Role).HasMaxLength(32).IsRequired();
+        });
+
+        modelBuilder.Entity<AppUserSession>(entity =>
+        {
+            entity.ToTable("app_user_sessions");
+            entity.Property(session => session.Id).HasMaxLength(64).IsRequired();
+            entity.Property(session => session.UserName).HasMaxLength(80).IsRequired();
+            entity.Property(session => session.Role).HasMaxLength(32).IsRequired();
+            entity.Property(session => session.RemoteIp).HasMaxLength(80);
+            entity.HasOne(session => session.AppUser)
+                .WithMany()
+                .HasForeignKey(session => session.AppUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

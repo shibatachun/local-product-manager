@@ -1,8 +1,9 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { CurrentUser, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
 
 @Component({
@@ -13,6 +14,8 @@ import { SocialApiService } from '../../core/social-api.service';
 })
 export class SocialAccountsPage {
   readonly api = inject(SocialApiService);
+  readonly authApi = inject(AuthApiService);
+  readonly currentUser = signal<CurrentUser | null>(null);
   readonly accounts = signal<SocialAccount[]>([]);
   readonly selectedMetric = signal<SocialMetricKey>('clicks');
   readonly selectedAccountId = signal<number | null>(null);
@@ -246,8 +249,20 @@ export class SocialAccountsPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
+    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
     await this.loadSelectedAccountContent();
+  }
+
+  async loadCurrentUser(): Promise<void> {
+    try {
+      this.currentUser.set(await this.authApi.me());
+    } catch {
+      this.currentUser.set(null);
+    }
+  }
+
+  canManageSocial(): boolean {
+    return !!this.currentUser()?.canManageSocial;
   }
 
   async load(): Promise<void> {
@@ -282,7 +297,7 @@ export class SocialAccountsPage {
   }
 
   async createAccount(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Account editing is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Account editing is only available on the host computer.');
     if (!this.accountForm.accountName.trim()) return this.showNotice('Account name is required.');
     await this.perform(async () => {
       const account = await this.api.createAccount({
@@ -304,7 +319,7 @@ export class SocialAccountsPage {
   }
 
   async deleteAccount(account: SocialAccount): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Account editing is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Account editing is only available on the host computer.');
     const action = account.platform === 'youtube' || account.platform === 'pinterest' ? 'Disconnect' : 'Delete';
     if (!confirm(`${action} ${account.accountName}? Metrics for this account will be removed.`)) return;
     if (account.platform === 'youtube') {
@@ -338,7 +353,7 @@ export class SocialAccountsPage {
   }
 
   async saveMetric(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Manual metrics are only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Manual metrics are only available on the host computer.');
     const account = this.selectedAccount();
     if (!account) return this.showNotice('Select or create an account first.');
     await this.perform(async () => {
@@ -349,7 +364,7 @@ export class SocialAccountsPage {
   }
 
   async sync(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('API sync is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('API sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.sync();
       await this.loadFetchLogs(false);
@@ -358,7 +373,7 @@ export class SocialAccountsPage {
   }
 
   async loadFetchLogs(showNotice = true): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return;
+    if (!this.canManageSocial()) return;
     await this.perform(async () => {
       this.fetchLogs.set(await this.api.fetchLogs());
       this.logsOpen.set(true);
@@ -367,7 +382,7 @@ export class SocialAccountsPage {
   }
 
   async archiveFetchLogs(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return;
+    if (!this.canManageSocial()) return;
     await this.perform(async () => {
       const result = await this.api.archiveLogs();
       await this.loadFetchLogs(false);
@@ -376,7 +391,7 @@ export class SocialAccountsPage {
   }
 
   async loadSocialDebug(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return;
+    if (!this.canManageSocial()) return;
     await this.perform(async () => {
       this.socialDebug.set(await this.api.socialDebug());
       this.debugOpen.set(true);
@@ -402,7 +417,7 @@ export class SocialAccountsPage {
 
   async connectYouTube(): Promise<void> {
     const status = this.youtubeStatus();
-    if (status?.isAdminHost === false) {
+    if (!this.canManageSocial()) {
       return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
     }
     if (status?.isConfigured === false) {
@@ -425,7 +440,7 @@ export class SocialAccountsPage {
   }
 
   async syncYouTube(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Sync is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.youtubeSync();
       await Promise.all([this.load(), this.loadYouTubeStatus()]);
@@ -436,7 +451,7 @@ export class SocialAccountsPage {
   }
 
   async disconnectYouTube(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Disconnect is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Disconnect is only available on the host computer.');
     if (!confirm('Disconnect YouTube authorization on this server?')) return;
     await this.perform(async () => {
       await this.api.youtubeDisconnect();
@@ -449,7 +464,7 @@ export class SocialAccountsPage {
   }
 
   async fetchYouTubeVideos(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Fetching is only available on the host computer. Showing saved data.');
+    if (!this.canManageSocial()) return this.showNotice('Fetching is only available on the host computer. Showing saved data.');
     await this.perform(async () => {
       const snapshot = await this.api.youtubeVideosDebug();
       this.youtubeSnapshot.set(snapshot);
@@ -473,7 +488,7 @@ export class SocialAccountsPage {
 
   async connectPinterest(): Promise<void> {
     const status = this.pinterestStatus();
-    if (status?.isAdminHost === false) {
+    if (!this.canManageSocial()) {
       return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
     }
     if (status?.isConfigured === false) {
@@ -496,7 +511,7 @@ export class SocialAccountsPage {
   }
 
   async syncPinterest(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Sync is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Sync is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.pinterestSync();
       await Promise.all([this.load(), this.loadPinterestStatus()]);
@@ -507,7 +522,7 @@ export class SocialAccountsPage {
   }
 
   async disconnectPinterest(): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Disconnect is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Disconnect is only available on the host computer.');
     if (!confirm('Disconnect Pinterest authorization on this server?')) return;
     await this.perform(async () => {
       await this.api.pinterestDisconnect();
@@ -526,7 +541,7 @@ export class SocialAccountsPage {
   }
 
   async importPinterestReport(file: File): Promise<void> {
-    if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Pinterest report import is only available on the host computer.');
+    if (!this.canManageSocial()) return this.showNotice('Pinterest report import is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.pinterestImportReport(file);
       await this.load();
@@ -752,7 +767,7 @@ export class SocialAccountsPage {
   youtubeHelperText(): string {
     const status = this.youtubeStatus();
     if (!status) return 'Checking YouTube connection...';
-    if (!status.isAdminHost) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
+    if (!this.canManageSocial()) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
     if (status.isConnected) return status.channelTitle || 'YouTube Channel';
     if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
     return status.message || 'Open Google authorization';
@@ -761,7 +776,7 @@ export class SocialAccountsPage {
   pinterestHelperText(): string {
     const status = this.pinterestStatus();
     if (!status) return 'Checking Pinterest connection...';
-    if (!status.isAdminHost) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
+    if (!this.canManageSocial()) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
     if (status.isConnected) return status.accountName || 'Pinterest Account';
     if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
     return status.message || 'Open Pinterest authorization';
@@ -867,3 +882,4 @@ export class SocialAccountsPage {
 
 type RangePreset = 'day' | 'week' | 'month' | 'ytd' | '5y' | 'custom';
 type ChartMode = 'cumulative' | 'daily';
+

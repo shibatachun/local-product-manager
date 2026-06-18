@@ -9,7 +9,8 @@ namespace LocalProductManager.Api.Controllers;
 public sealed class ImportsController(
     AmazonBusinessReportImportService businessReportImporter,
     BulkAttributionImportService attributionImporter,
-    AttributionFolderImportService attributionFolderImporter) : ControllerBase
+    AttributionFolderImportService attributionFolderImporter,
+    AuthService auth) : ControllerBase
 {
     [HttpPost("amazon-business-report")]
     [RequestSizeLimit(25_000_000)]
@@ -17,6 +18,7 @@ public sealed class ImportsController(
         IFormFile file,
         CancellationToken cancellationToken)
     {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (file.Length == 0) return BadRequest("The Business Report file is empty.");
         try
         {
@@ -34,6 +36,7 @@ public sealed class ImportsController(
         IFormFile file,
         CancellationToken cancellationToken)
     {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (file.Length == 0) return BadRequest("The attribution file is empty.");
         try
         {
@@ -51,6 +54,7 @@ public sealed class ImportsController(
         [FromForm] List<IFormFile> files,
         CancellationToken cancellationToken)
     {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (files.Count == 0)
         {
             return BadRequest("Select a folder containing attribution CSV files.");
@@ -58,4 +62,7 @@ public sealed class ImportsController(
 
         return Ok(await attributionFolderImporter.ImportAsync(files, cancellationToken));
     }
+
+    private ObjectResult AdminOnly() =>
+        StatusCode(StatusCodes.Status403Forbidden, "Only admin can import product or attribution data.");
 }

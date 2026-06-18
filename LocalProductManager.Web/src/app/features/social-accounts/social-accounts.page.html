@@ -1,4 +1,4 @@
-<div class="social-shell">
+﻿<div class="social-shell">
   <header class="topbar">
     <div>
       <p class="eyebrow">Marketing Hub</p>
@@ -7,13 +7,13 @@
     </div>
     <nav>
       <a routerLink="/">Product manager</a>
-      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="loadFetchLogs()">Fetch logs</button>
-      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="loadSocialDebug()">Debug data</button>
-      <button type="button" *ngIf="youtubeStatus()?.isAdminHost" (click)="sync()">Sync API</button>
+      <button type="button" *ngIf="canManageSocial()" (click)="loadFetchLogs()">Fetch logs</button>
+      <button type="button" *ngIf="canManageSocial()" (click)="loadSocialDebug()">Debug data</button>
+      <button type="button" *ngIf="canManageSocial()" (click)="sync()">Sync API</button>
     </nav>
   </header>
 
-  <section class="readonly-banner" *ngIf="youtubeStatus() && !youtubeStatus()?.isAdminHost">
+  <section class="readonly-banner" *ngIf="youtubeStatus() && !canManageSocial()">
     This is a read-only dashboard from this computer. Connect, disconnect, account editing, and data fetching are only available on the host computer through localhost.
   </section>
 
@@ -34,7 +34,7 @@
 
   <main class="grid">
     <aside class="accounts">
-      <section class="panel" *ngIf="youtubeStatus()?.isAdminHost; else readonlyAccountPanel">
+      <section class="panel" *ngIf="canManageSocial(); else readonlyAccountPanel">
         <h2>Add account</h2>
         <label class="platform-select">Platform
           <select [(ngModel)]="accountForm.platform">
@@ -123,7 +123,7 @@
             <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
             <em>{{ totalFor(account, selectedMetric()) | number }}</em>
           </button>
-          <button class="disconnect-account" *ngIf="youtubeStatus()?.isAdminHost" type="button" (click)="deleteAccount(account)">
+          <button class="disconnect-account" *ngIf="canManageSocial()" type="button" (click)="deleteAccount(account)">
             {{ account.platform === 'youtube' || account.platform === 'pinterest' ? 'Disconnect' : 'Delete' }}
           </button>
         </div>
@@ -191,20 +191,20 @@
           </g>
         </ng-container>
       </svg>
-      <div class="fetch-log-panel" *ngIf="logsOpen() && youtubeStatus()?.isAdminHost">
+      <div class="fetch-log-panel" *ngIf="logsOpen() && canManageSocial()">
         <div class="section-heading">
           <div><h2>Daily fetch log</h2><p>Saved under the server logging folder.</p></div>
           <button type="button" (click)="archiveFetchLogs()">Archive</button>
         </div>
         <div class="fetch-log-list">
           <div *ngFor="let log of fetchLogs()" [class.failed]="log.status !== 'success'">
-            <span><strong>{{ log.timestamp | date:'MMM d, y, h:mm a' }}</strong><small>{{ log.source }} · {{ log.message }}</small></span>
-            <em>{{ log.status }} · {{ log.metricsImported | number }}</em>
+            <span><strong>{{ log.timestamp | date:'MMM d, y, h:mm a' }}</strong><small>{{ log.source }} Â· {{ log.message }}</small></span>
+            <em>{{ log.status }} Â· {{ log.metricsImported | number }}</em>
           </div>
           <p *ngIf="!fetchLogs().length">No fetch logs recorded yet.</p>
         </div>
       </div>
-      <div class="debug-panel" *ngIf="debugOpen() && youtubeStatus()?.isAdminHost && socialDebug() as debug">
+      <div class="debug-panel" *ngIf="debugOpen() && canManageSocial() && socialDebug() as debug">
         <div class="section-heading">
           <div><h2>Social debug data</h2><p>Generated {{ debug.generatedAt | date:'MMM d, y, h:mm:ss a' }}</p></div>
           <button type="button" (click)="loadSocialDebug()">Refresh</button>
@@ -263,8 +263,8 @@
     <section class="panel platform-content">
       <div class="section-heading">
         <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : 'Saved data and future API posts for this platform.' }}</p></div>
-        <button type="button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
-        <label class="file-button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'pinterest'">
+        <button type="button" *ngIf="canManageSocial() && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
+        <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'pinterest'">
           Import report
           <input type="file" accept=".csv,text/csv" (change)="onPinterestReportSelected($event)" />
         </label>
@@ -317,7 +317,7 @@
         </button>
           <div class="empty-videos" *ngIf="!(youtubeSnapshot()?.videos?.length)">
             <strong>No videos loaded</strong>
-            <small>{{ youtubeStatus()?.isAdminHost ? 'Connect YouTube, then click Fetch videos.' : 'Waiting for the host computer to fetch YouTube data.' }}</small>
+            <small>{{ canManageSocial() ? 'Connect YouTube, then click Fetch videos.' : 'Waiting for the host computer to fetch YouTube data.' }}</small>
           </div>
         </div>
 
@@ -351,7 +351,7 @@
             </button>
             <div class="empty-videos" *ngIf="!(pinterestSnapshot()?.pins?.length)">
               <strong>No pins loaded</strong>
-              <small>{{ youtubeStatus()?.isAdminHost ? 'Import a Pinterest analytics report CSV.' : 'Waiting for the host computer to import Pinterest data.' }}</small>
+              <small>{{ canManageSocial() ? 'Import a Pinterest analytics report CSV.' : 'Waiting for the host computer to import Pinterest data.' }}</small>
             </div>
           </div>
 
@@ -359,7 +359,7 @@
             <span class="pin-detail-mark">{{ pin.kind === 'board' ? 'Board' : 'Pin' }}</span>
             <div>
               <h3>{{ pin.title }}</h3>
-              <p>{{ pin.views | number }} impressions · {{ pin.clicks | number }} clicks · {{ pin.likes | number }} engagement</p>
+              <p>{{ pin.views | number }} impressions Â· {{ pin.clicks | number }} clicks Â· {{ pin.likes | number }} engagement</p>
               <a [href]="pin.url" target="_blank" rel="noreferrer">Open {{ pin.kind }}</a>
             </div>
           </div>
@@ -397,7 +397,7 @@
       </ng-template>
     </section>
 
-    <section class="panel metric-entry" *ngIf="youtubeStatus()?.isAdminHost && selectedAccount() as account">
+    <section class="panel metric-entry" *ngIf="canManageSocial() && selectedAccount() as account">
       <div class="section-heading"><div><h2>Manual metrics</h2><p>{{ account.accountName }}</p></div></div>
       <div class="metric-form">
         <label>Date<input type="date" [(ngModel)]="metricForm.snapshotDate" /></label>
@@ -414,3 +414,4 @@
 </div>
 
 <div class="toast" *ngIf="notice()">{{ notice() }}</div>
+

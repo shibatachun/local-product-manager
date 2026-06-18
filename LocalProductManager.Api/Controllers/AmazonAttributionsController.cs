@@ -10,7 +10,8 @@ namespace LocalProductManager.Api.Controllers;
 [Route("api/products/{productId:int}/amazon-attributions")]
 public sealed class AmazonAttributionsController(
     AppDbContext db,
-    AmazonAttributionImportService attributionService) : ControllerBase
+    AmazonAttributionImportService attributionService,
+    AuthService auth) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AmazonAttributionLinkDto>>> GetAll(
@@ -46,6 +47,7 @@ public sealed class AmazonAttributionsController(
         UpsertAmazonAttributionRequest request,
         CancellationToken cancellationToken)
     {
+        if (!await auth.CanEditAttributionAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (string.IsNullOrWhiteSpace(request.AttributionUrl))
         {
             return BadRequest("Attribution URL is required.");
@@ -70,6 +72,7 @@ public sealed class AmazonAttributionsController(
         [FromForm] int? amazonAsinId,
         CancellationToken cancellationToken)
     {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (file.Length == 0)
         {
             return BadRequest("Import file is empty.");
@@ -85,4 +88,7 @@ public sealed class AmazonAttributionsController(
             return BadRequest(ex.Message);
         }
     }
+
+    private ObjectResult AdminOnly() =>
+        StatusCode(StatusCodes.Status403Forbidden, "Only admin can edit or import attribution links.");
 }

@@ -1,0 +1,87 @@
+<section class="storage-page">
+  <div class="storage-intro">
+    <div>
+      <h2>Allowed file folders</h2>
+      <p>The server can read and publish files only from these folders and their subfolders.</p>
+    </div>
+    <button class="icon-button" title="Check folder availability" (click)="loadRoots()" [disabled]="loading()">↻</button>
+  </div>
+
+  <div class="readonly-note" *ngIf="!canManage()">
+    You can browse configured server folders. Only admin can add or remove file roots.
+  </div>
+
+  <div class="add-root" *ngIf="canManage()">
+    <label>
+      Folder path
+      <input [ngModel]="newRoot()" (ngModelChange)="newRoot.set($event)" (keyup.enter)="addRoot()" placeholder="\\FILE-PC\SharedFiles" />
+    </label>
+    <button class="primary" (click)="addRoot()" [disabled]="loading()">Add folder</button>
+  </div>
+
+  <div class="root-table">
+    <div class="root-header"><span>Path</span><span>Status</span><span></span></div>
+    <div class="root-row" *ngFor="let root of roots()">
+      <span class="root-path"><strong>{{ root.path }}</strong><small>{{ root.path.startsWith('\\\\') ? 'Network share' : 'Server folder' }}</small></span>
+      <span class="root-status" [class.available]="root.available"><i></i>{{ root.available ? 'Available' : 'Unavailable' }}</span>
+      <button class="danger-link" *ngIf="canManage()" (click)="removeRoot(root)">Remove</button>
+    </div>
+    <div class="root-empty" *ngIf="!roots().length">No file folders are currently allowed.</div>
+  </div>
+
+  <div class="image-host-panel">
+    <div class="storage-intro compact">
+      <div>
+        <h2>File host</h2>
+        <p>Browse folders and serve files through this website so client computers do not need access to the original share.</p>
+      </div>
+    </div>
+    <div class="image-host-controls">
+      <label>
+        Host folder
+        <input [ngModel]="hostPath()" (ngModelChange)="hostPath.set($event)" placeholder="\\FILE-PC\SharedFiles" />
+      </label>
+      <label>
+        Configured root
+        <select [ngModel]="''" (ngModelChange)="selectRoot($event)">
+          <option value="">Choose a root</option>
+          <option *ngFor="let root of roots()" [value]="root.path" [disabled]="!root.available">{{ root.path }}{{ root.available ? '' : ' (unavailable)' }}</option>
+        </select>
+      </label>
+      <button class="primary" type="button" (click)="browse()" [disabled]="loading()">Load files</button>
+    </div>
+
+    <div class="image-host-browser" *ngIf="host() as currentHost">
+      <div class="image-host-current">
+        <button type="button" *ngIf="currentHost.parentPath" (click)="openFolder(currentHost.parentPath)">Up</button>
+        <code>{{ currentHost.path }}</code>
+        <span>{{ currentHost.folders.length }} folder(s) - {{ files(currentHost).length }} file(s)</span>
+      </div>
+      <div class="host-folder-grid" *ngIf="currentHost.folders.length">
+        <button type="button" *ngFor="let folder of currentHost.folders" (click)="openFolder(folder.path)">
+          <span>Folder</span>
+          <strong>{{ folder.name }}</strong>
+          <small>{{ folder.modifiedAt | date:'MMM d, y, h:mm a' }}</small>
+        </button>
+      </div>
+      <div class="host-image-grid" *ngIf="files(currentHost).length">
+        <a class="host-image-card" *ngFor="let file of files(currentHost)" [href]="downloadUrl(file.path)" [title]="file.path">
+          <img *ngIf="isImage(file); else fileIcon" [src]="previewUrl(file.path)" [alt]="file.name" (error)="hideBrokenImage($event)" />
+          <ng-template #fileIcon>
+            <span class="host-file-icon">{{ fileLabel(file) }}</span>
+          </ng-template>
+          <strong>{{ file.name }}</strong>
+          <small>{{ fileSize(file.size) }} - {{ file.modifiedAt | date:'MMM d, y' }}</small>
+        </a>
+      </div>
+      <div class="root-empty" *ngIf="!currentHost.folders.length && !files(currentHost).length">This folder does not contain subfolders or files.</div>
+    </div>
+  </div>
+
+  <div class="storage-note">
+    <strong>Network share permissions</strong>
+    <p>For UNC paths, the Windows account running this server must have read permission on the remote share. Visitors only access the server API; they do not need permission to the original share. Use paths such as <code>\\FILE-PC\SharedFiles</code>, not mapped drives such as <code>Z:\</code>.</p>
+  </div>
+</section>
+
+<div class="toast" *ngIf="notice()">{{ notice() }}</div>

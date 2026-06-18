@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import {
   AmazonAsin,
   AttributionPlatform,
+  CurrentUser,
   Platform,
   ProductDetail,
   ProductListItem,
@@ -15,7 +16,9 @@ import {
   ImageStorageRoot,
   StoreLink,
 } from '../../core/models';
+import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService } from '../../core/product-api.service';
+import { FileStoragePanelComponent } from './file-storage-panel.component';
 
 type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage';
 
@@ -97,13 +100,15 @@ interface PlatformChoice {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrl: './product-manager.page.css',
 })
 export class ProductManagerPage {
   readonly api = inject(ProductApiService);
+  readonly authApi = inject(AuthApiService);
 
+  readonly currentUser = signal<CurrentUser | null>(null);
   readonly products = signal<ProductListItem[]>([]);
   readonly marketingProducts = signal<ProductListItem[]>([]);
   readonly selectedProduct = signal<ProductDetail | null>(null);
@@ -333,7 +338,23 @@ export class ProductManagerPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks()]);
+    await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks()]);
+  }
+
+  async loadCurrentUser(): Promise<void> {
+    try {
+      this.currentUser.set(await this.authApi.me());
+    } catch {
+      this.currentUser.set(null);
+    }
+  }
+
+  canEditAttribution(): boolean {
+    return !!this.currentUser()?.canEditAttribution;
+  }
+
+  canImportData(): boolean {
+    return !!this.currentUser()?.canImportData;
   }
 
   async loadStoreLinks(): Promise<void> {
@@ -559,6 +580,7 @@ export class ProductManagerPage {
   }
 
   openImport(): void {
+    if (!this.canImportData()) return this.showNotice('Only admin can import Amazon data.');
     this.businessReportFile.set(null);
     this.bulkAttributionFile.set(null);
     this.importOpen.set(true);
@@ -577,6 +599,7 @@ export class ProductManagerPage {
   }
 
   async importBusinessReport(): Promise<void> {
+    if (!this.canImportData()) return this.showNotice('Only admin can import Amazon data.');
     const file = this.businessReportFile();
     if (!file) return this.showNotice('Select an Amazon Business Report CSV first.');
 
@@ -594,6 +617,7 @@ export class ProductManagerPage {
   }
 
   async importBulkAttributions(): Promise<void> {
+    if (!this.canImportData()) return this.showNotice('Only admin can import attribution data.');
     const file = this.bulkAttributionFile();
     if (!file) return this.showNotice('Select an Amazon Attribution CSV first.');
 
@@ -610,6 +634,7 @@ export class ProductManagerPage {
   }
 
   onAttributionFolderSelected(event: Event): void {
+    if (!this.canImportData()) return;
     const files = Array.from((event.target as HTMLInputElement).files ?? [])
       .filter((file) => file.name.toLowerCase().endsWith('.csv'));
     this.attributionFolderFiles.set(files);
@@ -618,6 +643,7 @@ export class ProductManagerPage {
   }
 
   async importAttributionFolder(): Promise<void> {
+    if (!this.canImportData()) return this.showNotice('Only admin can import attribution data.');
     const files = this.attributionFolderFiles();
     if (!files.length) return this.showNotice('Select a folder containing attribution CSV files.');
 
@@ -895,12 +921,14 @@ export class ProductManagerPage {
   async copyAttribution(platform: AttributionPlatform): Promise<void> {
     const link = this.selectedProduct()?.amazonAttributionLinks.find((item) => item.platform === platform);
     if (!link) return this.showNotice(`No ${this.platformLabel(platform)} link saved.`);
-    await navigator.clipboard.writeText(link.attributionUrl);
+    await this.copyText(link.attributionUrl);
     this.showNotice(`${this.platformLabel(platform)} link copied.`);
   }
 
   async saveAttribution(platform: AttributionPlatform, url: string): Promise<void> {
+    if (!this.canEditAttribution()) return this.showNotice('Only admin can edit attribution links.');
     const product = this.selectedProduct();
+    
     if (!product || !url.trim()) return;
     await this.perform(async () => {
       await this.api.saveAttribution(product.id, platform, url);
@@ -910,6 +938,7 @@ export class ProductManagerPage {
   }
 
   async onFileSelected(event: Event): Promise<void> {
+    if (!this.canImportData()) return this.showNotice('Only admin can import attribution CSV files.');
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
     this.importFile.set(file);
@@ -918,6 +947,7 @@ export class ProductManagerPage {
   }
 
   async importAttribution(): Promise<void> {
+    if (!this.canImportData()) return this.showNotice('Only admin can import attribution CSV files.');
     const product = this.selectedProduct();
     const file = this.importFile();
     if (!product || !file) return this.showNotice('Select an Amazon product and CSV file first.');
@@ -1179,8 +1209,12 @@ export class ProductManagerPage {
 
   private async copyText(value: string): Promise<void> {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
+      try {
+        await navigator.clipboard.writeText(value);
+        return;
+      } catch {
+        // Fall back for LAN HTTP pages where the async Clipboard API is blocked.
+      }
     }
 
     const textarea = document.createElement('textarea');

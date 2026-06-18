@@ -106,6 +106,41 @@ public sealed class DatabaseSchemaService
             """);
         db.Database.ExecuteSqlRaw(
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_social_video_metric_snapshots_SocialAccountId_PlatformVideoId_SnapshotDate ON social_video_metric_snapshots (SocialAccountId, PlatformVideoId, SnapshotDate)");
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS app_users (
+                Id INTEGER NOT NULL CONSTRAINT PK_app_users PRIMARY KEY AUTOINCREMENT,
+                UserName TEXT NOT NULL,
+                PasswordHash TEXT NOT NULL,
+                Role TEXT NOT NULL,
+                IsEnabled INTEGER NOT NULL,
+                CanManageStorage INTEGER NOT NULL,
+                CanEditAttribution INTEGER NOT NULL,
+                CanManageSocial INTEGER NOT NULL,
+                CanImportData INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            )
+            """);
+        db.Database.ExecuteSqlRaw(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_app_users_UserName ON app_users (UserName)");
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS app_user_sessions (
+                Id TEXT NOT NULL CONSTRAINT PK_app_user_sessions PRIMARY KEY,
+                AppUserId INTEGER NULL,
+                UserName TEXT NOT NULL,
+                Role TEXT NOT NULL,
+                RemoteIp TEXT NULL,
+                IsHost INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                LastSeenAt TEXT NOT NULL,
+                CONSTRAINT FK_app_user_sessions_app_users_AppUserId
+                    FOREIGN KEY (AppUserId) REFERENCES app_users (Id) ON DELETE SET NULL
+            )
+            """);
+        db.Database.ExecuteSqlRaw(
+            "CREATE INDEX IF NOT EXISTS IX_app_user_sessions_AppUserId ON app_user_sessions (AppUserId)");
     }
 
     private static HashSet<string> GetProductColumns(DbContext db)

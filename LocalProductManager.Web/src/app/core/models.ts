@@ -1,6 +1,46 @@
 export type Platform = 'amazon' | 'walmart' | 'ebay' | 'etsy';
 export type AttributionPlatform = 'pinterest' | 'facebook' | 'instagram' | 'tiktok' | 'youtube' | 'shopify';
 
+export interface CurrentUser {
+  sessionId: string;
+  userName: string;
+  role: string;
+  isHost: boolean;
+  isAdmin: boolean;
+  canManageStorage: boolean;
+  canEditAttribution: boolean;
+  canManageSocial: boolean;
+  canImportData: boolean;
+}
+
+export interface AuthAdminSnapshot {
+  users: AppUserAdmin[];
+  sessions: UserSessionAdmin[];
+}
+
+export interface AppUserAdmin {
+  id: number;
+  userName: string;
+  role: string;
+  isEnabled: boolean;
+  canManageStorage: boolean;
+  canEditAttribution: boolean;
+  canManageSocial: boolean;
+  canImportData: boolean;
+  updatedAt: string;
+}
+
+export interface UserSessionAdmin {
+  id: string;
+  appUserId: number | null;
+  userName: string;
+  role: string;
+  remoteIp: string | null;
+  isHost: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
 export interface ProductListItem {
   id: number;
   sku: string;

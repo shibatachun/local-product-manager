@@ -11,15 +11,17 @@ namespace LocalProductManager.Api.Controllers;
 public sealed class YouTubeAuthController(
     AppDbContext db,
     YouTubeOAuthService youtube,
-    SocialFetchLogService fetchLogs) : ControllerBase
+    SocialFetchLogService fetchLogs,
+    AuthService auth) : ControllerBase
 {
     [HttpGet("auth/status")]
-    public ActionResult<YouTubeAuthStatusDto> Status() => Ok(youtube.GetStatus(IsAdminHost()));
+    public async Task<ActionResult<YouTubeAuthStatusDto>> Status(CancellationToken cancellationToken) =>
+        Ok(youtube.GetStatus(await auth.CanManageSocialAsync(HttpContext, cancellationToken)));
 
     [HttpGet("auth/start")]
-    public ActionResult<YouTubeAuthStartResult> Start()
+    public async Task<ActionResult<YouTubeAuthStartResult>> Start(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             return Ok(new YouTubeAuthStartResult(
@@ -35,7 +37,7 @@ public sealed class YouTubeAuthController(
     [HttpPost("auth/disconnect")]
     public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         await youtube.DisconnectAsync(cancellationToken);
         await db.SocialAccounts
             .Where(account => account.Platform == "youtube")
@@ -50,7 +52,7 @@ public sealed class YouTubeAuthController(
         [FromQuery] string? error,
         CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         if (!string.IsNullOrWhiteSpace(error))
         {
             return Content(
@@ -87,7 +89,7 @@ public sealed class YouTubeAuthController(
     [HttpPost("sync")]
     public async Task<ActionResult<SocialSyncResult>> Sync(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             var imported = await youtube.SyncChannelMetricsAsync(db, cancellationToken);
@@ -114,7 +116,7 @@ public sealed class YouTubeAuthController(
     [HttpGet("videos/debug")]
     public async Task<ActionResult<YouTubeDebugSnapshotDto>> VideosDebug(CancellationToken cancellationToken)
     {
-        if (!IsAdminHost()) return AdminOnly();
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         try
         {
             var snapshot = await youtube.GetDebugSnapshotAsync(db, cancellationToken);
@@ -145,12 +147,6 @@ public sealed class YouTubeAuthController(
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
 
-    private bool IsAdminHost()
-    {
-        var remoteIp = HttpContext.Connection.RemoteIpAddress;
-        return remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
-    }
-
     private ObjectResult AdminOnly() =>
-        StatusCode(StatusCodes.Status403Forbidden, "This action is only available on the host computer through localhost.");
+        StatusCode(StatusCodes.Status403Forbidden, "Only admin can manage YouTube authorization and fetches.");
 }

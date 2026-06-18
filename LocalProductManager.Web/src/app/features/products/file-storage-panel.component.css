@@ -1,0 +1,42 @@
+.storage-page { display: grid; gap: 18px; }
+.storage-intro { display: flex; align-items: center; justify-content: space-between; gap: 18px; background: #fff; border: 1px solid #d9e1e6; border-radius: 8px; padding: 22px 26px; }
+.storage-intro.compact { padding: 0; border: 0; }
+.storage-intro h2 { margin: 0 0 6px; font-size: 22px; }
+.storage-intro p { margin: 0; color: #6e7b86; }
+.readonly-note { border: 1px solid #d9e1e6; background: #f8fbfc; border-radius: 8px; padding: 12px 14px; color: #54616c; font-weight: 700; }
+.add-root, .image-host-controls { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 12px; align-items: end; background: #fff; border: 1px solid #d9e1e6; border-radius: 8px; padding: 18px 22px; }
+.image-host-controls { grid-template-columns: minmax(260px, 1fr) minmax(220px, 340px) auto; }
+label { display: grid; gap: 7px; color: #5b6873; font-weight: 700; }
+input, select { border: 1px solid #cfd9e0; border-radius: 8px; padding: 12px 13px; font: inherit; color: #1f2933; background: #fff; }
+button, .primary, .danger-link, .icon-button { border: 1px solid #cfd9e0; border-radius: 8px; padding: 11px 14px; font: inherit; font-weight: 800; background: #fff; color: #17212b; cursor: pointer; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.primary { background: #3b6f8d; color: #fff; border-color: #3b6f8d; }
+.icon-button { width: 42px; height: 42px; padding: 0; display: inline-grid; place-items: center; }
+.danger-link { color: #a73224; border-color: transparent; background: transparent; justify-self: end; }
+.root-table, .image-host-panel, .storage-note { background: #fff; border: 1px solid #d9e1e6; border-radius: 8px; padding: 18px 22px; }
+.root-header, .root-row { display: grid; grid-template-columns: minmax(260px, 1fr) 150px 100px; gap: 14px; align-items: center; }
+.root-header { color: #6e7b86; font-size: 12px; text-transform: uppercase; font-weight: 900; padding-bottom: 10px; border-bottom: 1px solid #edf2f5; }
+.root-row { padding: 12px 0; border-bottom: 1px solid #edf2f5; }
+.root-row:last-child { border-bottom: 0; }
+.root-path { display: grid; gap: 3px; min-width: 0; }
+.root-path strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root-path small, .host-image-card small, .host-folder-grid small { color: #788793; }
+.root-status { display: inline-flex; align-items: center; gap: 8px; color: #8b5a1e; font-weight: 800; }
+.root-status i { width: 9px; height: 9px; border-radius: 50%; background: #d28b2f; }
+.root-status.available { color: #2d7a45; }
+.root-status.available i { background: #2d7a45; }
+.root-empty { padding: 18px 0; color: #788793; }
+.image-host-panel { display: grid; gap: 16px; }
+.image-host-browser { display: grid; gap: 14px; }
+.image-host-current { display: flex; gap: 12px; align-items: center; min-width: 0; color: #5b6873; }
+.image-host-current code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #f3f6f8; padding: 8px 10px; border-radius: 6px; color: #253441; }
+.host-folder-grid, .host-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; max-height: 430px; overflow: auto; padding: 4px; }
+.host-folder-grid button, .host-image-card { min-height: 120px; border: 1px solid #d9e1e6; border-radius: 8px; padding: 12px; background: #fff; text-align: left; color: #17212b; text-decoration: none; display: grid; gap: 8px; align-content: start; }
+.host-folder-grid span, .host-file-icon { width: 52px; height: 52px; border-radius: 8px; display: grid; place-items: center; background: #e9f2f6; color: #3b6f8d; font-weight: 900; }
+.host-image-card img { width: 100%; aspect-ratio: 1.35; object-fit: cover; border-radius: 6px; background: #f4f7f9; }
+.host-image-card strong, .host-folder-grid strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-note p { margin: 6px 0 0; color: #61717c; font-size: 13px; line-height: 1.6; }
+.toast { position: fixed; right: 22px; bottom: 22px; background: #17212b; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 14px 40px rgba(23, 33, 43, .18); font-weight: 800; z-index: 50; }
+@media (max-width: 900px) {
+  .add-root, .image-host-controls, .root-header, .root-row { grid-template-columns: 1fr; }
+}

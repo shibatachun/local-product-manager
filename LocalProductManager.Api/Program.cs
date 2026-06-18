@@ -27,6 +27,7 @@ builder.Services.AddScoped<AmazonBusinessReportImportService>();
 builder.Services.AddScoped<BulkAttributionImportService>();
 builder.Services.AddScoped<AttributionFolderImportService>();
 builder.Services.AddScoped<PinterestReportImportService>();
+builder.Services.AddScoped<AuthService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();
 builder.Services.AddHostedService<YouTubeDailyMetricsHostedService>();
@@ -42,15 +43,16 @@ builder.Services.AddCors(options =>
     options.AddPolicy("LanFrontend", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(_ => true)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-const string appVersion = "2026-06-18-file-storage-v1";
+const string appVersion = "2026-06-18-auth-permissions-v1";
 var angularRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",
@@ -64,6 +66,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     DatabaseSchemaService.Upgrade(db);
+    await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
     await DemoSocialDataSeeder.SeedAsync(db);
 }
 

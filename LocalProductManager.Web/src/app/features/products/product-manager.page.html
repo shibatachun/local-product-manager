@@ -10,6 +10,7 @@
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
+      <a routerLink="/admin"><span>AD</span> Admin</a>
       <a routerLink="/test"><span>⌘</span> API Test</a>
     </nav>
 
@@ -27,7 +28,7 @@
       </div>
       <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
-        <button type="button" *ngIf="view() === 'products'" (click)="openImport()">Import</button>
+        <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
         <button class="primary" type="button" *ngIf="view() === 'products'" (click)="openWizard()"><span>+</span> Add product</button>
       </div>
     </header>
@@ -127,7 +128,7 @@
           </div>
         </div>
         <div class="marketing-workspace">
-          <div class="folder-import">
+          <div class="folder-import" *ngIf="canImportData()">
             <div>
               <strong>Batch import attribution folder</strong>
               <small>File names are matched to existing products by SKU.</small>
@@ -146,13 +147,13 @@
           <ng-container *ngIf="selectedProduct() as product">
             <div class="section-heading">
               <div><h2>{{ product.productName }}</h2><p>{{ product.sku }} · {{ product.amazonAsins.length }} ASIN</p></div>
-              <label class="file-button">Import CSV<input type="file" accept=".csv" (change)="onFileSelected($event)" /></label>
+              <label class="file-button" *ngIf="canImportData()">Import CSV<input type="file" accept=".csv" (change)="onFileSelected($event)" /></label>
             </div>
             <div class="channel-grid">
               <div class="channel" *ngFor="let platform of attributionPlatforms">
                 <div><span class="channel-icon">{{ platform.slice(0,1).toUpperCase() }}</span><strong>{{ platformLabel(platform) }}</strong></div>
-                <input #url [value]="attributionUrl(platform)" placeholder="Paste attribution link" />
-                <footer><button (click)="saveAttribution(platform, url.value)">Save</button><button class="copy" (click)="copyAttribution(platform)" [disabled]="!attributionUrl(platform)">Copy link</button></footer>
+                <input #url [value]="attributionUrl(platform)" [readonly]="!canEditAttribution()" placeholder="Paste attribution link" />
+                <footer><button *ngIf="canEditAttribution()" (click)="saveAttribution(platform, url.value)">Save</button><button class="copy" (click)="copyAttribution(platform)" [disabled]="!attributionUrl(platform)">Copy link</button></footer>
               </div>
             </div>
           </ng-container>
@@ -274,86 +275,7 @@
     </ng-template>
 
     <ng-template #storageView>
-      <section class="storage-page">
-        <div class="storage-intro">
-          <div>
-            <h2>Allowed file folders</h2>
-            <p>The server can read and publish files only from these folders and their subfolders.</p>
-          </div>
-          <button class="icon-button" title="Check folder availability" (click)="loadImageStorageRoots()">↻</button>
-        </div>
-
-        <div class="add-root">
-          <label>
-            Folder path
-            <input [ngModel]="newImageRoot()" (ngModelChange)="newImageRoot.set($event)" (keyup.enter)="addImageRoot()" placeholder="\\FILE-PC\SharedFiles" />
-          </label>
-          <button class="primary" (click)="addImageRoot()">Add folder</button>
-        </div>
-
-        <div class="root-table">
-          <div class="root-header"><span>Path</span><span>Status</span><span></span></div>
-          <div class="root-row" *ngFor="let root of imageStorageRoots()">
-            <span class="root-path"><strong>{{ root.path }}</strong><small>{{ root.path.startsWith('\\\\') ? 'Network share' : 'Server folder' }}</small></span>
-            <span class="root-status" [class.available]="root.available"><i></i>{{ root.available ? 'Available' : 'Unavailable' }}</span>
-            <button class="danger-link" (click)="removeImageRoot(root)">Remove</button>
-          </div>
-          <div class="root-empty" *ngIf="!imageStorageRoots().length">No file folders are currently allowed.</div>
-        </div>
-
-        <div class="image-host-panel">
-          <div class="storage-intro compact">
-            <div>
-              <h2>File host</h2>
-              <p>Browse folders and serve files through this website so client computers do not need access to the original share.</p>
-            </div>
-          </div>
-          <div class="image-host-controls">
-            <label>
-              Host folder
-              <input [ngModel]="imageHostPath()" (ngModelChange)="imageHostPath.set($event)" placeholder="\\FILE-PC\SharedFiles" />
-            </label>
-            <label>
-              Configured root
-              <select [ngModel]="''" (ngModelChange)="selectImageHostRoot($event)">
-                <option value="">Choose a root</option>
-                <option *ngFor="let root of imageStorageRoots()" [value]="root.path" [disabled]="!root.available">{{ root.path }}{{ root.available ? '' : ' (unavailable)' }}</option>
-              </select>
-            </label>
-            <button class="primary" type="button" (click)="browseImageHost()">Load files</button>
-          </div>
-          <div class="image-host-browser" *ngIf="imageHost() as host">
-            <div class="image-host-current">
-              <button type="button" *ngIf="host.parentPath" (click)="openImageHostFolder(host.parentPath)">Up</button>
-              <code>{{ host.path }}</code>
-              <span>{{ host.folders.length }} folder(s) - {{ hostFiles(host).length }} file(s)</span>
-            </div>
-            <div class="host-folder-grid" *ngIf="host.folders.length">
-              <button type="button" *ngFor="let folder of host.folders" (click)="openImageHostFolder(folder.path)">
-                <span>Folder</span>
-                <strong>{{ folder.name }}</strong>
-                <small>{{ folder.modifiedAt | date:'MMM d, y, h:mm a' }}</small>
-              </button>
-            </div>
-            <div class="host-image-grid" *ngIf="hostFiles(host).length">
-              <a class="host-image-card" *ngFor="let file of hostFiles(host)" [href]="imageDownloadUrl(file.path)" [title]="file.path">
-                <img *ngIf="isImageFile(file); else fileIcon" [src]="imagePreviewUrl(file.path)" [alt]="file.name" (error)="hideBrokenImage($event)" />
-                <ng-template #fileIcon>
-                  <span class="host-file-icon">{{ fileExtensionLabel(file) }}</span>
-                </ng-template>
-                <strong>{{ file.name }}</strong>
-                <small>{{ fileSize(file.size) }} - {{ file.modifiedAt | date:'MMM d, y' }}</small>
-              </a>
-            </div>
-            <div class="root-empty" *ngIf="!host.folders.length && !hostFiles(host).length">This folder does not contain subfolders or files.</div>
-          </div>
-        </div>
-
-        <div class="storage-note">
-          <strong>Network share permissions</strong>
-          <p>For UNC paths, the Windows account running this server must have read permission on the remote share. Visitors only access the server API; they do not need permission to the original share. Use paths such as <code>\\FILE-PC\SharedFiles</code>, not mapped drives such as <code>Z:\</code>.</p>
-        </div>
-      </section>
+      <app-file-storage-panel [currentUser]="currentUser()"></app-file-storage-panel>
     </ng-template>
   </main>
 </div>
@@ -575,3 +497,4 @@
 </aside>
 
 <div class="toast" *ngIf="notice()">{{ notice() }}</div>
+
