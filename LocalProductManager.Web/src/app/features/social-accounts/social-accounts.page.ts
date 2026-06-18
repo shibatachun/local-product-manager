@@ -30,7 +30,7 @@ export class SocialAccountsPage {
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
   readonly logsOpen = signal(false);
-  readonly appVersion = 'social-platform-content-v2';
+  readonly appVersion = 'social-account-driven-content-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
   readonly chartWidth = 640;
@@ -226,15 +226,16 @@ export class SocialAccountsPage {
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
-    await this.loadStoredYouTubeVideos();
-    await this.loadStoredPinterestPins();
+    await this.loadSelectedAccountContent();
   }
 
   async load(): Promise<void> {
     await this.perform(async () => {
       const accounts = await this.api.accounts(this.range.from, this.range.to);
       this.accounts.set(accounts);
-      if (!this.selectedAccountId() && accounts[0]) this.selectedAccountId.set(accounts[0].id);
+      const selected = accounts.find(account => account.id === this.selectedAccountId()) ?? accounts[0] ?? null;
+      this.selectedAccountId.set(selected?.id ?? null);
+      if (selected) this.setContentPlatformForAccount(selected);
     }, false);
   }
 
@@ -276,6 +277,7 @@ export class SocialAccountsPage {
       this.accountForm.accountUrl = '';
       await this.load();
       this.selectedAccountId.set(account.id);
+      this.setContentPlatformForAccount(account);
       this.showNotice('Social account added.');
     });
   }
@@ -397,6 +399,7 @@ export class SocialAccountsPage {
     await this.perform(async () => {
       const result = await this.api.youtubeSync();
       await Promise.all([this.load(), this.loadYouTubeStatus()]);
+      await this.selectConnectedPlatformAccount('youtube');
       await this.loadFetchLogs(false);
       this.showNotice(result.status);
     });
@@ -432,6 +435,7 @@ export class SocialAccountsPage {
       })));
       console.log('YouTube raw debug snapshot', snapshot);
       await this.load();
+      await this.selectConnectedPlatformAccount('youtube');
       await this.loadFetchLogs(false);
       this.showNotice(`Fetched ${snapshot.videos.length} YouTube videos. Open browser console to inspect.`);
     });
@@ -466,6 +470,7 @@ export class SocialAccountsPage {
     await this.perform(async () => {
       const result = await this.api.pinterestSync();
       await Promise.all([this.load(), this.loadPinterestStatus()]);
+      await this.selectConnectedPlatformAccount('pinterest');
       await this.loadFetchLogs(false);
       this.showNotice(result.status);
     });
@@ -494,8 +499,10 @@ export class SocialAccountsPage {
     if (!this.youtubeStatus()?.isAdminHost) return this.showNotice('Pinterest report import is only available on the host computer.');
     await this.perform(async () => {
       const result = await this.api.pinterestImportReport(file);
-      await Promise.all([this.load(), this.loadStoredPinterestPins(), this.loadFetchLogs(false)]);
-      this.selectedContentPlatform.set('pinterest');
+      await this.load();
+      this.selectedAccountId.set(result.accountId);
+      this.setContentPlatformForAccount(this.selectedAccount());
+      await Promise.all([this.loadStoredPinterestPins(result.accountId), this.loadFetchLogs(false)]);
       this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'pinterest']));
       this.showNotice(`Imported ${result.pinsImported} pins, ${result.boardsImported} boards, and ${result.dailyRowsImported} daily rows.`);
     });
@@ -512,9 +519,9 @@ export class SocialAccountsPage {
     }
   }
 
-  async loadStoredPinterestPins(): Promise<void> {
+  async loadStoredPinterestPins(accountId: number | null = this.selectedAccount()?.id ?? null): Promise<void> {
     try {
-      const snapshot = await this.api.pinterestPins();
+      const snapshot = await this.api.pinterestPins(accountId);
       this.pinterestSnapshot.set(snapshot);
       this.selectedPinterestItemId.set(snapshot.pins[0]?.id ?? null);
     } catch {
@@ -529,6 +536,13 @@ export class SocialAccountsPage {
 
   selectPinterestItem(itemId: string): void {
     this.selectedPinterestItemId.set(itemId);
+  }
+
+  async selectAccount(account: SocialAccount): Promise<void> {
+    this.selectedAccountId.set(account.id);
+    this.setContentPlatformForAccount(account);
+    this.selectedChartPlatforms.update(current => new Set([...Array.from(current), account.platform]));
+    await this.loadSelectedAccountContent();
   }
 
   selectContentPlatform(platform: SocialPlatform): void {
@@ -598,6 +612,35 @@ export class SocialAccountsPage {
       .flatMap(account => account.metrics)
       .filter(metric => metric.snapshotDate === date)
       .reduce((sum, metric) => sum + (Number(metric[this.selectedMetric()]) || 0), 0);
+  }
+
+  private async loadSelectedAccountContent(): Promise<void> {
+    const account = this.selectedAccount();
+    if (!account) return;
+    this.setContentPlatformForAccount(account);
+    if (account.platform === 'youtube') {
+      await this.loadStoredYouTubeVideos();
+      return;
+    }
+    if (account.platform === 'pinterest') {
+      await this.loadStoredPinterestPins(account.id);
+      return;
+    }
+  }
+
+  private async selectConnectedPlatformAccount(platform: SocialPlatform): Promise<void> {
+    const account = this.accounts().find(item => item.platform === platform);
+    if (!account) return;
+    this.selectedAccountId.set(account.id);
+    this.setContentPlatformForAccount(account);
+    await this.loadSelectedAccountContent();
+  }
+
+  private setContentPlatformForAccount(account: SocialAccount | null): void {
+    if (!account) return;
+    if (this.contentPlatforms.some(platform => platform.value === account.platform)) {
+      this.selectedContentPlatform.set(account.platform);
+    }
   }
 
   totalFor(account: SocialAccount, key: SocialMetricKey): number {

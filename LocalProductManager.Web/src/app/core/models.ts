@@ -183,6 +183,7 @@ export interface PinterestAuthStatus {
 }
 
 export interface PinterestReportImportResult {
+  accountId: number;
   dailyRowsImported: number;
   boardsImported: number;
   pinsImported: number;

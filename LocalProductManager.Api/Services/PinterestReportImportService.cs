@@ -93,6 +93,7 @@ public sealed class PinterestReportImportService(AppDbContext db)
         await db.SaveChangesAsync(cancellationToken);
 
         return new PinterestReportImportResult(
+            account.Id,
             dailyRows.Count,
             boardRows.Count,
             pinRows.Count,
@@ -100,14 +101,22 @@ public sealed class PinterestReportImportService(AppDbContext db)
             snapshotDate);
     }
 
-    public async Task<PinterestContentSnapshotDto?> GetStoredSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<PinterestContentSnapshotDto?> GetStoredSnapshotAsync(
+        int? accountId,
+        CancellationToken cancellationToken)
     {
-        var account = await db.SocialAccounts
+        var query = db.SocialAccounts
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Platform == "pinterest" && item.AccountName != "Demo Pinterest", cancellationToken) ??
-            await db.SocialAccounts
-                .AsNoTracking()
-                .FirstOrDefaultAsync(item => item.Platform == "pinterest", cancellationToken);
+            .Where(item => item.Platform == "pinterest");
+        if (accountId.HasValue)
+        {
+            query = query.Where(item => item.Id == accountId.Value);
+        }
+
+        var account = await query
+            .OrderBy(item => item.AccountName == "Demo Pinterest")
+            .ThenBy(item => item.AccountName)
+            .FirstOrDefaultAsync(cancellationToken);
         if (account is null)
         {
             return null;

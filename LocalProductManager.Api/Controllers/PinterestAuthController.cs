@@ -151,9 +151,11 @@ public sealed class PinterestAuthController(
     }
 
     [HttpGet("pins")]
-    public async Task<ActionResult<PinterestContentSnapshotDto>> Pins(CancellationToken cancellationToken)
+    public async Task<ActionResult<PinterestContentSnapshotDto>> Pins(
+        [FromQuery] int? accountId,
+        CancellationToken cancellationToken)
     {
-        var snapshot = await pinterestReports.GetStoredSnapshotAsync(cancellationToken);
+        var snapshot = await pinterestReports.GetStoredSnapshotAsync(accountId, cancellationToken);
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
 

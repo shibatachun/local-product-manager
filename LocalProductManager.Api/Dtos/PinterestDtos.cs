@@ -13,6 +13,7 @@ public sealed record PinterestAuthStatusDto(
 public sealed record PinterestAuthStartResult(string AuthorizationUrl, string RedirectUri);
 
 public sealed record PinterestReportImportResult(
+    int AccountId,
     int DailyRowsImported,
     int BoardsImported,
     int PinsImported,

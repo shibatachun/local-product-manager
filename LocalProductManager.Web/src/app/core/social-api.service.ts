@@ -97,8 +97,9 @@ export class SocialApiService {
     return firstValueFrom(this.http.post<PinterestReportImportResult>(`${this.baseUrl}/pinterest/report/import`, data));
   }
 
-  pinterestPins(): Promise<PinterestContentSnapshot> {
-    return firstValueFrom(this.http.get<PinterestContentSnapshot>(`${this.baseUrl}/pinterest/pins`));
+  pinterestPins(accountId?: number | null): Promise<PinterestContentSnapshot> {
+    const query = accountId ? `?accountId=${accountId}` : '';
+    return firstValueFrom(this.http.get<PinterestContentSnapshot>(`${this.baseUrl}/pinterest/pins${query}`));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {

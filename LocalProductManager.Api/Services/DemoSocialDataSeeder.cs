@@ -10,13 +10,15 @@ public static class DemoSocialDataSeeder
     [
         new("facebook", "Demo Facebook", "@demo-facebook", "https://www.facebook.com/demo", "#1877f2", 38, 220, 1800, 12, 18, 1240),
         new("instagram", "Demo Instagram", "@demo.instagram", "https://www.instagram.com/demo", "#c13584", 52, 410, 2600, 24, 31, 2860),
-        new("pinterest", "Demo Pinterest", "@demo-pins", "https://www.pinterest.com/demo", "#bd081c", 64, 180, 4200, 8, 54, 1540),
         new("tiktok", "Demo TikTok", "@demo.tiktok", "https://www.tiktok.com/@demo", "#111827", 71, 560, 9300, 42, 67, 3780)
     ];
 
     public static async Task SeedAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
+        await db.SocialAccounts
+            .Where(account => account.Platform == "pinterest" && account.AccountName == "Demo Pinterest")
+            .ExecuteDeleteAsync(cancellationToken);
 
         foreach (var demo in Accounts)
         {

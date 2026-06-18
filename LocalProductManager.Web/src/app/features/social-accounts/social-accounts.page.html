@@ -117,7 +117,7 @@
       <section class="panel account-list">
         <h2>Accounts</h2>
         <div class="account-row" *ngFor="let account of accounts()" [class.active]="selectedAccount()?.id === account.id">
-          <button class="account-pick" type="button" (click)="selectedAccountId.set(account.id)">
+          <button class="account-pick" type="button" (click)="selectAccount(account)">
             <i [style.background]="account.color || '#176b87'"></i>
             <span><strong>{{ account.accountName }}</strong><small>{{ platformLabel(account.platform) }} {{ account.accountHandle || '' }}</small></span>
             <em>{{ totalFor(account, selectedMetric()) | number }}</em>
@@ -197,18 +197,12 @@
 
     <section class="panel platform-content">
       <div class="section-heading">
-        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : 'Saved data and future API posts for this platform.' }}</p></div>
+        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : 'Saved data and future API posts for this platform.' }}</p></div>
         <button type="button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
         <label class="file-button" *ngIf="youtubeStatus()?.isAdminHost && selectedContentPlatform() === 'pinterest'">
           Import report
           <input type="file" accept=".csv,text/csv" (change)="onPinterestReportSelected($event)" />
         </label>
-      </div>
-
-      <div class="content-tabs">
-        <button *ngFor="let platform of contentPlatforms" type="button" [class.active]="selectedContentPlatform() === platform.value" (click)="selectContentPlatform(platform.value)">
-          {{ platform.label }}
-        </button>
       </div>
 
       <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'youtube'; else nonYoutubeSummary">
