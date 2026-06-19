@@ -501,8 +501,18 @@
         </div>
       </div>
     </section>
-    <section *ngIf="listingFor(product, 'amazon')">
+    <section *ngIf="listingFor(product, 'amazon') || product.amazonAsins.length || asinRelationshipRows(product).length">
       <div class="section-heading"><div><h3>Amazon ASINs</h3><p>Parent and child variation records.</p></div></div>
+      <div class="asin-relationship-list">
+        <div class="asin-relationship-head"><span>Parent ASIN</span><span>Child ASIN</span><span>SKU</span><span>Status</span></div>
+        <div *ngFor="let row of asinRelationshipRows(product)">
+          <span><strong>{{ row.parentAsin }}</strong><small>{{ row.parentAsin === row.childAsin ? 'single product' : 'variation family' }}</small></span>
+          <span><strong>{{ row.childAsin }}</strong><small>{{ row.source === 'current' ? 'current product' : 'child product' }}</small></span>
+          <code>{{ row.sku }}</code>
+          <em [class.done]="row.amazonAttributeDone">{{ row.amazonAttributeDone ? 'Attribution done' : 'Pending' }}</em>
+        </div>
+        <div class="mini-empty" *ngIf="!asinRelationshipRows(product).length">No ASIN records yet.</div>
+      </div>
       <div class="asin-list"><div *ngFor="let asin of product.amazonAsins"><span><strong>{{ asin.asin }}</strong><small>{{ asin.asinType }}<ng-container *ngIf="asin.parentAsin"> · Parent {{ asin.parentAsin }}</ng-container></small></span><em [class.done]="asin.amazonAttributeDone">{{ asin.amazonAttributeDone ? 'Attribution done' : 'Pending' }}</em><button class="icon-button" title="Remove ASIN" (click)="removeAsin(asin)">×</button></div></div>
       <div class="asin-add"><input [(ngModel)]="asinDraft.asin" placeholder="New ASIN" /><select [(ngModel)]="asinDraft.asinType"><option value="parent">Parent</option><option value="child">Child</option></select><input *ngIf="asinDraft.asinType === 'child'" [(ngModel)]="asinDraft.parentAsin" placeholder="Parent ASIN" /><button (click)="addAsin()">Add</button></div>
     </section>

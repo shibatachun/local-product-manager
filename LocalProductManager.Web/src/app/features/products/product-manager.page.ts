@@ -22,6 +22,13 @@ import { FileStoragePanelComponent } from './file-storage-panel.component';
 
 type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
+type AsinRelationshipRow = {
+  parentAsin: string;
+  childAsin: string;
+  sku: string;
+  amazonAttributeDone: boolean;
+  source: 'current' | 'child';
+};
 
 interface PricingStep {
   label: string;
@@ -1157,6 +1164,44 @@ export class ProductManagerPage {
     return this.safeNumber(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
+  asinRelationshipRows(product: ProductDetail): AsinRelationshipRow[] {
+    const rows = new Map<string, AsinRelationshipRow>();
+    const addRow = (
+      parentAsin: string,
+      childAsin: string,
+      sku: string,
+      status: boolean,
+      source: 'current' | 'child',
+    ) => {
+      const parent = parentAsin.trim().toUpperCase();
+      const child = childAsin.trim().toUpperCase();
+      if (!parent || !child) return;
+      rows.set(`${parent}:${child}:${sku}`, { parentAsin: parent, childAsin: child, sku, amazonAttributeDone: status, source });
+    };
+
+    for (const asin of product.amazonAsins) {
+      const parentAsin = asin.parentAsin || product.amazonParentAsin || asin.asin;
+      addRow(parentAsin, asin.asin, product.sku, asin.amazonAttributeDone, 'current');
+    }
+
+    for (const child of product.children) {
+      for (const childAsin of child.amazonAsinValues) {
+        const parentAsin = child.amazonParentAsin || product.amazonParentAsin || this.firstParentAsin(product) || childAsin;
+        addRow(parentAsin, childAsin, child.sku, false, 'child');
+      }
+    }
+
+    if (!rows.size && product.amazonParentAsin) {
+      addRow(product.amazonParentAsin, product.amazonParentAsin, product.sku, false, 'current');
+    }
+
+    return Array.from(rows.values()).sort((left, right) =>
+      left.parentAsin.localeCompare(right.parentAsin) ||
+      left.childAsin.localeCompare(right.childAsin) ||
+      left.sku.localeCompare(right.sku),
+    );
+  }
+
   listingFor(product: ProductDetail, platform: Platform): ProductListing | undefined {
     return product.listings.find((item) => item.platform === platform);
   }
@@ -1240,6 +1285,10 @@ export class ProductManagerPage {
 
   productInitial(product: ProductListItem | ProductDetail): string {
     return (product.productName || product.sku).trim().slice(0, 2).toUpperCase();
+  }
+
+  private firstParentAsin(product: ProductDetail): string | null {
+    return product.amazonAsins.find((asin) => asin.asinType === 'parent')?.asin ?? null;
   }
 
   productImageUrl(productId: number, download = false): string {
