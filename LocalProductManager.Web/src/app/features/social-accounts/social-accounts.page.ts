@@ -2,7 +2,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CurrentUser, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { CurrentUser, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
 
@@ -25,8 +25,10 @@ export class SocialAccountsPage {
   readonly pinterestStatus = signal<PinterestAuthStatus | null>(null);
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly pinterestSnapshot = signal<PinterestContentSnapshot | null>(null);
+  readonly instagramSnapshot = signal<InstagramContentSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedPinterestItemId = signal<string | null>(null);
+  readonly selectedInstagramPostId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
   readonly selectedRangePreset = signal<RangePreset>('month');
@@ -135,6 +137,11 @@ export class SocialAccountsPage {
     if (!snapshot?.pins.length) return null;
     return snapshot.pins.find(item => item.id === this.selectedPinterestItemId()) ?? snapshot.pins[0];
   });
+  readonly selectedInstagramPost = computed(() => {
+    const snapshot = this.instagramSnapshot();
+    if (!snapshot?.posts.length) return null;
+    return snapshot.posts.find(item => item.id === this.selectedInstagramPostId()) ?? snapshot.posts[0];
+  });
   readonly youtubeStats = computed(() => {
     const snapshot = this.youtubeSnapshot();
     const video = this.selectedYouTubeVideo();
@@ -159,6 +166,19 @@ export class SocialAccountsPage {
       { label: 'Comments', value: item?.comments ?? 0, delta: item && previous ? item.comments - previous.comments : null, detail: 'Not included in this report' },
       { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Not included in this report' },
       { label: 'Pins', value: snapshot?.channel.pinCount ?? snapshot?.pins.length ?? 0, delta: null, detail: 'Imported pins' },
+    ];
+  });
+  readonly instagramStats = computed(() => {
+    const snapshot = this.instagramSnapshot();
+    const item = this.selectedInstagramPost();
+    const previous = item?.metrics.length && item.metrics.length > 1 ? item.metrics[item.metrics.length - 2] : null;
+    return [
+      { label: 'Views', value: item?.views ?? snapshot?.channel.views ?? 0, delta: item && previous ? item.views - previous.views : null, detail: item ? 'Selected post views' : 'Imported report views' },
+      { label: 'Likes', value: item?.likes ?? 0, delta: item && previous ? item.likes - previous.likes : null, detail: item ? 'Selected post likes' : 'Select a post' },
+      { label: 'Comments', value: item?.comments ?? 0, delta: item && previous ? item.comments - previous.comments : null, detail: item ? 'Selected post comments' : 'Select a post' },
+      { label: 'Saves', value: item?.saves ?? 0, delta: item && previous ? item.saves - previous.clicks : null, detail: item ? 'Selected post saves' : 'Select a post' },
+      { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Follows from imported report' },
+      { label: 'Posts', value: snapshot?.channel.postCount ?? snapshot?.posts.length ?? 0, delta: null, detail: 'Imported posts and reels' },
     ];
   });
   readonly selectedContentMeta = computed(() =>
@@ -553,6 +573,27 @@ export class SocialAccountsPage {
     });
   }
 
+  async onInstagramReportSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+    await this.importInstagramReport(file);
+  }
+
+  async importInstagramReport(file: File): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('Instagram report import is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.instagramImportReport(file);
+      await this.load();
+      this.selectedAccountId.set(result.accountId);
+      this.setContentPlatformForAccount(this.selectedAccount());
+      await Promise.all([this.loadStoredInstagramPosts(result.accountId), this.loadFetchLogs(false)]);
+      this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'instagram']));
+      this.showNotice(`Imported ${result.postsImported} Instagram posts for ${result.accountName}.`);
+    });
+  }
+
   async loadStoredYouTubeVideos(): Promise<void> {
     try {
       const snapshot = await this.api.youtubeStoredVideos();
@@ -575,12 +616,27 @@ export class SocialAccountsPage {
     }
   }
 
+  async loadStoredInstagramPosts(accountId: number | null = this.selectedAccount()?.id ?? null): Promise<void> {
+    try {
+      const snapshot = await this.api.instagramPosts(accountId);
+      this.instagramSnapshot.set(snapshot);
+      this.selectedInstagramPostId.set(snapshot.posts[0]?.id ?? null);
+    } catch {
+      this.instagramSnapshot.set(null);
+      this.selectedInstagramPostId.set(null);
+    }
+  }
+
   selectYouTubeVideo(videoId: string): void {
     this.selectedYouTubeVideoId.set(videoId);
   }
 
   selectPinterestItem(itemId: string): void {
     this.selectedPinterestItemId.set(itemId);
+  }
+
+  selectInstagramPost(itemId: string): void {
+    this.selectedInstagramPostId.set(itemId);
   }
 
   async selectAccount(account: SocialAccount): Promise<void> {
@@ -701,7 +757,7 @@ export class SocialAccountsPage {
   }
 
   private isTotalSnapshotMetric(platform: SocialPlatform, key: SocialMetricKey): boolean {
-    return platform === 'youtube' && key !== 'clicks';
+    return (platform === 'youtube' && key !== 'clicks') || platform === 'instagram';
   }
 
   private pointerSvgX(event: MouseEvent): number {
@@ -728,6 +784,10 @@ export class SocialAccountsPage {
     }
     if (account.platform === 'pinterest') {
       await this.loadStoredPinterestPins(account.id);
+      return;
+    }
+    if (account.platform === 'instagram') {
+      await this.loadStoredInstagramPosts(account.id);
       return;
     }
   }

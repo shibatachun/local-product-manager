@@ -345,6 +345,44 @@ export interface PinterestContentSnapshot {
   }[];
 }
 
+export interface InstagramReportImportResult {
+  accountId: number;
+  postsImported: number;
+  accountName: string;
+  snapshotDate: string;
+}
+
+export interface InstagramContentSnapshot {
+  channel: {
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    followers: number;
+    views: number;
+    postCount: number;
+    shares: number;
+    clicksNote: string;
+  };
+  posts: {
+    id: string;
+    title: string;
+    url: string;
+    kind: 'post' | 'reel' | string;
+    publishedAt: string | null;
+    views: number;
+    likes: number;
+    saves: number;
+    comments: number;
+    metrics: {
+      snapshotDate: string;
+      views: number;
+      likes: number;
+      comments: number;
+      clicks: number;
+    }[];
+  }[];
+}
+
 export interface YouTubeDebugSnapshot {
   channel: {
     id: string;

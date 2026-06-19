@@ -52,3 +52,35 @@ public sealed record PinterestMetricPointDto(
     long Likes,
     long Comments,
     long Clicks);
+
+public sealed record InstagramReportImportResult(
+    int AccountId,
+    int PostsImported,
+    string AccountName,
+    DateOnly SnapshotDate);
+
+public sealed record InstagramContentSnapshotDto(
+    InstagramContentChannelDto Channel,
+    IReadOnlyList<InstagramContentItemDto> Posts);
+
+public sealed record InstagramContentChannelDto(
+    string Id,
+    string Title,
+    string? ThumbnailUrl,
+    long Followers,
+    long Views,
+    long PostCount,
+    long Shares,
+    string ClicksNote);
+
+public sealed record InstagramContentItemDto(
+    string Id,
+    string Title,
+    string Url,
+    string Kind,
+    DateTimeOffset? PublishedAt,
+    long Views,
+    long Likes,
+    long Saves,
+    long Comments,
+    IReadOnlyList<PinterestMetricPointDto> Metrics);

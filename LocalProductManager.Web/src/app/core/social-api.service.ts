@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -104,6 +104,17 @@ export class SocialApiService {
   pinterestPins(accountId?: number | null): Promise<PinterestContentSnapshot> {
     const query = accountId ? `?accountId=${accountId}` : '';
     return firstValueFrom(this.http.get<PinterestContentSnapshot>(`${this.baseUrl}/pinterest/pins${query}`));
+  }
+
+  instagramImportReport(file: File): Promise<InstagramReportImportResult> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<InstagramReportImportResult>(`${this.baseUrl}/instagram/report/import`, data));
+  }
+
+  instagramPosts(accountId?: number | null): Promise<InstagramContentSnapshot> {
+    const query = accountId ? `?accountId=${accountId}` : '';
+    return firstValueFrom(this.http.get<InstagramContentSnapshot>(`${this.baseUrl}/instagram/posts${query}`));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {

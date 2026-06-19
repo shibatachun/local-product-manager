@@ -262,11 +262,15 @@
 
     <section class="panel platform-content">
       <div class="section-heading">
-        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : 'Saved data and future API posts for this platform.' }}</p></div>
+        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : selectedContentPlatform() === 'instagram' ? (selectedInstagramPost()?.title || instagramSnapshot()?.channel?.title || 'Import an Instagram analytics report to inspect posts.') : 'Saved data and future API posts for this platform.' }}</p></div>
         <button type="button" *ngIf="canManageSocial() && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
         <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'pinterest'">
           Import report
           <input type="file" accept=".csv,text/csv" (change)="onPinterestReportSelected($event)" />
+        </label>
+        <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'instagram'">
+          Import report
+          <input type="file" accept=".csv,text/csv" (change)="onInstagramReportSelected($event)" />
         </label>
       </div>
 
@@ -282,8 +286,21 @@
         </div>
       </div>
       <ng-template #nonYoutubeSummary>
-        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'pinterest'; else platformSummary">
+        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'pinterest'; else nonPinterestSummary">
           <div class="stat-card" *ngFor="let stat of pinterestStats()">
+            <span>{{ stat.label.slice(0, 1) }}</span>
+            <strong>{{ stat.value | number }}</strong>
+            <small>{{ stat.label }}</small>
+            <b *ngIf="stat.delta !== null" [class.positive]="stat.delta > 0" [class.flat]="stat.delta === 0">
+              {{ stat.delta > 0 ? '+' : '' }}{{ stat.delta | number }} since previous
+            </b>
+            <em>{{ stat.detail }}</em>
+          </div>
+        </div>
+      </ng-template>
+      <ng-template #nonPinterestSummary>
+        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'instagram'; else platformSummary">
+          <div class="stat-card" *ngFor="let stat of instagramStats()">
             <span>{{ stat.label.slice(0, 1) }}</span>
             <strong>{{ stat.value | number }}</strong>
             <small>{{ stat.label }}</small>
@@ -339,7 +356,7 @@
         </ng-template>
       </div>
       <ng-template #nonYoutubeContent>
-        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'pinterest'; else genericPlatformContent">
+        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'pinterest'; else nonPinterestContent">
           <div class="video-list">
             <button *ngFor="let pin of pinterestSnapshot()?.pins || []" type="button" [class.active]="selectedPinterestItem()?.id === pin.id" (click)="selectPinterestItem(pin.id)">
               <span class="pin-kind">{{ pin.kind === 'board' ? 'BD' : 'PIN' }}</span>
@@ -368,6 +385,41 @@
               <div>
                 <h3>Select a pin</h3>
                 <p>Pinterest report metrics will appear in the stat cards above.</p>
+              </div>
+            </div>
+          </ng-template>
+        </div>
+      </ng-template>
+      <ng-template #nonPinterestContent>
+        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'instagram'; else genericPlatformContent">
+          <div class="video-list">
+            <button *ngFor="let post of instagramSnapshot()?.posts || []" type="button" [class.active]="selectedInstagramPost()?.id === post.id" (click)="selectInstagramPost(post.id)">
+              <span class="instagram-kind">{{ post.kind === 'reel' ? 'REEL' : 'POST' }}</span>
+              <span>
+                <strong>{{ post.title }}</strong>
+                <small>{{ post.views | number }} views - {{ post.likes | number }} likes - {{ post.comments | number }} comments</small>
+                <em>{{ post.saves | number }} saves - {{ post.metrics.length }} snapshots recorded</em>
+              </span>
+            </button>
+            <div class="empty-videos" *ngIf="!(instagramSnapshot()?.posts?.length)">
+              <strong>No posts loaded</strong>
+              <small>{{ canManageSocial() ? 'Import an Instagram analytics report CSV.' : 'Waiting for the host computer to import Instagram data.' }}</small>
+            </div>
+          </div>
+
+          <div class="video-detail" *ngIf="selectedInstagramPost() as post; else noInstagramSelected">
+            <span class="instagram-detail-mark">{{ post.kind === 'reel' ? 'Reel' : 'Post' }}</span>
+            <div>
+              <h3>{{ post.title }}</h3>
+              <p>{{ post.publishedAt ? (post.publishedAt | date:'mediumDate') : 'No publish date' }} · {{ post.views | number }} views · {{ post.saves | number }} saves</p>
+              <a [href]="post.url" target="_blank" rel="noreferrer">Open {{ post.kind }}</a>
+            </div>
+          </div>
+          <ng-template #noInstagramSelected>
+            <div class="video-detail empty">
+              <div>
+                <h3>Select a post</h3>
+                <p>Instagram report metrics will appear in the stat cards above.</p>
               </div>
             </div>
           </ng-template>
