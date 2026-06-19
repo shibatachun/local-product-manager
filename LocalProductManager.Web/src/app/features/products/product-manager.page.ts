@@ -329,9 +329,7 @@ export class ProductManagerPage {
   });
   readonly amazonProducts = computed(() => {
     const keyword = this.marketingSearch().trim().toLowerCase();
-    const products = this.dedupeMarketingProducts(
-      this.marketingProducts().filter((product) => this.hasAmazon(product)),
-    );
+    const products = this.marketingListProducts(this.marketingProducts());
     if (!keyword) return products;
 
     return products.filter((product) => this.matchesMarketingSearch(product, keyword));
@@ -1139,6 +1137,10 @@ export class ProductManagerPage {
       product.children.some((child) => this.hasAmazon(child));
   }
 
+  isAmazonFamilyParent(product: ProductListItem): boolean {
+    return product.productType === 'parent' && product.children.some((child) => this.hasAmazon(child));
+  }
+
   matchesMarketingSearch(product: ProductListItem, keyword: string): boolean {
     return [
       product.sku,
@@ -1154,36 +1156,22 @@ export class ProductManagerPage {
     ].some((value) => value.toLowerCase().includes(keyword));
   }
 
-  private dedupeMarketingProducts(products: ProductListItem[]): ProductListItem[] {
-    const groups = new Map<string, ProductListItem>();
+  private marketingListProducts(products: ProductListItem[]): ProductListItem[] {
+    const result = new Map<number, ProductListItem>();
     for (const product of products) {
-      const key = this.marketingGroupKey(product);
-      const current = groups.get(key);
-      if (!current || this.marketingProductScore(product) > this.marketingProductScore(current)) {
-        groups.set(key, product);
+      if (this.isAmazonFamilyParent(product)) {
+        for (const child of product.children.filter((item) => this.hasAmazon(item))) {
+          result.set(child.id, child);
+        }
+        continue;
+      }
+
+      if (this.hasAmazon(product)) {
+        result.set(product.id, product);
       }
     }
 
-    return Array.from(groups.values()).sort((left, right) => left.sku.localeCompare(right.sku));
-  }
-
-  private marketingGroupKey(product: ProductListItem): string {
-    const token = /\d{5}/.exec(product.sku)?.[0] ??
-      product.skuBase ??
-      product.amazonParentAsin ??
-      product.sku;
-    return token.toLowerCase();
-  }
-
-  private marketingProductScore(product: ProductListItem): number {
-    let score = 0;
-    if (product.productType === 'parent') score += 1000;
-    if (!product.parentProductId) score += 500;
-    if (product.children.length > 0) score += 250;
-    if (product.platforms.includes('amazon')) score += 50;
-    score += product.asinCount + product.children.reduce((sum, child) => sum + child.asinCount, 0);
-    score -= Math.min(product.sku.length, 120) / 100;
-    return score;
+    return Array.from(result.values()).sort((left, right) => left.sku.localeCompare(right.sku));
   }
 
   platformLabel(platform: string): string {
