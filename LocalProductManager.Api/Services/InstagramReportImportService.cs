@@ -70,7 +70,16 @@ public sealed class InstagramReportImportService(AppDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return new InstagramReportImportResult(account.Id, records.Count, account.AccountName, snapshotDate);
+        return new InstagramReportImportResult(
+            account.Id,
+            records.Count,
+            totals.Views,
+            totals.Likes,
+            totals.Comments,
+            totals.Shares,
+            totals.Followers,
+            account.AccountName,
+            snapshotDate);
     }
 
     public async Task<InstagramContentSnapshotDto?> GetStoredSnapshotAsync(

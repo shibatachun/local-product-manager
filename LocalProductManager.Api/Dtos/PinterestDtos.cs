@@ -56,6 +56,11 @@ public sealed record PinterestMetricPointDto(
 public sealed record InstagramReportImportResult(
     int AccountId,
     int PostsImported,
+    int ViewsImported,
+    int LikesImported,
+    int CommentsImported,
+    int SharesImported,
+    int FollowsImported,
     string AccountName,
     DateOnly SnapshotDate);
 

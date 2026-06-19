@@ -590,7 +590,8 @@ export class SocialAccountsPage {
       this.setContentPlatformForAccount(this.selectedAccount());
       await Promise.all([this.loadStoredInstagramPosts(result.accountId), this.loadFetchLogs(false)]);
       this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'instagram']));
-      this.showNotice(`Imported ${result.postsImported} Instagram posts for ${result.accountName}.`);
+      this.selectedMetric.set('views');
+      this.showNotice(`Imported ${result.postsImported} Instagram posts: ${result.viewsImported.toLocaleString()} views, ${result.likesImported.toLocaleString()} likes, ${result.commentsImported.toLocaleString()} comments.`);
     });
   }
 

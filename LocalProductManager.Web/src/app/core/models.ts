@@ -348,6 +348,11 @@ export interface PinterestContentSnapshot {
 export interface InstagramReportImportResult {
   accountId: number;
   postsImported: number;
+  viewsImported: number;
+  likesImported: number;
+  commentsImported: number;
+  sharesImported: number;
+  followsImported: number;
   accountName: string;
   snapshotDate: string;
 }
