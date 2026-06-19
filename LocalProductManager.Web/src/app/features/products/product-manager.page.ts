@@ -1209,6 +1209,12 @@ export class ProductManagerPage {
     return product.listings.find((item) => item.platform === platform);
   }
 
+  marketplaceListingUrl(platform: Platform): string | null {
+    const value = this.listingDrafts[platform]?.trim();
+    if (!value) return null;
+    return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  }
+
   hasAmazon(product: ProductListItem): boolean {
     return product.platforms.includes('amazon') ||
       product.asinCount > 0 ||

@@ -460,6 +460,7 @@
       <div class="section-heading"><div><h3>Marketplace listings</h3><p>Add, update, or remove channels.</p></div></div>
       <div class="listing-editor" *ngFor="let option of listingOptions">
         <strong>{{ option.label }}</strong><input [(ngModel)]="listingDrafts[option.value]" placeholder="Listing URL" />
+        <a class="listing-open-button" [class.disabled]="!marketplaceListingUrl(option.value)" [href]="marketplaceListingUrl(option.value) || '#'" target="_blank" rel="noreferrer">Open</a>
         <button (click)="saveListing(option.value)">Save</button>
         <button class="danger-link" *ngIf="listingFor(product, option.value) as listing" (click)="removeListing(listing)">Remove</button>
       </div>
