@@ -113,7 +113,7 @@ public sealed class PinterestReportImportService(AppDbContext db)
         }
 
         var account = await query
-            .OrderBy(item => item.AccountName == "Demo Pinterest")
+            .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.AccountName)
             .FirstOrDefaultAsync(cancellationToken);
         if (account is null)

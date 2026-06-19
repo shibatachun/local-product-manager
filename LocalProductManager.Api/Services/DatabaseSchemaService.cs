@@ -160,6 +160,38 @@ public sealed class DatabaseSchemaService
             """);
         db.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS IX_video_trend_items_Platform ON video_trend_items (Platform)");
+
+        RemoveDemoSocialData(db);
+    }
+
+    private static void RemoveDemoSocialData(DbContext db)
+    {
+        const string demoAccountFilter =
+            """
+            SELECT Id
+            FROM social_accounts
+            WHERE lower(AccountName) LIKE 'demo %'
+                OR lower(AccountName) LIKE '% demo %'
+                OR lower(AccountHandle) LIKE '@demo%'
+                OR lower(AccountHandle) LIKE 'demo%'
+                OR lower(AccountUrl) LIKE '%/demo%'
+            """;
+
+        db.Database.ExecuteSqlRaw(
+            $"""
+            DELETE FROM social_video_metric_snapshots
+            WHERE SocialAccountId IN ({demoAccountFilter})
+            """);
+        db.Database.ExecuteSqlRaw(
+            $"""
+            DELETE FROM social_metric_snapshots
+            WHERE SocialAccountId IN ({demoAccountFilter})
+            """);
+        db.Database.ExecuteSqlRaw(
+            $"""
+            DELETE FROM social_accounts
+            WHERE Id IN ({demoAccountFilter})
+            """);
     }
 
     private static HashSet<string> GetProductColumns(DbContext db)

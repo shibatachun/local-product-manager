@@ -95,7 +95,7 @@ public sealed class InstagramReportImportService(AppDbContext db)
         }
 
         var account = await query
-            .OrderBy(item => item.AccountName == "Demo Instagram")
+            .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.AccountName)
             .FirstOrDefaultAsync(cancellationToken);
         if (account is null)
