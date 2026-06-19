@@ -72,7 +72,6 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
     DatabaseSchemaService.Upgrade(db);
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
-    await DemoSocialDataSeeder.SeedAsync(db);
 }
 
 if (app.Environment.IsDevelopment())
