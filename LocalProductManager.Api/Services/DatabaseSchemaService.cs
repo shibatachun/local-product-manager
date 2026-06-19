@@ -141,6 +141,25 @@ public sealed class DatabaseSchemaService
             """);
         db.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS IX_app_user_sessions_AppUserId ON app_user_sessions (AppUserId)");
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS video_trend_items (
+                Id INTEGER NOT NULL CONSTRAINT PK_video_trend_items PRIMARY KEY AUTOINCREMENT,
+                Platform TEXT NOT NULL,
+                Url TEXT NOT NULL,
+                Title TEXT NOT NULL,
+                Description TEXT NULL,
+                Author TEXT NULL,
+                PlatformVideoId TEXT NULL,
+                EmbedUrl TEXT NULL,
+                ThumbnailUrl TEXT NULL,
+                Tags TEXT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            )
+            """);
+        db.Database.ExecuteSqlRaw(
+            "CREATE INDEX IF NOT EXISTS IX_video_trend_items_Platform ON video_trend_items (Platform)");
     }
 
     private static HashSet<string> GetProductColumns(DbContext db)

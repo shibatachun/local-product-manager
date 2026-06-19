@@ -19,8 +19,9 @@ import {
 import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService } from '../../core/product-api.service';
 import { FileStoragePanelComponent } from './file-storage-panel.component';
+import { VideoTrendPanelComponent } from './video-trend-panel.component';
 
-type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage';
+type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage' | 'videoTrend';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type AsinRelationshipRow = {
   parentAsin: string;
@@ -108,7 +109,7 @@ interface PlatformChoice {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrl: './product-manager.page.css',
 })
@@ -490,6 +491,7 @@ export class ProductManagerPage {
       pricing: 'Cost planning',
       marketing: 'Amazon Attribution',
       storage: 'Server settings',
+      videoTrend: 'Creative research',
     };
     return labels[this.view()];
   }
@@ -500,6 +502,7 @@ export class ProductManagerPage {
       pricing: 'Pricing estimator',
       marketing: 'Marketing links',
       storage: 'File storage',
+      videoTrend: 'Video trend',
     };
     return labels[this.view()];
   }

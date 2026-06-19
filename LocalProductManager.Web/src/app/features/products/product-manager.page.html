@@ -10,6 +10,7 @@
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
+      <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
       <a routerLink="/admin"><span>AD</span> Admin</a>
       <a routerLink="/test"><span>⌘</span> API Test</a>
     </nav>
@@ -26,7 +27,7 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing'">
+      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'videoTrend'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -289,7 +290,12 @@
     </ng-template>
 
     <ng-template #storageView>
-      <app-file-storage-panel [currentUser]="currentUser()"></app-file-storage-panel>
+      <ng-container *ngIf="view() === 'storage'; else videoTrendView">
+        <app-file-storage-panel [currentUser]="currentUser()"></app-file-storage-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #videoTrendView>
+      <app-video-trend-panel [currentUser]="currentUser()"></app-video-trend-panel>
     </ng-template>
   </main>
 </div>

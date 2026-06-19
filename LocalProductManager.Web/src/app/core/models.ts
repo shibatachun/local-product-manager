@@ -144,6 +144,32 @@ export interface StoreLink {
   url: string | null;
 }
 
+export type VideoTrendPlatform = 'youtube' | 'instagram' | 'tiktok' | 'pinterest' | 'facebook' | 'other';
+
+export interface VideoTrendItem {
+  id: number;
+  platform: VideoTrendPlatform | string;
+  url: string;
+  title: string;
+  description: string | null;
+  author: string | null;
+  platformVideoId: string | null;
+  embedUrl: string | null;
+  thumbnailUrl: string | null;
+  tags: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateVideoTrendItemRequest {
+  platform: string | null;
+  url: string;
+  title: string | null;
+  description: string | null;
+  author: string | null;
+  tags: string | null;
+}
+
 export interface BusinessReportImportResult {
   rowsRead: number;
   parentProductsCreated: number;

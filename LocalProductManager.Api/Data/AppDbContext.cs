@@ -14,6 +14,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SocialVideoMetricSnapshot> SocialVideoMetricSnapshots => Set<SocialVideoMetricSnapshot>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
+    public DbSet<VideoTrendItem> VideoTrendItems => Set<VideoTrendItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,6 +136,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(session => session.AppUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<VideoTrendItem>(entity =>
+        {
+            entity.ToTable("video_trend_items");
+            entity.Property(item => item.Platform).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.Url).HasMaxLength(2048).IsRequired();
+            entity.Property(item => item.Title).HasMaxLength(300).IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(2000);
+            entity.Property(item => item.Author).HasMaxLength(160);
+            entity.Property(item => item.PlatformVideoId).HasMaxLength(160);
+            entity.Property(item => item.EmbedUrl).HasMaxLength(2048);
+            entity.Property(item => item.ThumbnailUrl).HasMaxLength(2048);
+            entity.Property(item => item.Tags).HasMaxLength(500);
+            entity.HasIndex(item => item.Platform);
         });
     }
 }

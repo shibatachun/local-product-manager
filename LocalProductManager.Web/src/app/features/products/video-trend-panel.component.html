@@ -1,0 +1,90 @@
+<section class="trend-page">
+  <div class="trend-intro">
+    <div>
+      <h2>Competitor video library</h2>
+      <p>Collect videos from each social channel for research, product ideas, hooks, and creative trends.</p>
+    </div>
+    <button type="button" (click)="load()" [disabled]="loading()">Refresh</button>
+  </div>
+
+  <section class="trend-add" *ngIf="canManage(); else readonlyTrend">
+    <div class="trend-add-heading">
+      <strong>Add competitor video</strong>
+      <small>Paste a link. YouTube links can be embedded; other platforms are saved with parsed IDs when possible.</small>
+    </div>
+    <div class="trend-form">
+      <label>Platform
+        <select [(ngModel)]="form.platform">
+          <option value="auto">Auto detect</option>
+          <option *ngFor="let platform of platforms.slice(1)" [value]="platform.value">{{ platform.label }}</option>
+        </select>
+      </label>
+      <label class="url-field">Video link
+        <input [(ngModel)]="form.url" placeholder="https://..." />
+      </label>
+      <label>Title
+        <input [(ngModel)]="form.title" placeholder="Optional title" />
+      </label>
+      <label>Creator
+        <input [(ngModel)]="form.author" placeholder="@account or store name" />
+      </label>
+      <label class="notes-field">Notes
+        <textarea [(ngModel)]="form.description" rows="2" placeholder="Hook, product idea, style notes"></textarea>
+      </label>
+      <label>Tags
+        <input [(ngModel)]="form.tags" placeholder="keychain, packaging, ads" />
+      </label>
+      <button class="primary" type="button" (click)="addVideo()" [disabled]="loading()">Save video</button>
+    </div>
+  </section>
+
+  <ng-template #readonlyTrend>
+    <section class="trend-readonly">
+      Saved competitor videos are shared from the server. Ask an admin to add or remove links.
+    </section>
+  </ng-template>
+
+  <div class="trend-tabs">
+    <button *ngFor="let platform of platforms" type="button" [class.active]="selectedPlatform() === platform.value" (click)="selectedPlatform.set(platform.value)">
+      <span>{{ platform.short }}</span>
+      {{ platform.label }}
+      <em>{{ platform.value === 'all' ? items().length : (counts().get(platform.value) || 0) }}</em>
+    </button>
+  </div>
+
+  <section class="trend-grid">
+    <article class="trend-card" *ngFor="let item of visibleItems()">
+      <div class="video-frame" *ngIf="safeEmbedUrl(item) as embed; else linkPreview">
+        <iframe [src]="embed" title="Video preview" allowfullscreen></iframe>
+      </div>
+      <ng-template #linkPreview>
+        <button class="video-link-preview" type="button" (click)="openUrl(item)">
+          <img *ngIf="item.thumbnailUrl" [src]="item.thumbnailUrl" alt="" />
+          <span *ngIf="!item.thumbnailUrl">{{ platformLabel(item.platform).slice(0, 2).toUpperCase() }}</span>
+        </button>
+      </ng-template>
+
+      <div class="trend-card-body">
+        <div class="trend-card-title">
+          <span>{{ platformLabel(item.platform) }}</span>
+          <button type="button" *ngIf="canManage()" (click)="deleteVideo(item)">Delete</button>
+        </div>
+        <h3>{{ item.title }}</h3>
+        <p *ngIf="item.description">{{ item.description }}</p>
+        <dl>
+          <div *ngIf="item.author"><dt>Creator</dt><dd>{{ item.author }}</dd></div>
+          <div *ngIf="item.platformVideoId"><dt>ID</dt><dd>{{ item.platformVideoId }}</dd></div>
+          <div *ngIf="item.tags"><dt>Tags</dt><dd>{{ item.tags }}</dd></div>
+        </dl>
+        <a [href]="item.url" target="_blank" rel="noreferrer">Open original</a>
+      </div>
+    </article>
+
+    <div class="trend-empty" *ngIf="!visibleItems().length">
+      <strong>No videos saved</strong>
+      <p>{{ selectedPlatform() === 'all' ? 'Add the first competitor video link.' : 'No videos saved for this platform yet.' }}</p>
+    </div>
+  </section>
+</section>
+
+<div class="trend-toast" *ngIf="notice()">{{ notice() }}</div>
