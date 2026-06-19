@@ -380,6 +380,21 @@ export class ProductManagerPage {
     });
   }
 
+  async exportProducts(): Promise<void> {
+    await this.perform(async () => {
+      const blob = await this.api.exportProducts();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `local-products-${this.exportTimestamp()}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      this.showNotice('Product Excel exported.');
+    });
+  }
+
   storeLink(platform: Platform): StoreLink | undefined {
     return this.storeLinks().find(link => link.platform === platform);
   }
@@ -1123,6 +1138,12 @@ export class ProductManagerPage {
 
   private safePercent(value: number | null | undefined): number {
     return Math.max(0, Math.min(95, this.safeNumber(value))) / 100;
+  }
+
+  private exportTimestamp(): string {
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
   }
 
   currency(value: number): string {

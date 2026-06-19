@@ -22,6 +22,7 @@ if (dbPath is not null)
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<ProductExportService>();
 builder.Services.AddScoped<AmazonAttributionImportService>();
 builder.Services.AddScoped<AmazonBusinessReportImportService>();
 builder.Services.AddScoped<BulkAttributionImportService>();

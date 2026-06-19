@@ -7,7 +7,9 @@ namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/products")]
-public sealed class ProductsController(ProductService products) : ControllerBase
+public sealed class ProductsController(
+    ProductService products,
+    ProductExportService productExport) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ProductListItemDto>>> Search(
@@ -18,6 +20,17 @@ public sealed class ProductsController(ProductService products) : ControllerBase
     {
         var result = await products.SearchAsync(keyword, platform, hasAmazon, cancellationToken);
         return Ok(result);
+    }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(CancellationToken cancellationToken)
+    {
+        var content = await productExport.ExportProductsAsync(cancellationToken);
+        var fileName = $"local-products-{DateTimeOffset.Now:yyyyMMdd-HHmm}.xlsx";
+        return File(
+            content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
     }
 
     [HttpGet("{productId:int}")]

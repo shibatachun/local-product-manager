@@ -37,6 +37,10 @@ export class ProductApiService {
     return firstValueFrom(this.http.get<ProductDetail>(`${this.baseUrl}/products/${id}`));
   }
 
+  exportProducts(): Promise<Blob> {
+    return firstValueFrom(this.http.get(`${this.baseUrl}/products/export`, { responseType: 'blob' }));
+  }
+
   checkDuplicateSku(sku: string, excludeProductId?: number): Promise<ProductDuplicateCheck> {
     const params: Record<string, string> = { sku };
     if (excludeProductId !== undefined) params['excludeProductId'] = String(excludeProductId);
