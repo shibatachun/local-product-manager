@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -123,5 +123,20 @@ export class SocialApiService {
 
   archiveLogs(): Promise<ArchiveLogResult> {
     return firstValueFrom(this.http.post<ArchiveLogResult>(`${this.baseUrl}/social-fetch-logs/archive`, {}));
+  }
+
+  aiAnalysisStatus(): Promise<SocialAiAnalysisStatus> {
+    return firstValueFrom(this.http.get<SocialAiAnalysisStatus>(`${this.baseUrl}/social-ai-analysis/status`));
+  }
+
+  aiAnalysisReports(limit = 20): Promise<SocialAiAnalysisReport[]> {
+    return firstValueFrom(this.http.get<SocialAiAnalysisReport[]>(`${this.baseUrl}/social-ai-analysis/reports?limit=${limit}`));
+  }
+
+  runAiAnalysis(period: 'daily' | 'weekly', date?: string): Promise<SocialAiAnalysisResult> {
+    return firstValueFrom(this.http.post<SocialAiAnalysisResult>(`${this.baseUrl}/social-ai-analysis/run`, {
+      period,
+      date: date || null,
+    }));
   }
 }

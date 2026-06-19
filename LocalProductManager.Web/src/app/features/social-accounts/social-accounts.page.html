@@ -9,6 +9,7 @@
       <a routerLink="/">Product manager</a>
       <button type="button" *ngIf="canManageSocial()" (click)="loadFetchLogs()">Fetch logs</button>
       <button type="button" *ngIf="canManageSocial()" (click)="loadSocialDebug()">Debug data</button>
+      <button type="button" *ngIf="canManageSocial()" (click)="loadAiReports()">AI analysis</button>
       <button type="button" *ngIf="canManageSocial()" (click)="sync()">Sync API</button>
     </nav>
   </header>
@@ -191,6 +192,39 @@
           </g>
         </ng-container>
       </svg>
+      <div class="ai-analysis-panel" *ngIf="aiPanelOpen() && canManageSocial()">
+        <div class="section-heading">
+          <div>
+            <h2>AI analysis</h2>
+            <p>{{ aiStatus()?.message || 'Daily and weekly social analysis saved on the host computer.' }}</p>
+          </div>
+          <button type="button" (click)="loadAiReports(false)">Refresh</button>
+        </div>
+        <div class="ai-runner">
+          <label>Period
+            <select [(ngModel)]="aiForm.period">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          <label>Report date
+            <input type="date" [(ngModel)]="aiForm.date" />
+          </label>
+          <button class="primary" type="button" (click)="runAiAnalysis()" [disabled]="!aiStatus()?.isConfigured || loading()">Run Gemini analysis</button>
+          <code>{{ aiStatus()?.reportDirectory }}</code>
+        </div>
+        <div class="ai-report-list">
+          <article *ngFor="let report of aiReports()">
+            <div>
+              <strong>{{ report.period }} · {{ report.from }} to {{ report.to }}</strong>
+              <small>{{ report.fileName }} · {{ report.generatedAt | date:'MMM d, y, h:mm a' }}</small>
+            </div>
+            <p>{{ report.preview }}</p>
+            <code>{{ report.path }}</code>
+          </article>
+          <p class="ai-empty" *ngIf="!aiReports().length">No AI reports saved yet.</p>
+        </div>
+      </div>
       <div class="fetch-log-panel" *ngIf="logsOpen() && canManageSocial()">
         <div class="section-heading">
           <div><h2>Daily fetch log</h2><p>Saved under the server logging folder.</p></div>

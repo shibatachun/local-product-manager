@@ -309,6 +309,33 @@ export interface ArchiveLogResult {
   path: string;
 }
 
+export interface SocialAiAnalysisStatus {
+  isConfigured: boolean;
+  model: string;
+  reportDirectory: string;
+  message: string | null;
+}
+
+export interface SocialAiAnalysisResult {
+  period: string;
+  from: string;
+  to: string;
+  model: string;
+  path: string;
+  summary: string;
+  generatedAt: string;
+}
+
+export interface SocialAiAnalysisReport {
+  fileName: string;
+  path: string;
+  period: string;
+  from: string;
+  to: string;
+  generatedAt: string;
+  preview: string;
+}
+
 export interface YouTubeAuthStatus {
   isConfigured: boolean;
   isConnected: boolean;

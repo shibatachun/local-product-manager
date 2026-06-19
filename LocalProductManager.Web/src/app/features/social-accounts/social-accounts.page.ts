@@ -2,7 +2,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CurrentUser, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { CurrentUser, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
 
@@ -36,8 +36,11 @@ export class SocialAccountsPage {
   readonly selectedChartPlatforms = signal<Set<SocialPlatform>>(new Set(['youtube']));
   readonly fetchLogs = signal<SocialFetchLogEntry[]>([]);
   readonly socialDebug = signal<SocialDebugSnapshot | null>(null);
+  readonly aiStatus = signal<SocialAiAnalysisStatus | null>(null);
+  readonly aiReports = signal<SocialAiAnalysisReport[]>([]);
   readonly logsOpen = signal(false);
   readonly debugOpen = signal(false);
+  readonly aiPanelOpen = signal(false);
   readonly appVersion = 'chart-metric-key-fix-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
@@ -69,6 +72,10 @@ export class SocialAccountsPage {
     comments: 0,
     shares: 0,
     followers: 0,
+  };
+  readonly aiForm = {
+    period: 'daily' as 'daily' | 'weekly',
+    date: this.today,
   };
 
   readonly platforms: { value: SocialPlatform; label: string }[] = [
@@ -269,7 +276,7 @@ export class SocialAccountsPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus()]);
+    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus(), this.loadAiAnalysisStatus()]);
     await this.loadSelectedAccountContent();
   }
 
@@ -416,6 +423,32 @@ export class SocialAccountsPage {
       this.socialDebug.set(await this.api.socialDebug());
       this.debugOpen.set(true);
       this.showNotice('Social debug data loaded.');
+    });
+  }
+
+  async loadAiAnalysisStatus(): Promise<void> {
+    try {
+      this.aiStatus.set(await this.api.aiAnalysisStatus());
+    } catch {
+      this.aiStatus.set(null);
+    }
+  }
+
+  async loadAiReports(showNotice = true): Promise<void> {
+    if (!this.canManageSocial()) return;
+    await this.perform(async () => {
+      this.aiReports.set(await this.api.aiAnalysisReports());
+      this.aiPanelOpen.set(true);
+      if (showNotice) this.showNotice('AI analysis reports loaded.');
+    });
+  }
+
+  async runAiAnalysis(): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('AI analysis is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.runAiAnalysis(this.aiForm.period, this.aiForm.date);
+      await Promise.all([this.loadAiReports(false), this.loadFetchLogs(false)]);
+      this.showNotice(`Generated ${result.period} AI analysis: ${result.path}`);
     });
   }
 
