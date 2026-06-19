@@ -336,11 +336,14 @@ export class ProductManagerPage {
   });
   readonly amazonProducts = computed(() => {
     const keyword = this.marketingSearch().trim().toLowerCase();
-    const products = this.marketingListProducts(this.marketingProducts(), this.marketingProductFilter());
+    const products = this.marketingBaseProducts();
     if (!keyword) return products;
 
     return products.filter((product) => this.matchesMarketingSearch(product, keyword));
   });
+  readonly marketingBaseProducts = computed(() =>
+    this.marketingListProducts(this.marketingProducts(), this.marketingProductFilter()),
+  );
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks()]);

@@ -127,6 +127,10 @@
               {{ filter.label }}
             </button>
           </div>
+          <div class="marketing-count">
+            <span>{{ amazonProducts().length | number }} item{{ amazonProducts().length === 1 ? '' : 's' }}</span>
+            <small *ngIf="amazonProducts().length !== marketingBaseProducts().length">of {{ marketingBaseProducts().length | number }}</small>
+          </div>
           <div class="marketing-list-scroll">
         <button *ngFor="let product of amazonProducts()" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
             <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></span>
