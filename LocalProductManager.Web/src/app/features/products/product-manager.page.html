@@ -11,6 +11,7 @@
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
       <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
+      <button [class.active]="view() === 'apiDocs'" (click)="changeView('apiDocs')"><span>API</span> API documentation</button>
       <a routerLink="/admin"><span>AD</span> Admin</a>
       <a routerLink="/test"><span>⌘</span> API Test</a>
     </nav>
@@ -27,7 +28,7 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'videoTrend'">
+      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'videoTrend' && view() !== 'apiDocs'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -295,7 +296,38 @@
       </ng-container>
     </ng-template>
     <ng-template #videoTrendView>
-      <app-video-trend-panel [currentUser]="currentUser()"></app-video-trend-panel>
+      <ng-container *ngIf="view() === 'videoTrend'; else apiDocsView">
+        <app-video-trend-panel [currentUser]="currentUser()"></app-video-trend-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #apiDocsView>
+      <section class="api-docs-page">
+        <div class="api-docs-hero">
+          <div>
+            <p class="eyebrow">Local Product Manager</p>
+            <h2>System and API reference</h2>
+            <p>The backend API is served from <code>{{ api.baseUrl }}</code>. Use this page as the in-app reference for products, imports, file proxying, marketing links, social analytics, and AI reports.</p>
+          </div>
+          <a href="/PROJECT_DOCUMENTATION.md" target="_blank" rel="noreferrer">Open full project document</a>
+        </div>
+
+        <div class="api-docs-grid">
+          <article class="api-doc-card" *ngFor="let section of apiDocumentationSections">
+            <div>
+              <h3>{{ section.title }}</h3>
+              <p>{{ section.description }}</p>
+            </div>
+            <ul>
+              <li *ngFor="let endpoint of section.endpoints"><code>{{ endpoint }}</code></li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="api-docs-note">
+          <strong>Permission model</strong>
+          <p>Admin-only actions include imports, storage root changes, social account connect/disconnect, manual metrics, attribution edits, user management, and AI report execution. Guest and regular users can browse allowed product, file, marketing, and analytics data without modifying protected records.</p>
+        </div>
+      </section>
     </ng-template>
   </main>
 </div>

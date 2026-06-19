@@ -175,6 +175,8 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .storage-note { margin: 20px 22px 22px; padding: 14px; border-left: 3px solid #2783a0; background: #eef7f9; }
 .storage-note strong { font-size: 12px; }.storage-note p { margin: 5px 0 0; color: #61717c; font-size: 12px; line-height: 1.6; }
 
+.api-docs-page{display:grid;gap:16px;max-width:1180px}.api-docs-hero,.api-doc-card{padding:18px;border:1px solid #dce2e7;border-radius:8px;background:#fff}.api-docs-hero{display:flex;justify-content:space-between;gap:22px}.api-docs-hero p,.api-doc-card p,.api-docs-note p{margin:7px 0 0;color:#61717c;font-size:12px;line-height:1.55}.api-docs-hero a{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:38px;padding:0 13px;border:1px solid #cbd4da;border-radius:6px;color:#334e68;background:#fff;font-size:12px;font-weight:800;text-decoration:none}.api-docs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.api-doc-card{display:grid;gap:12px}.api-doc-card ul{display:grid;gap:7px;margin:0;padding:0;list-style:none}.api-doc-card li{padding:8px;border-radius:5px;background:#f6f8f9}.api-doc-card code{display:block;overflow:hidden;color:#304f5f;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.api-docs-note{padding:15px 18px;border-left:3px solid #176b87;background:#eef7f9}
+
 .backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(24,34,44,.44); }
 .modal { position: fixed; z-index: 30; top: 50%; left: 50%; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; transform: translate(-50%,-50%); border-radius: 8px; background: #fff; box-shadow: 0 24px 70px rgba(21,31,40,.24); }
 .modal > header, .drawer > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px; border-bottom: 1px solid #e2e7ea; }
@@ -264,6 +266,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .store-band { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .pricing-page { grid-template-columns:1fr; }
   .marketing-layout { grid-template-columns:260px minmax(0,1fr); }.channel-grid { grid-template-columns:1fr; }
+  .api-docs-grid{grid-template-columns:1fr}
   .image-host-controls { grid-template-columns: 1fr; }
   th:nth-child(6),td:nth-child(6){display:none}
 }
