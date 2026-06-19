@@ -28,9 +28,12 @@ public sealed class VideoTrendController(
 
         var items = await query
             .OrderBy(item => item.Platform)
-            .ThenByDescending(item => item.UpdatedAt)
             .ToListAsync(cancellationToken);
-        return Ok(items.Select(ToDto).ToArray());
+        return Ok(items
+            .OrderBy(item => item.Platform)
+            .ThenByDescending(item => item.UpdatedAt)
+            .Select(ToDto)
+            .ToArray());
     }
 
     [HttpPost]
