@@ -21,6 +21,7 @@ import { ProductApiService } from '../../core/product-api.service';
 import { FileStoragePanelComponent } from './file-storage-panel.component';
 
 type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage';
+type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 
 interface PricingStep {
   label: string;
@@ -114,6 +115,7 @@ export class ProductManagerPage {
   readonly selectedProduct = signal<ProductDetail | null>(null);
   readonly search = signal('');
   readonly marketingSearch = signal('');
+  readonly marketingProductFilter = signal<MarketingProductFilter>('family-one');
   readonly platformFilter = signal('');
   readonly view = signal<ViewMode>('products');
   readonly loading = signal(false);
@@ -151,6 +153,11 @@ export class ProductManagerPage {
     { value: 'etsy', label: 'Etsy' },
   ];
   readonly attributionPlatforms: AttributionPlatform[] = ['pinterest', 'facebook', 'instagram', 'tiktok', 'youtube', 'shopify'];
+  readonly marketingProductFilters: { value: MarketingProductFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'standalone', label: 'Singles' },
+    { value: 'family-one', label: 'One / family' },
+  ];
 
   readonly createForm = {
     sku: '',
@@ -329,7 +336,7 @@ export class ProductManagerPage {
   });
   readonly amazonProducts = computed(() => {
     const keyword = this.marketingSearch().trim().toLowerCase();
-    const products = this.marketingListProducts(this.marketingProducts());
+    const products = this.marketingListProducts(this.marketingProducts(), this.marketingProductFilter());
     if (!keyword) return products;
 
     return products.filter((product) => this.matchesMarketingSearch(product, keyword));
@@ -1137,10 +1144,6 @@ export class ProductManagerPage {
       product.children.some((child) => this.hasAmazon(child));
   }
 
-  isAmazonFamilyParent(product: ProductListItem): boolean {
-    return product.productType === 'parent' && product.children.some((child) => this.hasAmazon(child));
-  }
-
   matchesMarketingSearch(product: ProductListItem, keyword: string): boolean {
     return [
       product.sku,
@@ -1156,22 +1159,50 @@ export class ProductManagerPage {
     ].some((value) => value.toLowerCase().includes(keyword));
   }
 
-  private marketingListProducts(products: ProductListItem[]): ProductListItem[] {
-    const result = new Map<number, ProductListItem>();
-    for (const product of products) {
-      if (this.isAmazonFamilyParent(product)) {
-        for (const child of product.children.filter((item) => this.hasAmazon(item))) {
-          result.set(child.id, child);
-        }
-        continue;
-      }
+  private marketingListProducts(products: ProductListItem[], filter: MarketingProductFilter): ProductListItem[] {
+    const flattened = this.flattenMarketingProducts(products).filter((product) => this.hasAmazon(product));
+    if (filter === 'all') {
+      return flattened.sort((left, right) => left.sku.localeCompare(right.sku));
+    }
 
-      if (this.hasAmazon(product)) {
-        result.set(product.id, product);
+    if (filter === 'standalone') {
+      return flattened
+        .filter((product) => product.parentProductId === null && product.productType !== 'parent')
+        .sort((left, right) => left.sku.localeCompare(right.sku));
+    }
+
+    const result = new Map<string, ProductListItem>();
+    for (const product of flattened) {
+      if (product.productType === 'parent') continue;
+      const key = product.parentProductId !== null
+        ? `parent:${product.parentProductId}`
+        : `product:${product.id}`;
+      const current = result.get(key);
+      if (!current || this.marketingRepresentativeScore(product) > this.marketingRepresentativeScore(current)) {
+        result.set(key, product);
       }
     }
 
     return Array.from(result.values()).sort((left, right) => left.sku.localeCompare(right.sku));
+  }
+
+  private flattenMarketingProducts(products: ProductListItem[]): ProductListItem[] {
+    const result = new Map<number, ProductListItem>();
+    for (const product of products) {
+      result.set(product.id, product);
+      for (const child of product.children) result.set(child.id, child);
+    }
+
+    return Array.from(result.values());
+  }
+
+  private marketingRepresentativeScore(product: ProductListItem): number {
+    let score = 0;
+    if (product.imagePath) score += 100;
+    if (product.asinCount > 0 || product.amazonAsinValues.length > 0) score += 50;
+    if (product.platforms.includes('amazon')) score += 20;
+    score -= Math.min(product.sku.length, 120) / 100;
+    return score;
   }
 
   platformLabel(platform: string): string {

@@ -117,6 +117,15 @@
             <span>⌕</span>
             <input placeholder="Search SKU or ASIN" [ngModel]="marketingSearch()" (ngModelChange)="marketingSearch.set($event)" />
           </label>
+          <div class="marketing-filter">
+            <button
+              *ngFor="let filter of marketingProductFilters"
+              type="button"
+              [class.active]="marketingProductFilter() === filter.value"
+              (click)="marketingProductFilter.set(filter.value)">
+              {{ filter.label }}
+            </button>
+          </div>
           <div class="marketing-list-scroll">
         <button *ngFor="let product of amazonProducts()" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
             <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" (error)="hideBrokenImage($event)" /></span>

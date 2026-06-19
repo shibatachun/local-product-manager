@@ -97,6 +97,9 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .marketing-search { display: flex; align-items: center; gap: 7px; min-height: 36px; margin-bottom: 10px; padding: 0 9px; border: 1px solid #cfd7dd; border-radius: 6px; background: #fff; }
 .marketing-search span { color: #71808c; font-size: 16px; }
 .marketing-search input { min-height: 32px; padding: 5px 0; border: 0; outline: 0; font-size: 12px; }
+.marketing-filter { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-bottom: 10px; }
+.marketing-filter button { min-height: 32px; padding: 6px 7px; border: 1px solid #cfd7dd; border-radius: 6px; background: #fff; color: #5f6e79; font-size: 11px; font-weight: 800; }
+.marketing-filter button.active { color: #fff; border-color: #3b6f8d; background: #3b6f8d; }
 .marketing-list-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 3px; }
 .marketing-list-scroll > button { display: grid; grid-template-columns: 40px minmax(0,1fr) auto auto; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: 6px; color: inherit; background: transparent; text-align: left; }
 .marketing-list-scroll > button:hover, .marketing-list-scroll > button.active { background: #edf5f7; }
