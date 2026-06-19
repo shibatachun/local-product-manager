@@ -24,7 +24,8 @@ public sealed class SocialAiAnalysisHostedService(
             {
                 using var scope = scopeFactory.CreateScope();
                 var analysis = scope.ServiceProvider.GetRequiredService<SocialAiAnalysisService>();
-                var yesterday = DateOnly.FromDateTime(DateTime.Now.AddDays(-1));
+                var now = DateTime.Now;
+                var yesterday = DateOnly.FromDateTime(now.AddDays(-1));
                 var result = await analysis.RunAsync("daily", yesterday, stoppingToken);
                 await fetchLogs.RecordAsync(
                     "ai-analysis-daily",
@@ -32,6 +33,11 @@ public sealed class SocialAiAnalysisHostedService(
                     1,
                     $"Daily social AI analysis generated: {result.Path}",
                     stoppingToken);
+
+                if (now.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    await RunWeeklyAnalysisAsync(analysis, yesterday, stoppingToken);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -53,7 +59,34 @@ public sealed class SocialAiAnalysisHostedService(
     private static TimeSpan DelayUntilNextAnalysisTime()
     {
         var now = DateTime.Now;
-        var nextRun = now.Date.AddDays(1).AddMinutes(5);
+        var nextRun = now.Date.AddDays(1);
         return nextRun - now;
+    }
+
+    private async Task RunWeeklyAnalysisAsync(
+        SocialAiAnalysisService analysis,
+        DateOnly reportDate,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            var result = await analysis.RunAsync("weekly", reportDate, stoppingToken);
+            await fetchLogs.RecordAsync(
+                "ai-analysis-weekly",
+                "success",
+                1,
+                $"Weekly social AI analysis generated: {result.Path}",
+                stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Weekly social AI analysis failed.");
+            await fetchLogs.RecordAsync(
+                "ai-analysis-weekly",
+                "failed",
+                0,
+                ex.Message,
+                stoppingToken);
+        }
     }
 }

@@ -21,7 +21,7 @@ public sealed class SocialAiAnalysisService(
         Model,
         reportDirectory,
         IsConfigured
-            ? "Gemini API key is configured."
+            ? "Gemini API key is configured. Daily bilingual reports run at server time 00:00; weekly bilingual reports run every Sunday at 00:00."
             : "Set AiAnalysis:GeminiApiKey in appsettings or GEMINI_API_KEY in the server environment.");
 
     public async Task<SocialAiAnalysisResultDto> RunAsync(
@@ -100,8 +100,22 @@ public sealed class SocialAiAnalysisService(
 
         var lines = new StringBuilder();
         lines.AppendLine("You are a practical marketing analyst for a small ecommerce business.");
-        lines.AppendLine("Analyze the following social media metrics and write a concise Chinese report.");
-        lines.AppendLine("The report should include: 1) executive summary, 2) platform changes, 3) unusual drops/spikes, 4) action items for tomorrow/next week, 5) data caveats.");
+        lines.AppendLine("Analyze the following social media metrics and write one concise bilingual report.");
+        lines.AppendLine("Write the Chinese version first, then an English version with the same findings.");
+        lines.AppendLine("Use these Markdown sections exactly:");
+        lines.AppendLine("## 中文报告");
+        lines.AppendLine("### 总结");
+        lines.AppendLine("### 平台变化");
+        lines.AppendLine("### 异常波动");
+        lines.AppendLine("### 下一步行动");
+        lines.AppendLine("### 数据注意事项");
+        lines.AppendLine("## English Report");
+        lines.AppendLine("### Summary");
+        lines.AppendLine("### Platform Changes");
+        lines.AppendLine("### Unusual Drops or Spikes");
+        lines.AppendLine("### Next Actions");
+        lines.AppendLine("### Data Caveats");
+        lines.AppendLine("Keep both languages practical and specific. Do not invent metrics that are not present.");
         lines.AppendLine($"Period: {NormalizePeriod(period)}");
         lines.AppendLine($"Date range: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
         lines.AppendLine();
