@@ -29,6 +29,7 @@ builder.Services.AddScoped<BulkAttributionImportService>();
 builder.Services.AddScoped<AttributionFolderImportService>();
 builder.Services.AddScoped<PinterestReportImportService>();
 builder.Services.AddScoped<InstagramReportImportService>();
+builder.Services.AddScoped<FacebookReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();

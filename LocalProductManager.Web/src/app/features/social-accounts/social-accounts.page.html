@@ -296,7 +296,7 @@
 
     <section class="panel platform-content">
       <div class="section-heading">
-        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : selectedContentPlatform() === 'instagram' ? (selectedInstagramPost()?.title || instagramSnapshot()?.channel?.title || 'Import an Instagram analytics report to inspect posts.') : 'Saved data and future API posts for this platform.' }}</p></div>
+        <div><h2>{{ selectedContentMeta().label }} {{ selectedContentMeta().pluralLabel }}</h2><p>{{ selectedAccount()?.accountName || selectedContentMeta().label }} - {{ selectedContentPlatform() === 'youtube' ? (selectedYouTubeVideo()?.title || youtubeSnapshot()?.channel?.title || 'Fetch videos to inspect channel data.') : selectedContentPlatform() === 'pinterest' ? (selectedPinterestItem()?.title || pinterestSnapshot()?.channel?.title || 'Import a Pinterest analytics report to inspect pins.') : selectedContentPlatform() === 'instagram' ? (selectedInstagramPost()?.title || instagramSnapshot()?.channel?.title || 'Import an Instagram analytics report to inspect posts.') : selectedContentPlatform() === 'facebook' ? (selectedFacebookPost()?.title || facebookSnapshot()?.channel?.title || 'Import a Facebook report to inspect posts.') : 'Saved data and future API posts for this platform.' }}</p></div>
         <button type="button" *ngIf="canManageSocial() && selectedContentPlatform() === 'youtube'" (click)="fetchYouTubeVideos()" [disabled]="!youtubeStatus()?.isConnected || loading()">Refresh</button>
         <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'pinterest'">
           Import report
@@ -305,6 +305,10 @@
         <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'instagram'">
           Import report
           <input type="file" accept=".csv,text/csv" (change)="onInstagramReportSelected($event)" />
+        </label>
+        <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'facebook'">
+          Import report
+          <input type="file" accept=".csv,text/csv" (change)="onFacebookReportSelected($event)" />
         </label>
       </div>
 
@@ -333,8 +337,21 @@
         </div>
       </ng-template>
       <ng-template #nonPinterestSummary>
-        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'instagram'; else platformSummary">
+        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'instagram'; else nonInstagramSummary">
           <div class="stat-card" *ngFor="let stat of instagramStats()">
+            <span>{{ stat.label.slice(0, 1) }}</span>
+            <strong>{{ stat.value | number }}</strong>
+            <small>{{ stat.label }}</small>
+            <b *ngIf="stat.delta !== null" [class.positive]="stat.delta > 0" [class.flat]="stat.delta === 0">
+              {{ stat.delta > 0 ? '+' : '' }}{{ stat.delta | number }} since previous
+            </b>
+            <em>{{ stat.detail }}</em>
+          </div>
+        </div>
+      </ng-template>
+      <ng-template #nonInstagramSummary>
+        <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'facebook'; else platformSummary">
+          <div class="stat-card" *ngFor="let stat of facebookStats()">
             <span>{{ stat.label.slice(0, 1) }}</span>
             <strong>{{ stat.value | number }}</strong>
             <small>{{ stat.label }}</small>
@@ -435,7 +452,7 @@
         </div>
       </ng-template>
       <ng-template #nonPinterestContent>
-        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'instagram'; else genericPlatformContent">
+        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'instagram'; else nonInstagramContent">
           <div class="video-list">
             <button *ngFor="let post of instagramSnapshot()?.posts || []" type="button" [class.active]="selectedInstagramPost()?.id === post.id" (click)="selectInstagramPost(post.id)">
               <span class="instagram-kind">{{ post.kind === 'reel' ? 'REEL' : 'POST' }}</span>
@@ -464,6 +481,41 @@
               <div>
                 <h3>Select a post</h3>
                 <p>Instagram report metrics will appear in the stat cards above.</p>
+              </div>
+            </div>
+          </ng-template>
+        </div>
+      </ng-template>
+      <ng-template #nonInstagramContent>
+        <div class="video-workspace" *ngIf="selectedContentPlatform() === 'facebook'; else genericPlatformContent">
+          <div class="video-list">
+            <button *ngFor="let post of facebookSnapshot()?.posts || []" type="button" [class.active]="selectedFacebookPost()?.id === post.id" (click)="selectFacebookPost(post.id)">
+              <span class="facebook-kind">{{ post.kind === 'video' ? 'VID' : post.kind === 'reel' ? 'REEL' : 'POST' }}</span>
+              <span>
+                <strong>{{ post.title }}</strong>
+                <small>{{ post.views | number }} views - {{ post.likes | number }} likes - {{ post.comments | number }} comments</small>
+                <em>{{ post.clicks | number }} clicks - {{ post.metrics.length }} snapshots recorded</em>
+              </span>
+            </button>
+            <div class="empty-videos" *ngIf="!(facebookSnapshot()?.posts?.length)">
+              <strong>No Facebook posts loaded</strong>
+              <small>{{ canManageSocial() ? 'Import a Facebook report CSV.' : 'Waiting for the host computer to import Facebook data.' }}</small>
+            </div>
+          </div>
+
+          <div class="video-detail" *ngIf="selectedFacebookPost() as post; else noFacebookSelected">
+            <span class="facebook-detail-mark">{{ post.kind === 'video' ? 'Video' : post.kind === 'reel' ? 'Reel' : 'Post' }}</span>
+            <div>
+              <h3>{{ post.title }}</h3>
+              <p>{{ post.publishedAt ? (post.publishedAt | date:'mediumDate') : 'No publish date' }} · {{ post.views | number }} views · {{ post.clicks | number }} clicks</p>
+              <a [href]="post.url" target="_blank" rel="noreferrer">Open {{ post.kind }}</a>
+            </div>
+          </div>
+          <ng-template #noFacebookSelected>
+            <div class="video-detail empty">
+              <div>
+                <h3>Select a Facebook post</h3>
+                <p>Facebook report metrics will appear in the stat cards above.</p>
               </div>
             </div>
           </ng-template>

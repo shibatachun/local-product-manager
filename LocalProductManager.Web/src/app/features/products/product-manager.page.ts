@@ -236,6 +236,8 @@ export class ProductManagerPage {
         'GET /api/pinterest/pins - stored Pinterest pin metrics',
         'POST /api/instagram/report/import - import Instagram CSV',
         'GET /api/instagram/posts - stored Instagram post/reel metrics',
+        'POST /api/facebook/report/import - import Facebook CSV',
+        'GET /api/facebook/posts - stored Facebook post metrics',
       ],
     },
     {

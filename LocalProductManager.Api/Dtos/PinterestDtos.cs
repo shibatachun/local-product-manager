@@ -90,3 +90,40 @@ public sealed record InstagramContentItemDto(
     long Saves,
     long Comments,
     IReadOnlyList<PinterestMetricPointDto> Metrics);
+
+public sealed record FacebookReportImportResult(
+    int AccountId,
+    int PostsImported,
+    int ViewsImported,
+    int LikesImported,
+    int CommentsImported,
+    int SharesImported,
+    int ClicksImported,
+    string AccountName,
+    DateOnly SnapshotDate);
+
+public sealed record FacebookContentSnapshotDto(
+    FacebookContentChannelDto Channel,
+    IReadOnlyList<FacebookContentItemDto> Posts);
+
+public sealed record FacebookContentChannelDto(
+    string Id,
+    string Title,
+    string? ThumbnailUrl,
+    long Followers,
+    long Views,
+    long PostCount,
+    long Clicks,
+    string ClicksNote);
+
+public sealed record FacebookContentItemDto(
+    string Id,
+    string Title,
+    string Url,
+    string Kind,
+    DateTimeOffset? PublishedAt,
+    long Views,
+    long Likes,
+    long Clicks,
+    long Comments,
+    IReadOnlyList<PinterestMetricPointDto> Metrics);

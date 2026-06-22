@@ -459,6 +459,49 @@ export interface InstagramContentSnapshot {
   }[];
 }
 
+export interface FacebookReportImportResult {
+  accountId: number;
+  postsImported: number;
+  viewsImported: number;
+  likesImported: number;
+  commentsImported: number;
+  sharesImported: number;
+  clicksImported: number;
+  accountName: string;
+  snapshotDate: string;
+}
+
+export interface FacebookContentSnapshot {
+  channel: {
+    id: string;
+    title: string;
+    thumbnailUrl: string | null;
+    followers: number;
+    views: number;
+    postCount: number;
+    clicks: number;
+    clicksNote: string;
+  };
+  posts: {
+    id: string;
+    title: string;
+    url: string;
+    kind: 'post' | 'video' | 'reel' | string;
+    publishedAt: string | null;
+    views: number;
+    likes: number;
+    clicks: number;
+    comments: number;
+    metrics: {
+      snapshotDate: string;
+      views: number;
+      likes: number;
+      comments: number;
+      clicks: number;
+    }[];
+  }[];
+}
+
 export interface YouTubeDebugSnapshot {
   channel: {
     id: string;

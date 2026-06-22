@@ -2,7 +2,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CurrentUser, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { CurrentUser, FacebookContentSnapshot, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
 
@@ -26,9 +26,11 @@ export class SocialAccountsPage {
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly pinterestSnapshot = signal<PinterestContentSnapshot | null>(null);
   readonly instagramSnapshot = signal<InstagramContentSnapshot | null>(null);
+  readonly facebookSnapshot = signal<FacebookContentSnapshot | null>(null);
   readonly selectedYouTubeVideoId = signal<string | null>(null);
   readonly selectedPinterestItemId = signal<string | null>(null);
   readonly selectedInstagramPostId = signal<string | null>(null);
+  readonly selectedFacebookPostId = signal<string | null>(null);
   readonly selectedContentPlatform = signal<SocialPlatform>('youtube');
   readonly hoveredChartIndex = signal<number | null>(null);
   readonly selectedRangePreset = signal<RangePreset>('month');
@@ -149,6 +151,11 @@ export class SocialAccountsPage {
     if (!snapshot?.posts.length) return null;
     return snapshot.posts.find(item => item.id === this.selectedInstagramPostId()) ?? snapshot.posts[0];
   });
+  readonly selectedFacebookPost = computed(() => {
+    const snapshot = this.facebookSnapshot();
+    if (!snapshot?.posts.length) return null;
+    return snapshot.posts.find(item => item.id === this.selectedFacebookPostId()) ?? snapshot.posts[0];
+  });
   readonly youtubeStats = computed(() => {
     const snapshot = this.youtubeSnapshot();
     const video = this.selectedYouTubeVideo();
@@ -187,6 +194,19 @@ export class SocialAccountsPage {
       { label: 'Saves', value: item?.saves ?? 0, delta: item && previous ? item.saves - previous.clicks : null, detail: item ? 'Selected post saves' : 'Select a post' },
       { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Follows from imported report' },
       { label: 'Posts', value: snapshot?.channel.postCount ?? snapshot?.posts.length ?? 0, delta: null, detail: 'Imported posts and reels' },
+    ];
+  });
+  readonly facebookStats = computed(() => {
+    const snapshot = this.facebookSnapshot();
+    const item = this.selectedFacebookPost();
+    const previous = item?.metrics.length && item.metrics.length > 1 ? item.metrics[item.metrics.length - 2] : null;
+    return [
+      { label: 'Clicks', value: item?.clicks ?? snapshot?.channel.clicks ?? 0, delta: item && previous ? item.clicks - previous.clicks : null, detail: item ? 'Selected post clicks' : 'Imported report clicks' },
+      { label: 'Views', value: item?.views ?? snapshot?.channel.views ?? 0, delta: item && previous ? item.views - previous.views : null, detail: item ? 'Selected post views' : 'Imported impressions or reach' },
+      { label: 'Likes', value: item?.likes ?? 0, delta: item && previous ? item.likes - previous.likes : null, detail: 'Reactions mapped to likes' },
+      { label: 'Comments', value: item?.comments ?? 0, delta: item && previous ? item.comments - previous.comments : null, detail: 'Selected post comments' },
+      { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Only if present in report' },
+      { label: 'Posts', value: snapshot?.channel.postCount ?? snapshot?.posts.length ?? 0, delta: null, detail: 'Imported Facebook posts' },
     ];
   });
   readonly selectedContentMeta = computed(() =>
@@ -629,6 +649,28 @@ export class SocialAccountsPage {
     });
   }
 
+  async onFacebookReportSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+    await this.importFacebookReport(file);
+  }
+
+  async importFacebookReport(file: File): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('Facebook report import is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.facebookImportReport(file);
+      await this.load();
+      this.selectedAccountId.set(result.accountId);
+      this.setContentPlatformForAccount(this.selectedAccount());
+      await Promise.all([this.loadStoredFacebookPosts(result.accountId), this.loadFetchLogs(false)]);
+      this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'facebook']));
+      this.selectedMetric.set('views');
+      this.showNotice(`Imported ${result.postsImported} Facebook posts: ${result.viewsImported.toLocaleString()} views, ${result.likesImported.toLocaleString()} likes, ${result.commentsImported.toLocaleString()} comments.`);
+    });
+  }
+
   async loadStoredYouTubeVideos(): Promise<void> {
     try {
       const snapshot = await this.api.youtubeStoredVideos();
@@ -662,6 +704,17 @@ export class SocialAccountsPage {
     }
   }
 
+  async loadStoredFacebookPosts(accountId: number | null = this.selectedAccount()?.id ?? null): Promise<void> {
+    try {
+      const snapshot = await this.api.facebookPosts(accountId);
+      this.facebookSnapshot.set(snapshot);
+      this.selectedFacebookPostId.set(snapshot.posts[0]?.id ?? null);
+    } catch {
+      this.facebookSnapshot.set(null);
+      this.selectedFacebookPostId.set(null);
+    }
+  }
+
   selectYouTubeVideo(videoId: string): void {
     this.selectedYouTubeVideoId.set(videoId);
   }
@@ -672,6 +725,10 @@ export class SocialAccountsPage {
 
   selectInstagramPost(itemId: string): void {
     this.selectedInstagramPostId.set(itemId);
+  }
+
+  selectFacebookPost(itemId: string): void {
+    this.selectedFacebookPostId.set(itemId);
   }
 
   async selectAccount(account: SocialAccount): Promise<void> {
@@ -828,6 +885,10 @@ export class SocialAccountsPage {
     }
     if (account.platform === 'instagram') {
       await this.loadStoredInstagramPosts(account.id);
+      return;
+    }
+    if (account.platform === 'facebook') {
+      await this.loadStoredFacebookPosts(account.id);
       return;
     }
   }

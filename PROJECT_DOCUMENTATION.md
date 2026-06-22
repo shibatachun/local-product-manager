@@ -186,6 +186,7 @@ Current integrations:
 - YouTube OAuth and API fetch
 - Pinterest CSV report import
 - Instagram CSV report import
+- Facebook CSV report import
 - Demo data removed
 - Manual/API placeholders for other platforms
 
@@ -329,6 +330,11 @@ Instagram:
 - `POST /api/instagram/report/import`
 - `GET /api/instagram/posts`
 
+Facebook:
+
+- `POST /api/facebook/report/import`
+- `GET /api/facebook/posts`
+
 Metric model:
 
 - Account-level snapshots store clicks, views, likes, comments, shares, followers, and snapshot date.
@@ -336,6 +342,7 @@ Metric model:
 - YouTube totals are treated as fetched total snapshots.
 - Instagram report rows are imported as total/lifetime snapshots from the CSV.
 - Pinterest report rows are mapped from impressions/clicks/engagement data according to the report format.
+- Facebook report rows map impressions/views/reach to views, reactions/likes to likes, post/link clicks to clicks, and comments/shares to their matching fields.
 
 ## 11. AI analysis
 

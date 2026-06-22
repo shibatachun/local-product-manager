@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -115,6 +115,17 @@ export class SocialApiService {
   instagramPosts(accountId?: number | null): Promise<InstagramContentSnapshot> {
     const query = accountId ? `?accountId=${accountId}` : '';
     return firstValueFrom(this.http.get<InstagramContentSnapshot>(`${this.baseUrl}/instagram/posts${query}`));
+  }
+
+  facebookImportReport(file: File): Promise<FacebookReportImportResult> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<FacebookReportImportResult>(`${this.baseUrl}/facebook/report/import`, data));
+  }
+
+  facebookPosts(accountId?: number | null): Promise<FacebookContentSnapshot> {
+    const query = accountId ? `?accountId=${accountId}` : '';
+    return firstValueFrom(this.http.get<FacebookContentSnapshot>(`${this.baseUrl}/facebook/posts${query}`));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {

@@ -139,6 +139,7 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .pin-kind { display:grid; place-items:center; width:84px; aspect-ratio:16/9; border-radius:5px; color:#fff; background:#bd081c; font-size:12px; font-weight:850; }
 .board-summary-list{display:grid;gap:7px;margin-bottom:10px;padding:10px;border:1px solid #e1e6ea;border-radius:7px;background:#fbfcfd}.board-summary-list>strong{font-size:12px}.board-summary-list a{display:grid;grid-template-columns:52px minmax(0,1fr);gap:9px;align-items:center;color:#17212b;text-decoration:none}.board-summary-list .pin-kind{width:52px}.board-summary-list b,.board-summary-list small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.board-summary-list small{margin-top:3px;color:#73808a;font-size:11px}
 .instagram-kind { display:grid; place-items:center; width:84px; aspect-ratio:16/9; border-radius:5px; color:#fff; background:#c13584; font-size:12px; font-weight:850; }
+.facebook-kind { display:grid; place-items:center; width:84px; aspect-ratio:16/9; border-radius:5px; color:#fff; background:#1877f2; font-size:12px; font-weight:850; }
 .video-list strong,.video-list small,.video-list em { display:block; overflow:hidden; text-overflow:ellipsis; }
 .video-list strong { color:#17212b; font-size:13px; line-height:1.25; }
 .video-list small { margin-top:5px; color:#73818c; font-size:11px; white-space:nowrap; }
@@ -149,6 +150,7 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .video-detail img { width:180px; aspect-ratio:16/9; border-radius:6px; object-fit:cover; background:#dce2e7; }
 .pin-detail-mark { display:grid; place-items:center; width:180px; aspect-ratio:16/9; border-radius:6px; color:#fff; background:#bd081c; font-size:20px; font-weight:850; }
 .instagram-detail-mark { display:grid; place-items:center; width:180px; aspect-ratio:16/9; border-radius:6px; color:#fff; background:#c13584; font-size:20px; font-weight:850; }
+.facebook-detail-mark { display:grid; place-items:center; width:180px; aspect-ratio:16/9; border-radius:6px; color:#fff; background:#1877f2; font-size:20px; font-weight:850; }
 .video-detail h3 { margin:0; font-size:17px; line-height:1.3; }
 .video-detail p { margin:7px 0 12px; color:#73818c; font-size:12px; }
 .video-detail a { display:inline-flex; align-items:center; min-height:34px; padding:0 11px; border:1px solid #cbd4da; border-radius:6px; color:#334e68; background:#fff; text-decoration:none; font-size:12px; font-weight:800; }
