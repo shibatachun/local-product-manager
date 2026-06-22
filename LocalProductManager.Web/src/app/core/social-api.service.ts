@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -142,6 +142,14 @@ export class SocialApiService {
 
   aiAnalysisReports(limit = 20): Promise<SocialAiAnalysisReport[]> {
     return firstValueFrom(this.http.get<SocialAiAnalysisReport[]>(`${this.baseUrl}/social-ai-analysis/reports?limit=${limit}`));
+  }
+
+  aiAnalysisReportContent(fileName: string): Promise<SocialAiAnalysisReportContent> {
+    return firstValueFrom(this.http.get<SocialAiAnalysisReportContent>(`${this.baseUrl}/social-ai-analysis/reports/${encodeURIComponent(fileName)}`));
+  }
+
+  aiAnalysisReportDownloadUrl(fileName: string): string {
+    return `${this.baseUrl}/social-ai-analysis/reports/${encodeURIComponent(fileName)}/download`;
   }
 
   runAiAnalysis(period: 'daily' | 'weekly', date?: string): Promise<SocialAiAnalysisResult> {

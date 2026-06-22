@@ -336,6 +336,11 @@ export interface SocialAiAnalysisReport {
   preview: string;
 }
 
+export interface SocialAiAnalysisReportContent {
+  fileName: string;
+  content: string;
+}
+
 export interface YouTubeAuthStatus {
   isConfigured: boolean;
   isConnected: boolean;

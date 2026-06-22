@@ -80,6 +80,27 @@ public sealed class SocialAiAnalysisService(
         return result;
     }
 
+    public async Task<SocialAiAnalysisReportContentDto?> GetReportContentAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var path = ResolveReportPath(fileName);
+        if (path is null || !File.Exists(path))
+        {
+            return null;
+        }
+
+        return new SocialAiAnalysisReportContentDto(
+            Path.GetFileName(path),
+            await File.ReadAllTextAsync(path, cancellationToken));
+    }
+
+    public string? GetReportPathForDownload(string fileName)
+    {
+        var path = ResolveReportPath(fileName);
+        return path is not null && File.Exists(path) ? path : null;
+    }
+
     private async Task<string> BuildPromptAsync(
         string period,
         DateOnly from,
@@ -263,6 +284,22 @@ public sealed class SocialAiAnalysisService(
             : text.Trim();
         body = body.Replace("\r", "").Trim();
         return body.Length <= 360 ? body : body[..360] + "...";
+    }
+
+    private string? ResolveReportPath(string fileName)
+    {
+        var safeName = Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safeName) ||
+            !safeName.StartsWith("social-ai-", StringComparison.OrdinalIgnoreCase) ||
+            !safeName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        Directory.CreateDirectory(reportDirectory);
+        var root = Path.GetFullPath(reportDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(Path.Combine(root, safeName));
+        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path : null;
     }
 
     private sealed record GeminiGenerateRequest(IReadOnlyList<GeminiContent> Contents);

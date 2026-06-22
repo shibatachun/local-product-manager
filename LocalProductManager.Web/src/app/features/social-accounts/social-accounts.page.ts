@@ -40,9 +40,10 @@ export class SocialAccountsPage {
   readonly socialDebug = signal<SocialDebugSnapshot | null>(null);
   readonly aiStatus = signal<SocialAiAnalysisStatus | null>(null);
   readonly aiReports = signal<SocialAiAnalysisReport[]>([]);
+  readonly selectedAiReport = signal<{ fileName: string; content: string } | null>(null);
   readonly logsOpen = signal(false);
   readonly debugOpen = signal(false);
-  readonly aiPanelOpen = signal(false);
+  readonly aiPanelOpen = signal(true);
   readonly appVersion = 'chart-metric-key-fix-v1';
   readonly today = this.toDateInput(new Date());
   readonly runningOnLanHost = !['localhost', '127.0.0.1', ''].includes(globalThis.location?.hostname || '');
@@ -297,7 +298,7 @@ export class SocialAccountsPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus(), this.loadAiAnalysisStatus()]);
+    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus(), this.loadAiAnalysisStatus(), this.loadAiReports(false)]);
     await this.loadSelectedAccountContent();
   }
 
@@ -456,12 +457,26 @@ export class SocialAccountsPage {
   }
 
   async loadAiReports(showNotice = true): Promise<void> {
-    if (!this.canManageSocial()) return;
     await this.perform(async () => {
       this.aiReports.set(await this.api.aiAnalysisReports());
       this.aiPanelOpen.set(true);
       if (showNotice) this.showNotice('AI analysis reports loaded.');
     });
+  }
+
+  async openAiReport(report: SocialAiAnalysisReport): Promise<void> {
+    await this.perform(async () => {
+      const content = await this.api.aiAnalysisReportContent(report.fileName);
+      this.selectedAiReport.set(content);
+    });
+  }
+
+  closeAiReport(): void {
+    this.selectedAiReport.set(null);
+  }
+
+  aiReportDownloadUrl(report: { fileName: string }): string {
+    return this.api.aiAnalysisReportDownloadUrl(report.fileName);
   }
 
   async runAiAnalysis(): Promise<void> {

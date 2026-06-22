@@ -19,8 +19,25 @@ public sealed class SocialAiAnalysisController(
         [FromQuery] int limit,
         CancellationToken cancellationToken)
     {
-        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
         return Ok(await analysis.GetRecentReportsAsync(limit <= 0 ? 20 : limit, cancellationToken));
+    }
+
+    [HttpGet("reports/{fileName}")]
+    public async Task<ActionResult<SocialAiAnalysisReportContentDto>> ReportContent(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var report = await analysis.GetReportContentAsync(fileName, cancellationToken);
+        return report is null ? NotFound("AI analysis report was not found.") : Ok(report);
+    }
+
+    [HttpGet("reports/{fileName}/download")]
+    public IActionResult DownloadReport(string fileName)
+    {
+        var path = analysis.GetReportPathForDownload(fileName);
+        return path is null
+            ? NotFound("AI analysis report was not found.")
+            : PhysicalFile(path, "text/markdown; charset=utf-8", Path.GetFileName(path));
     }
 
     [HttpPost("run")]

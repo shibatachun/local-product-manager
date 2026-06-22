@@ -27,3 +27,7 @@ public sealed record SocialAiAnalysisReportDto(
     DateOnly To,
     DateTimeOffset GeneratedAt,
     string Preview);
+
+public sealed record SocialAiAnalysisReportContentDto(
+    string FileName,
+    string Content);

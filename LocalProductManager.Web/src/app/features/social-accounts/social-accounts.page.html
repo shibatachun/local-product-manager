@@ -9,7 +9,7 @@
       <a routerLink="/">Product manager</a>
       <button type="button" *ngIf="canManageSocial()" (click)="loadFetchLogs()">Fetch logs</button>
       <button type="button" *ngIf="canManageSocial()" (click)="loadSocialDebug()">Debug data</button>
-      <button type="button" *ngIf="canManageSocial()" (click)="loadAiReports()">AI analysis</button>
+      <button type="button" (click)="loadAiReports()">AI analysis</button>
       <button type="button" *ngIf="canManageSocial()" (click)="sync()">Sync API</button>
     </nav>
   </header>
@@ -192,7 +192,7 @@
           </g>
         </ng-container>
       </svg>
-      <div class="ai-analysis-panel" *ngIf="aiPanelOpen() && canManageSocial()">
+      <div class="ai-analysis-panel" *ngIf="aiPanelOpen()">
         <div class="section-heading">
           <div>
             <h2>AI analysis</h2>
@@ -200,7 +200,7 @@
           </div>
           <button type="button" (click)="loadAiReports(false)">Refresh</button>
         </div>
-        <div class="ai-runner">
+        <div class="ai-runner" *ngIf="canManageSocial(); else aiReadonlyNote">
           <label>Period
             <select [(ngModel)]="aiForm.period">
               <option value="daily">Daily</option>
@@ -213,14 +213,23 @@
           <button class="primary" type="button" (click)="runAiAnalysis()" [disabled]="!aiStatus()?.isConfigured || loading()">Run Gemini analysis</button>
           <code>{{ aiStatus()?.reportDirectory }}</code>
         </div>
+        <ng-template #aiReadonlyNote>
+          <p class="ai-readonly-note">AI reports are read-only on this computer. The host admin generates daily and weekly reports.</p>
+        </ng-template>
         <div class="ai-report-list">
           <article *ngFor="let report of aiReports()">
-            <div>
-              <strong>{{ report.period }} · {{ report.from }} to {{ report.to }}</strong>
-              <small>{{ report.fileName }} · {{ report.generatedAt | date:'MMM d, y, h:mm a' }}</small>
+            <div class="ai-report-row">
+              <div>
+                <strong>{{ report.period }} · {{ report.from }} to {{ report.to }}</strong>
+                <small>{{ report.fileName }} · {{ report.generatedAt | date:'MMM d, y, h:mm a' }}</small>
+              </div>
+              <div class="ai-report-actions">
+                <button type="button" title="Open report" (click)="openAiReport(report)">O</button>
+                <a title="Download report" [href]="aiReportDownloadUrl(report)" download>D</a>
+              </div>
             </div>
             <p>{{ report.preview }}</p>
-            <code>{{ report.path }}</code>
+            <code *ngIf="canManageSocial()">{{ report.path }}</code>
           </article>
           <p class="ai-empty" *ngIf="!aiReports().length">No AI reports saved yet.</p>
         </div>
@@ -559,6 +568,22 @@
       </div>
     </section>
   </main>
+
+  <div class="report-modal-backdrop" *ngIf="selectedAiReport() as report" (click)="closeAiReport()">
+    <section class="report-modal" (click)="$event.stopPropagation()">
+      <header>
+        <div>
+          <h2>{{ report.fileName }}</h2>
+          <p>Saved AI social analysis report.</p>
+        </div>
+        <div class="ai-report-actions">
+          <a title="Download report" [href]="aiReportDownloadUrl(report)" download>D</a>
+          <button type="button" title="Close" (click)="closeAiReport()">X</button>
+        </div>
+      </header>
+      <pre>{{ report.content }}</pre>
+    </section>
+  </div>
 </div>
 
 <div class="toast" *ngIf="notice()">{{ notice() }}</div>

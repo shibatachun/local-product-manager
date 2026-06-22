@@ -92,13 +92,26 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .ai-runner button { min-height:34px; padding:0 11px; border:1px solid #176b87; border-radius:6px; color:#fff; background:#176b87; font-weight:800; }
 .ai-runner button:disabled { cursor:default; opacity:.48; }
 .ai-runner code { overflow:hidden; align-self:center; color:#667681; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.ai-readonly-note { margin:0 0 10px; padding:10px 12px; border:1px solid #dfe7ec; border-radius:7px; background:#f7fafb; color:#5f6f7b; font-size:12px; }
 .ai-report-list { display:grid; gap:8px; max-height:310px; overflow:auto; }
 .ai-report-list article { display:grid; gap:8px; padding:12px; border:1px solid #e1e7eb; border-radius:7px; background:#fafbfc; }
+.ai-report-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:start; }
+.ai-report-actions { display:flex; gap:6px; align-items:center; }
+.ai-report-actions button,
+.ai-report-actions a { display:inline-grid; place-items:center; width:32px; height:32px; border:1px solid #cbd4da; border-radius:6px; background:#fff; color:#1f2d38; font-size:12px; font-weight:850; line-height:1; text-decoration:none; cursor:pointer; }
+.ai-report-actions button:hover,
+.ai-report-actions a:hover { border-color:#3d718b; color:#2f6f8d; }
 .ai-report-list strong,.ai-report-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ai-report-list small { margin-top:3px; color:#73818c; font-size:11px; }
 .ai-report-list p { margin:0; color:#465662; font-size:12px; line-height:1.45; }
 .ai-report-list code { overflow:hidden; color:#74818b; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
 .ai-empty { margin:0; padding:16px; color:#84919b; text-align:center; }
+.report-modal-backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:24px; background:rgba(15, 23, 32, .42); }
+.report-modal { display:grid; grid-template-rows:auto minmax(0, 1fr); width:min(980px, 94vw); max-height:86vh; border:1px solid #d5dde2; border-radius:8px; background:#fff; box-shadow:0 18px 50px rgba(11, 22, 32, .22); overflow:hidden; }
+.report-modal header { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:center; padding:16px 18px; border-bottom:1px solid #e1e7eb; }
+.report-modal h2 { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:18px; }
+.report-modal p { margin:4px 0 0; color:#73818c; font-size:12px; }
+.report-modal pre { margin:0; padding:18px; overflow:auto; background:#fbfcfd; color:#1d2a35; font:12px/1.6 Consolas, "SFMono-Regular", Menlo, monospace; white-space:pre-wrap; }
 .fetch-log-panel { margin-top:14px; padding-top:14px; border-top:1px solid #e2e8ec; }
 .fetch-log-panel .section-heading button { min-height:32px; padding:0 10px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-size:12px; font-weight:750; }
 .fetch-log-list { display:grid; gap:7px; max-height:210px; overflow:auto; }
