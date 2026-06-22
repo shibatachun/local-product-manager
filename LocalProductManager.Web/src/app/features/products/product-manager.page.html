@@ -445,19 +445,26 @@
       <div class="section-heading">
         <div><h3>Basic information</h3></div>
         <div class="section-actions">
-          <button type="button" (click)="loadDetailImageFolder()" [disabled]="!editForm.imagePath || loading()">Load folder</button>
-          <button type="button" (click)="useListingImage()" [disabled]="!canUseListingImage() || loading()">Use listing image</button>
           <button type="button" (click)="updateProduct()">Save</button>
         </div>
       </div>
       <div class="detail-image-panel">
         <div class="detail-image-toolbar">
           <span><strong>Product images</strong><small>{{ detailMatchedImages().length ? detailMatchedImages().length + ' image(s) loaded' : 'Load a folder to show every image for this product.' }}</small></span>
-          <div>
-            <button *ngIf="product.imagePath" (click)="copyImage(product.id)">Copy image</button>
-            <button *ngIf="product.imagePath" (click)="copyImageLink(product.id)">Copy link</button>
-            <a *ngIf="product.imagePath" [href]="productImageUrl(product.id, true)">Download</a>
-          </div>
+        </div>
+        <div class="form-grid">
+          <label>Online product page
+            <span class="input-action">
+              <input [(ngModel)]="detailImageForm.onlineUrl" placeholder="Amazon, Walmart, eBay, Etsy, Shopify, or product page URL" />
+              <button type="button" (click)="loadDetailOnlineImage()" [disabled]="!detailImageForm.onlineUrl.trim() || loading()">Load online image</button>
+            </span>
+          </label>
+          <label>Local image folder
+            <span class="input-action">
+              <input [(ngModel)]="detailImageForm.folder" placeholder="C:\ProductImages\SKU or \\SERVER\share\SKU" />
+              <button type="button" (click)="loadDetailImageFolder()" [disabled]="!detailImageForm.folder.trim() || loading()">Load local folder</button>
+            </span>
+          </label>
         </div>
         <div class="detail-image-strip">
           <a class="detail-image-card" *ngFor="let path of detailMatchedImages()" [class.selected]="editForm.imagePath === path" [href]="fileLocationUrl(path)" target="_blank" rel="noreferrer" [title]="path">
@@ -467,7 +474,7 @@
           </a>
           <div class="detail-image-empty" *ngIf="!detailMatchedImages().length">
             <strong>No folder images loaded</strong>
-            <small>Enter or keep an image path, then click Load folder.</small>
+            <small>Use one of the two image loaders above.</small>
           </div>
         </div>
       </div>

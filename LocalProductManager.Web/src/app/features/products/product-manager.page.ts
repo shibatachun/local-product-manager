@@ -304,6 +304,10 @@ export class ProductManagerPage {
     height: null as number | null,
     imagePath: ''
   };
+  readonly detailImageForm = {
+    onlineUrl: '',
+    folder: ''
+  };
   readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
   readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
@@ -940,6 +944,7 @@ export class ProductManagerPage {
       this.editForm.height = product.height;
       this.editForm.imagePath = product.imagePath ?? '';
       this.syncListingDrafts(product);
+      this.syncDetailImageForm(product);
       this.detailOpen.set(true);
       this.detailMatchedImages.set(product.imagePath ? [product.imagePath] : []);
       this.syncDetailPricing(product);
@@ -1023,33 +1028,34 @@ export class ProductManagerPage {
     });
   }
 
-  async useListingImage(): Promise<void> {
+  async loadDetailOnlineImage(): Promise<void> {
     const product = this.selectedProduct();
     if (!product) return;
-    const platform = this.firstListingPlatformWithUrl();
-    const listingUrl = platform ? this.listingDrafts[platform] : null;
+    const listingUrl = this.detailImageForm.onlineUrl.trim() || this.firstListingUrlWithValue();
+    if (!listingUrl) return this.showNotice('Enter a product page URL first.');
+    const platform = this.platformFromUrl(listingUrl) ?? this.firstListingPlatformWithUrl();
 
     await this.perform(async () => {
-      const result = await this.api.useListingImage(product.id, listingUrl || null, platform);
+      const result = await this.api.useListingImage(product.id, listingUrl, platform);
       this.editForm.imagePath = result.imageUrl;
       this.detailMatchedImages.set([result.imageUrl]);
       await this.refreshSelected(product.id);
-      this.showNotice('Listing image connected.');
+      this.showNotice('Online image loaded.');
     });
-  }
-
-  canUseListingImage(): boolean {
-    return this.listingOptions.some(option => !!this.listingDrafts[option.value]?.trim());
   }
 
   async loadDetailImageFolder(): Promise<void> {
     const product = this.selectedProduct();
-    const folder = this.folderFromPath(this.editForm.imagePath || product?.imagePath || '');
-    if (!product || !folder) return this.showNotice('Enter an image path first.');
+    const fallbackFolder = this.isRemotePath(this.editForm.imagePath || product?.imagePath || '')
+      ? ''
+      : this.folderFromPath(this.editForm.imagePath || product?.imagePath || '');
+    const folder = this.detailImageForm.folder.trim() || fallbackFolder;
+    if (!product || !folder) return this.showNotice('Enter a local or network image folder first.');
 
     await this.perform(async () => {
       const result = await this.api.matchImages(product.sku, folder, 'folder');
       this.detailMatchedImages.set(result.matchedImages);
+      this.detailImageForm.folder = folder;
       if (!this.editForm.imagePath && result.matchedImages[0]) this.editForm.imagePath = result.matchedImages[0];
       this.showNotice(`${result.matchedImages.length} image(s) loaded from the product folder.`);
     });
@@ -1473,10 +1479,11 @@ export class ProductManagerPage {
     const product = await this.api.getProduct(id);
     this.selectedProduct.set(product);
     this.editForm.imagePath = product.imagePath ?? '';
+    this.syncListingDrafts(product);
+    this.syncDetailImageForm(product, false);
     if (product.imagePath && !this.detailMatchedImages().includes(product.imagePath)) {
       this.detailMatchedImages.update(images => [product.imagePath!, ...images]);
     }
-    this.syncListingDrafts(product);
     await this.loadProducts();
     if (this.view() === 'marketing') {
       await this.loadMarketingProducts();
@@ -1491,6 +1498,33 @@ export class ProductManagerPage {
 
   private firstListingPlatformWithUrl(): Platform | null {
     return this.listingOptions.find(option => !!this.listingDrafts[option.value]?.trim())?.value ?? null;
+  }
+
+  private firstListingUrlWithValue(): string {
+    const platform = this.firstListingPlatformWithUrl();
+    return platform ? this.listingDrafts[platform].trim() : '';
+  }
+
+  private syncDetailImageForm(product: ProductDetail, overwrite = true): void {
+    const firstListingUrl = this.firstListingUrlWithValue();
+    if (overwrite || !this.detailImageForm.onlineUrl) {
+      this.detailImageForm.onlineUrl = firstListingUrl || (product.imageSource === 'remote' ? product.imagePath ?? '' : '');
+    }
+    if (overwrite || !this.detailImageForm.folder) {
+      this.detailImageForm.folder = product.imagePath && product.imageSource !== 'remote'
+        ? this.folderFromPath(product.imagePath)
+        : '';
+    }
+  }
+
+  private platformFromUrl(url: string): Platform | null {
+    const value = url.toLowerCase();
+    if (value.includes('amazon.')) return 'amazon';
+    if (value.includes('walmart.')) return 'walmart';
+    if (value.includes('ebay.')) return 'ebay';
+    if (value.includes('etsy.')) return 'etsy';
+    if (value.includes('shopify.') || value.includes('myshopify.')) return 'shopify';
+    return null;
   }
 
   private syncDetailPricing(product: ProductDetail): void {
@@ -1543,8 +1577,12 @@ export class ProductManagerPage {
     return lastSlash > 2 ? normalized.slice(0, lastSlash) : normalized;
   }
 
+  private isRemotePath(path: string): boolean {
+    return /^https?:\/\//i.test(path.trim());
+  }
+
   private imageSourceFor(path: string): 'local' | 'remote' {
-    return /^https?:\/\//i.test(path.trim()) ? 'remote' : 'local';
+    return this.isRemotePath(path) ? 'remote' : 'local';
   }
 
   private async perform(action: () => Promise<void>, showErrors = true): Promise<void> {
