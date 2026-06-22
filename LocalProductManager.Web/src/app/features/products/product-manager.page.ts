@@ -281,7 +281,6 @@ export class ProductManagerPage {
     imagePath: '',
     imageFolder: '',
     listingImageUrl: '',
-    imageMatchMode: 'folder' as 'folder' | 'sku',
   };
   readonly platformChoices: PlatformChoice[] = [
     { platform: 'amazon', label: 'Amazon', selected: false, url: '' },
@@ -545,10 +544,6 @@ export class ProductManagerPage {
     } catch {
       this.imageStorageRoots.set([]);
     }
-  }
-
-  selectImageRoot(path: string): void {
-    if (path) this.createForm.imageFolder = path;
   }
 
   selectImageHostRoot(path: string): void {
@@ -875,26 +870,21 @@ export class ProductManagerPage {
     this.wizardStep.update((step) => Math.max(1, step - 1));
   }
 
-  async autoMatchImages(): Promise<void> {
-    const folder = this.createForm.imageFolder.trim() || this.folderFromPath(this.createForm.imagePath);
-    if (!folder) return this.showNotice('Enter a product image folder first.');
-    if (this.createForm.imageMatchMode === 'sku' && !this.createForm.sku.trim()) {
-      return this.showNotice('Enter a SKU before searching images by SKU.');
+  async loadCreateLocalImage(): Promise<void> {
+    const path = this.createForm.imageFolder.trim() || this.createForm.imagePath.trim();
+    if (!path) return this.showNotice('Enter a local image folder or image path first.');
+    if (this.isImagePath(path)) {
+      this.createForm.imagePath = path;
+      this.matchedImages.set([path]);
+      this.showNotice('Local image selected.');
+      return;
     }
 
     await this.perform(async () => {
-      const result = await this.api.matchImages(
-        this.createForm.sku,
-        folder,
-        this.createForm.imageMatchMode,
-      );
+      const result = await this.api.matchImages(this.createForm.sku, path, 'folder');
       this.matchedImages.set(result.matchedImages);
       if (result.matchedImages[0]) this.createForm.imagePath = result.matchedImages[0];
-      this.showNotice(
-        this.createForm.imageMatchMode === 'folder'
-          ? `${result.matchedImages.length} image(s) loaded from the product folder.`
-          : `${result.matchedImages.length} image(s) containing SKU "${this.createForm.sku}" found.`,
-      );
+      this.showNotice(`${result.matchedImages.length} image(s) loaded from the local folder.`);
     });
   }
 
@@ -1600,7 +1590,6 @@ export class ProductManagerPage {
       imagePath: '',
       imageFolder: '',
       listingImageUrl: '',
-      imageMatchMode: 'folder',
     });
     for (const item of this.platformChoices) {
       item.selected = false;
@@ -1619,6 +1608,10 @@ export class ProductManagerPage {
 
   private isRemotePath(path: string): boolean {
     return /^https?:\/\//i.test(path.trim());
+  }
+
+  private isImagePath(path: string): boolean {
+    return /\.(avif|bmp|gif|jpe?g|png|webp)$/i.test(path.trim().split(/[?#]/)[0]);
   }
 
   private imageSourceFor(path: string): 'local' | 'remote' {

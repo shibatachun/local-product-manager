@@ -387,24 +387,8 @@
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
       <label>Height<input type="number" step="0.01" [(ngModel)]="createForm.height" placeholder="0.00" /></label>
-      <label>Image folder<input [(ngModel)]="createForm.imageFolder" placeholder="\\IMAGE-PC\ProductImages" /></label>
-      <label>Configured image root
-        <select [ngModel]="''" (ngModelChange)="selectImageRoot($event)">
-          <option value="">Choose a configured root</option>
-          <option *ngFor="let root of imageStorageRoots()" [value]="root.path" [disabled]="!root.available">{{ root.path }}{{ root.available ? '' : ' (unavailable)' }}</option>
-        </select>
-      </label>
-      <div class="wide image-mode-field">
-        <span>Image selection method</span>
-        <div class="segmented">
-          <button type="button" [class.active]="createForm.imageMatchMode === 'folder'" (click)="createForm.imageMatchMode = 'folder'">Product folder</button>
-          <button type="button" [class.active]="createForm.imageMatchMode === 'sku'" (click)="createForm.imageMatchMode = 'sku'">Search by SKU</button>
-        </div>
-        <small *ngIf="createForm.imageMatchMode === 'folder'">Every image directly inside this folder will be shown.</small>
-        <small *ngIf="createForm.imageMatchMode === 'sku'">Only images whose file name contains the complete SKU will be shown.</small>
-      </div>
-      <label class="wide">Website product page<span class="input-action"><input [(ngModel)]="createForm.listingImageUrl" placeholder="Amazon, Walmart, eBay, Etsy, or another product page URL" /><button (click)="fetchCreateListingImage()">Find website image</button></span></label>
-      <label class="wide">Product image path<span class="input-action"><input [(ngModel)]="createForm.imagePath" placeholder="Select a result or enter a path" /><button (click)="autoMatchImages()">{{ createForm.imageMatchMode === 'folder' ? 'Load folder' : 'Find by SKU' }}</button></span></label>
+      <label class="wide">Online product page<span class="input-action"><input [(ngModel)]="createForm.listingImageUrl" placeholder="Amazon, Walmart, eBay, Etsy, Shopify, or product page URL" /><button type="button" (click)="fetchCreateListingImage()">Load online image</button></span></label>
+      <label class="wide">Local folder / image<span class="input-action"><input [(ngModel)]="createForm.imageFolder" placeholder="C:\ProductImages\SKU, \\SERVER\share\SKU, or direct image path" /><button type="button" (click)="loadCreateLocalImage()">Load local</button></span></label>
     </div>
     <div class="image-results" *ngIf="matchedImages().length">
       <button *ngFor="let path of matchedImages()" [class.selected]="createForm.imagePath === path" (click)="chooseMatchedImage(path)">
