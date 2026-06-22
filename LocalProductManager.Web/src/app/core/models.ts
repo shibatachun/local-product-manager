@@ -1,4 +1,4 @@
-export type Platform = 'amazon' | 'walmart' | 'ebay' | 'etsy';
+export type Platform = 'amazon' | 'walmart' | 'ebay' | 'etsy' | 'shopify';
 export type AttributionPlatform = 'pinterest' | 'facebook' | 'instagram' | 'tiktok' | 'youtube' | 'shopify';
 
 export interface CurrentUser {

@@ -502,7 +502,7 @@
       <div class="detail-pricing-grid">
         <label>Platform
           <select [ngModel]="detailPricingForm.platform" (ngModelChange)="onDetailPricingPlatformChanged($event)">
-            <option *ngFor="let option of listingOptions" [ngValue]="option.value">{{ option.label }}</option>
+            <option *ngFor="let option of pricingPlatformOptions" [ngValue]="option.value">{{ option.label }}</option>
           </select>
         </label>
         <label>Category

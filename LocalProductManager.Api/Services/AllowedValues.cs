@@ -7,7 +7,8 @@ public static class AllowedValues
         "amazon",
         "walmart",
         "ebay",
-        "etsy"
+        "etsy",
+        "shopify"
     };
 
     public static readonly HashSet<string> AmazonAsinTypes = new(StringComparer.OrdinalIgnoreCase)

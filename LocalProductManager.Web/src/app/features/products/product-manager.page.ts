@@ -23,6 +23,7 @@ import { VideoTrendPanelComponent } from './video-trend-panel.component';
 
 type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage' | 'videoTrend' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
+type PricingPlatform = Exclude<Platform, 'shopify'>;
 type AsinRelationshipRow = {
   parentAsin: string;
   childAsin: string;
@@ -38,7 +39,7 @@ interface PricingStep {
 }
 
 interface PricingEstimate {
-  platform: Platform;
+  platform: PricingPlatform;
   logistics: string;
   category: string;
   categoryRate: number;
@@ -86,7 +87,7 @@ interface PricingCategory {
 }
 
 interface PricingInput {
-  platform: Platform;
+  platform: PricingPlatform;
   category: string;
   logistics: string;
   quantity: number;
@@ -153,12 +154,14 @@ export class ProductManagerPage {
     { value: 'walmart', label: 'Walmart' },
     { value: 'ebay', label: 'eBay' },
     { value: 'etsy', label: 'Etsy' },
+    { value: 'shopify', label: 'Shopify' },
   ];
   readonly listingOptions: { value: Platform; label: string }[] = [
     { value: 'amazon', label: 'Amazon' },
     { value: 'walmart', label: 'Walmart' },
     { value: 'ebay', label: 'eBay' },
     { value: 'etsy', label: 'Etsy' },
+    { value: 'shopify', label: 'Shopify' },
   ];
   readonly attributionPlatforms: AttributionPlatform[] = ['pinterest', 'facebook', 'instagram', 'tiktok', 'youtube', 'shopify'];
   readonly marketingProductFilters: { value: MarketingProductFilter; label: string }[] = [
@@ -282,6 +285,7 @@ export class ProductManagerPage {
     { platform: 'walmart', label: 'Walmart', selected: false, url: '' },
     { platform: 'ebay', label: 'eBay', selected: false, url: '' },
     { platform: 'etsy', label: 'Etsy', selected: false, url: '' },
+    { platform: 'shopify', label: 'Shopify', selected: false, url: '' },
   ];
   readonly createAsin = {
     asin: '',
@@ -300,11 +304,11 @@ export class ProductManagerPage {
     height: null as number | null,
     imagePath: ''
   };
-  readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
-  readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '' };
+  readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
+  readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
   readonly pricingForm = {
-    platform: 'walmart' as Platform,
+    platform: 'walmart' as PricingPlatform,
     category: 'general',
     logistics: 'usps-ground',
     quantity: 1,
@@ -318,7 +322,7 @@ export class ProductManagerPage {
     bufferPercent: 5,
   };
   readonly detailPricingForm = {
-    platform: 'walmart' as Platform,
+    platform: 'walmart' as PricingPlatform,
     category: 'general',
     logistics: 'usps-ground',
     quantity: 1,
@@ -326,7 +330,7 @@ export class ProductManagerPage {
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
-  readonly pricingConfigs: Record<Platform, PricingPlatformConfig> = {
+  readonly pricingConfigs: Record<PricingPlatform, PricingPlatformConfig> = {
     walmart: {
       label: 'Walmart',
       defaultLogistics: 'usps-ground',
@@ -424,7 +428,12 @@ export class ProductManagerPage {
       ],
     },
   };
-  readonly pricingPlatformOptions = this.listingOptions;
+  readonly pricingPlatformOptions: { value: PricingPlatform; label: string }[] = [
+    { value: 'amazon', label: 'Amazon' },
+    { value: 'walmart', label: 'Walmart' },
+    { value: 'ebay', label: 'eBay' },
+    { value: 'etsy', label: 'Etsy' },
+  ];
   readonly pricingResult = signal<PricingEstimate | null>(null);
   readonly detailPricingResult = signal<PricingEstimate | null>(null);
 
@@ -605,7 +614,7 @@ export class ProductManagerPage {
     return labels[this.view()];
   }
 
-  onPricingPlatformChanged(platform: Platform): void {
+  onPricingPlatformChanged(platform: PricingPlatform): void {
     const config = this.pricingConfigs[platform];
     this.pricingForm.platform = platform;
     this.pricingForm.category = config.defaultCategory;
@@ -646,7 +655,7 @@ export class ProductManagerPage {
     return this.pricingConfigs[this.detailPricingForm.platform].categories;
   }
 
-  onDetailPricingPlatformChanged(platform: Platform): void {
+  onDetailPricingPlatformChanged(platform: PricingPlatform): void {
     const config = this.pricingConfigs[platform];
     this.detailPricingForm.platform = platform;
     this.detailPricingForm.category = this.selectedProduct()?.category || config.defaultCategory;
@@ -1475,7 +1484,7 @@ export class ProductManagerPage {
   }
 
   private syncListingDrafts(product: ProductDetail): void {
-    for (const platform of ['amazon', 'walmart', 'ebay', 'etsy'] as Platform[]) {
+    for (const platform of this.listingOptions.map((option) => option.value)) {
       this.listingDrafts[platform] = product.listings.find((item) => item.platform === platform)?.listingUrl ?? '';
     }
   }
@@ -1485,7 +1494,8 @@ export class ProductManagerPage {
   }
 
   private syncDetailPricing(product: ProductDetail): void {
-    const platform = (product.listings[0]?.platform ?? this.detailPricingForm.platform) as Platform;
+    const listingPlatform = product.listings.map((item) => item.platform).find((platform) => this.isPricingPlatform(platform));
+    const platform = listingPlatform ?? this.detailPricingForm.platform;
     const config = this.pricingConfigs[platform];
     this.detailPricingForm.platform = platform;
     this.detailPricingForm.category = product.category || config.defaultCategory;
@@ -1497,6 +1507,10 @@ export class ProductManagerPage {
     this.detailPricingForm.targetMarginPercent = config.marginPercent;
     this.detailPricingForm.bufferPercent = config.bufferPercent;
     this.detailPricingResult.set(null);
+  }
+
+  private isPricingPlatform(platform: Platform): platform is PricingPlatform {
+    return platform === 'amazon' || platform === 'walmart' || platform === 'ebay' || platform === 'etsy';
   }
 
   private resetWizard(): void {
