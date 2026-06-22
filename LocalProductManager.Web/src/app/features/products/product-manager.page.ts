@@ -61,8 +61,10 @@ interface LogisticsOption {
   label: string;
   note: string;
   dimDivisor: number;
-  tiers: { max: number; cost: number }[];
+  tiers: { max: number; cost: number; baseAbove?: number; perLb?: number }[];
   overflowPerLb: number;
+  weightPaddingLb?: number;
+  includePackagingReserve?: boolean;
 }
 
 interface PricingPlatformConfig {
@@ -337,14 +339,14 @@ export class ProductManagerPage {
   readonly pricingConfigs: Record<PricingPlatform, PricingPlatformConfig> = {
     walmart: {
       label: 'Walmart',
-      defaultLogistics: 'usps-ground',
+      defaultLogistics: 'walmart-wfs',
       defaultCategory: 'general',
       processingRate: 0.029,
       fixedFee: 0.3,
       listingFee: 0,
       marginPercent: 20,
       bufferPercent: 5,
-      note: 'Seller-fulfilled Walmart estimate with a general referral fee assumption.',
+      note: 'Walmart estimate defaults to WFS fulfillment plus a general referral fee assumption.',
       categories: [
         this.category('general', 'General merchandise', 0.15, 'Common Walmart Marketplace planning rate for many categories.'),
         this.category('apparel', 'Apparel and accessories', 0.15, 'Typical soft goods planning rate.'),
@@ -354,6 +356,23 @@ export class ProductManagerPage {
         this.category('media', 'Media, books, games', 0.15, 'General media planning rate.'),
       ],
       logistics: [
+        this.logistics(
+          'walmart-wfs',
+          'Walmart WFS',
+          'WFS fulfillment estimate. Adds 0.25 lb packaging weight, rounds up, and includes pick, pack, ship, support, and standard packaging. Storage, returns, peak, hazmat, apparel, oversize, and low-price surcharges are not included.',
+          139,
+          [
+            [1, 3.45],
+            [2, 4.95],
+            [3, 5.45],
+            { max: 20, cost: 5.75, baseAbove: 4, perLb: 0.4 },
+            { max: 30, cost: 15.55, baseAbove: 21, perLb: 0.4 },
+            { max: 50, cost: 14.55, baseAbove: 31, perLb: 0.4 },
+            { max: 500, cost: 17.55, baseAbove: 51, perLb: 0.4 },
+          ],
+          0.8,
+          { weightPaddingLb: 0.25, includePackagingReserve: false },
+        ),
         this.logistics('usps-ground', 'USPS Ground Advantage', 'Common light parcel option for seller-fulfilled orders.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
         this.logistics('ups-ground', 'UPS Ground', 'Useful for heavier boxes and commercial pickups.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
         this.logistics('fedex-ground', 'FedEx Ground', 'Similar ground parcel planning tier.', 139, [[1, 9.25], [5, 14.25], [10, 19.5], [20, 32.5], [40, 57]], 1.3),
@@ -1189,12 +1208,12 @@ export class ProductManagerPage {
     const length = Math.max(0, this.safeNumber(input.length));
     const width = Math.max(0, this.safeNumber(input.width));
     const height = Math.max(0, this.safeNumber(input.height));
-    const packaging = this.safeNumber(input.packagingCost);
+    const packaging = logistics.includePackagingReserve === false ? 0 : this.safeNumber(input.packagingCost);
     const marginRate = this.safePercent(input.targetMarginPercent);
     const bufferRate = this.safePercent(input.bufferPercent);
     const cubicInches = length * width * height;
     const dimensionalWeight = cubicInches > 0 ? cubicInches / logistics.dimDivisor : 0;
-    const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight)));
+    const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight) + (logistics.weightPaddingLb ?? 0)));
     const shippingCost = this.estimateLogisticsCost(billableWeight, logistics);
     const fixedCost = totalCost + shippingCost + packaging + config.fixedFee + config.listingFee;
     const breakEvenVariableRate = category.feeRate + config.processingRate + bufferRate;
@@ -1225,7 +1244,7 @@ export class ProductManagerPage {
         { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} unit cost x ${quantity} = ${this.currency(totalCost)} product cost.` },
         { label: 'Total weight', value: `${this.number(totalWeight)} lb`, note: `${this.number(unitWeight)} lb per unit x ${quantity}.` },
         { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / ${logistics.dimDivisor} = ${this.number(dimensionalWeight)} lb.` },
-        { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight, rounded up.` },
+        { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight${logistics.weightPaddingLb ? `, adds ${this.number(logistics.weightPaddingLb)} lb packaging weight` : ''}, then rounds up.` },
         { label: logistics.label, value: this.currency(shippingCost), note: logistics.note },
         { label: 'Packaging reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
         { label: `${config.label} category fee`, value: `${this.number(category.feeRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${category.note}` },
@@ -1238,7 +1257,7 @@ export class ProductManagerPage {
 
   private estimateLogisticsCost(weightLb: number, logistics: LogisticsOption): number {
     const tier = logistics.tiers.find((item) => weightLb <= item.max);
-    if (tier) return tier.cost;
+    if (tier) return tier.cost + Math.max(0, weightLb - (tier.baseAbove ?? tier.max)) * (tier.perLb ?? 0);
     const last = logistics.tiers[logistics.tiers.length - 1];
     return last.cost + (weightLb - last.max) * logistics.overflowPerLb;
   }
@@ -1248,10 +1267,19 @@ export class ProductManagerPage {
     label: string,
     note: string,
     dimDivisor: number,
-    tiers: [number, number][],
+    tiers: ([number, number] | { max: number; cost: number; baseAbove?: number; perLb?: number })[],
     overflowPerLb: number,
+    options: Pick<LogisticsOption, 'weightPaddingLb' | 'includePackagingReserve'> = {},
   ): LogisticsOption {
-    return { value, label, note, dimDivisor, tiers: tiers.map(([max, cost]) => ({ max, cost })), overflowPerLb };
+    return {
+      value,
+      label,
+      note,
+      dimDivisor,
+      tiers: tiers.map((tier) => Array.isArray(tier) ? { max: tier[0], cost: tier[1] } : tier),
+      overflowPerLb,
+      ...options,
+    };
   }
 
   private category(value: string, label: string, feeRate: number, note: string): PricingCategory {
