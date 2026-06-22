@@ -107,13 +107,17 @@ public sealed class PinterestReportImportService(AppDbContext db)
         var query = db.SocialAccounts
             .AsNoTracking()
             .Where(item => item.Platform == "pinterest");
+        SocialAccount? account = null;
         if (accountId.HasValue)
         {
-            query = query.Where(item => item.Id == accountId.Value);
+            account = await query
+                .FirstOrDefaultAsync(item => item.Id == accountId.Value, cancellationToken);
         }
 
-        var account = await query
-            .OrderByDescending(item => item.UpdatedAt)
+        account ??= await query
+            .OrderByDescending(item => db.SocialVideoMetricSnapshots.Any(row => row.SocialAccountId == item.Id))
+            .ThenByDescending(item => db.SocialMetricSnapshots.Any(row => row.SocialAccountId == item.Id))
+            .ThenByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.AccountName)
             .FirstOrDefaultAsync(cancellationToken);
         if (account is null)

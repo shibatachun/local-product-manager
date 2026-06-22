@@ -682,6 +682,11 @@ export class SocialAccountsPage {
 
   selectContentPlatform(platform: SocialPlatform): void {
     this.selectedContentPlatform.set(platform);
+    const account = this.preferredPlatformAccount(platform);
+    if (account && this.selectedAccountId() !== account.id) {
+      this.selectedAccountId.set(account.id);
+    }
+    void this.loadSelectedAccountContent();
   }
 
   platformPath(platform: SocialPlatform): string {
@@ -827,11 +832,22 @@ export class SocialAccountsPage {
   }
 
   private async selectConnectedPlatformAccount(platform: SocialPlatform): Promise<void> {
-    const account = this.accounts().find(item => item.platform === platform);
+    const account = this.preferredPlatformAccount(platform);
     if (!account) return;
     this.selectedAccountId.set(account.id);
     this.setContentPlatformForAccount(account);
     await this.loadSelectedAccountContent();
+  }
+
+  private preferredPlatformAccount(platform: SocialPlatform): SocialAccount | null {
+    const accounts = this.accounts().filter(item => item.platform === platform);
+    return accounts
+      .sort((left, right) =>
+        Number(right.metrics.length > 0) - Number(left.metrics.length > 0) ||
+        this.totalFor(right, this.selectedMetric()) - this.totalFor(left, this.selectedMetric()) ||
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+        left.accountName.localeCompare(right.accountName))
+      [0] ?? null;
   }
 
   private setContentPlatformForAccount(account: SocialAccount | null): void {
