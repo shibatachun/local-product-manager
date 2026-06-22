@@ -188,6 +188,12 @@
                 <p>Estimate listing prices from quantity, package size, platform fees, and typical shipping tiers.</p>
               </div>
             </div>
+            <div class="unit-converter">
+              <label>Inches to cm<input type="number" min="0" step="0.01" [(ngModel)]="unitConverter.inches" placeholder="in" /></label>
+              <strong>{{ unit((unitConverter.inches || 0) * 2.54) }} cm</strong>
+              <label>Ounces to lb / g<input type="number" min="0" step="0.01" [(ngModel)]="unitConverter.ounces" placeholder="oz" /></label>
+              <strong>{{ unit((unitConverter.ounces || 0) / 16) }} lb · {{ unit((unitConverter.ounces || 0) * 28.3495) }} g</strong>
+            </div>
             <div class="pricing-form">
               <label>Platform
                 <select [ngModel]="pricingForm.platform" (ngModelChange)="onPricingPlatformChanged($event)">

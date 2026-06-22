@@ -336,6 +336,10 @@ export class ProductManagerPage {
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
+  readonly unitConverter = {
+    inches: null as number | null,
+    ounces: null as number | null,
+  };
   readonly pricingConfigs: Record<PricingPlatform, PricingPlatformConfig> = {
     walmart: {
       label: 'Walmart',
@@ -1301,6 +1305,10 @@ export class ProductManagerPage {
 
   number(value: number): string {
     return this.safeNumber(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  unit(value: number): string {
+    return this.safeNumber(value).toLocaleString(undefined, { maximumFractionDigits: 4 });
   }
 
   asinRelationshipRows(product: ProductDetail): AsinRelationshipRow[] {
