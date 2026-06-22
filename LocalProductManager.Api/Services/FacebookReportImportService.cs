@@ -11,6 +11,53 @@ namespace LocalProductManager.Api.Services;
 
 public sealed class FacebookReportImportService(AppDbContext db)
 {
+    private static readonly string[] FacebookIdKeys =
+    [
+        "Video asset ID", "Universal video ID", "Post ID", "PostId", "ID"
+    ];
+
+    private static readonly string[] FacebookUrlKeys =
+    [
+        "Permalink", "Post permalink", "URL", "Post URL", "Link"
+    ];
+
+    private static readonly string[] FacebookViewKeys =
+    [
+        "3-second video views", "3-Second viewers", "Views", "Video views",
+        "Impressions", "Lifetime Post Total Impressions", "Lifetime Post total impressions",
+        "Reach", "Lifetime Post Total Reach"
+    ];
+
+    private static readonly string[] FacebookLikeKeys =
+    [
+        "Reactions", "Likes", "Lifetime Post Reactions", "Lifetime Post Stories by action type - like"
+    ];
+
+    private static readonly string[] FacebookCommentKeys =
+    [
+        "Comments", "Lifetime Post Comments", "Comment count"
+    ];
+
+    private static readonly string[] FacebookShareKeys =
+    [
+        "Shares", "Lifetime Post Shares", "Share count"
+    ];
+
+    private static readonly string[] FacebookClickKeys =
+    [
+        "Clicks", "Post clicks", "Lifetime Post Consumers", "Link clicks", "Other clicks"
+    ];
+
+    private static readonly string[] FacebookFollowerKeys =
+    [
+        "Follows", "Followers", "New followers", "Page follows"
+    ];
+
+    private static readonly string[] FacebookPublishedAtKeys =
+    [
+        "Posted", "Publish time", "Created", "Date", "Post date"
+    ];
+
     private static readonly Regex FacebookPostRegex = new(
         @"facebook\.com/(?:[^/]+/)?(?:posts|videos|reel|photo|permalink\.php|watch)/(?<id>[^/?#]+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -43,19 +90,12 @@ public sealed class FacebookReportImportService(AppDbContext db)
             new FacebookTotals(),
             (current, row) => current with
             {
-                Views = current.Views + ReadMetric(row, [
-                    "Impressions", "Lifetime Post Total Impressions", "Lifetime Post total impressions",
-                    "Views", "Reach", "Lifetime Post Total Reach"]),
-                Likes = current.Likes + ReadMetric(row, [
-                    "Likes", "Reactions", "Lifetime Post Reactions", "Lifetime Post Stories by action type - like"]),
-                Comments = current.Comments + ReadMetric(row, [
-                    "Comments", "Lifetime Post Comments", "Comment count"]),
-                Shares = current.Shares + ReadMetric(row, [
-                    "Shares", "Lifetime Post Shares", "Share count"]),
-                Clicks = current.Clicks + ReadMetric(row, [
-                    "Clicks", "Post clicks", "Lifetime Post Consumers", "Link clicks", "Other clicks"]),
-                Followers = current.Followers + ReadMetric(row, [
-                    "Follows", "Followers", "New followers", "Page follows"])
+                Views = current.Views + ReadMetric(row, FacebookViewKeys),
+                Likes = current.Likes + ReadMetric(row, FacebookLikeKeys),
+                Comments = current.Comments + ReadMetric(row, FacebookCommentKeys),
+                Shares = current.Shares + ReadMetric(row, FacebookShareKeys),
+                Clicks = current.Clicks + ReadMetric(row, FacebookClickKeys),
+                Followers = current.Followers + ReadMetric(row, FacebookFollowerKeys)
             });
 
         var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
@@ -233,8 +273,8 @@ public sealed class FacebookReportImportService(AppDbContext db)
         CancellationToken cancellationToken)
     {
         var id = NormalizeFacebookId(
-            GetAny(row, ["Permalink", "Post permalink", "URL", "Post URL", "Link"]),
-            GetAny(row, ["Post ID", "PostId", "ID"]));
+            GetAny(row, FacebookUrlKeys),
+            GetAny(row, FacebookIdKeys));
         var metric = db.ChangeTracker
             .Entries<SocialVideoMetricSnapshot>()
             .Select(entry => entry.Entity)
@@ -261,22 +301,17 @@ public sealed class FacebookReportImportService(AppDbContext db)
 
         metric.Title = BuildTitle(row, id);
         metric.ThumbnailUrl = null;
-        metric.PublishedAt = ParseDateTime(GetAny(row, ["Posted", "Publish time", "Created", "Date", "Post date"]));
-        metric.Views = ReadMetric(row, [
-            "Impressions", "Lifetime Post Total Impressions", "Lifetime Post total impressions",
-            "Views", "Reach", "Lifetime Post Total Reach"]);
-        metric.Likes = ReadMetric(row, [
-            "Likes", "Reactions", "Lifetime Post Reactions", "Lifetime Post Stories by action type - like"]);
-        metric.Comments = ReadMetric(row, [
-            "Comments", "Lifetime Post Comments", "Comment count"]);
-        metric.Clicks = ReadMetric(row, [
-            "Clicks", "Post clicks", "Lifetime Post Consumers", "Link clicks", "Other clicks"]);
+        metric.PublishedAt = ParseDateTime(GetAny(row, FacebookPublishedAtKeys));
+        metric.Views = ReadMetric(row, FacebookViewKeys);
+        metric.Likes = ReadMetric(row, FacebookLikeKeys);
+        metric.Comments = ReadMetric(row, FacebookCommentKeys);
+        metric.Clicks = ReadMetric(row, FacebookClickKeys);
         metric.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static bool IsPostRow(IReadOnlyDictionary<string, string> row) =>
-        !string.IsNullOrWhiteSpace(GetAny(row, ["Post ID", "PostId", "ID"])) ||
-        !string.IsNullOrWhiteSpace(GetAny(row, ["Permalink", "Post permalink", "URL", "Post URL", "Link"]));
+        !string.IsNullOrWhiteSpace(GetAny(row, FacebookIdKeys)) ||
+        !string.IsNullOrWhiteSpace(GetAny(row, FacebookUrlKeys));
 
     private static FacebookAccountInfo ExtractAccountInfo(
         string fileName,
@@ -313,6 +348,10 @@ public sealed class FacebookReportImportService(AppDbContext db)
             .Select(value => DateOnly.TryParse(value, CultureInfo.InvariantCulture, out var date) ? date : (DateOnly?)null)
             .Where(date => date.HasValue)
             .Select(date => date!.Value)
+            .Concat(Regex.Matches(fileName, @"[A-Za-z]+-\d{1,2}-\d{4}")
+                .Select(match => ParseFileNameDate(match.Value))
+                .Where(date => date.HasValue)
+                .Select(date => date!.Value))
             .ToArray();
         if (fileDates.Length > 0)
         {
@@ -320,11 +359,24 @@ public sealed class FacebookReportImportService(AppDbContext db)
         }
 
         var rowDates = rows
-            .Select(row => ParseDateTime(GetAny(row, ["Posted", "Publish time", "Created", "Date", "Post date"])))
+            .Select(row => ParseDateTime(GetAny(row, FacebookPublishedAtKeys)))
             .Where(date => date.HasValue)
             .Select(date => DateOnly.FromDateTime(date!.Value.DateTime))
             .ToArray();
         return rowDates.Length > 0 ? rowDates.Max() : DateOnly.FromDateTime(DateTime.Now);
+    }
+
+    private static DateOnly? ParseFileNameDate(string value)
+    {
+        var formats = new[] { "MMM-d-yyyy", "MMMM-d-yyyy" };
+        return DateTime.TryParseExact(
+            value,
+            formats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var date)
+            ? DateOnly.FromDateTime(date)
+            : null;
     }
 
     private static List<List<string>> ReadRows(Stream stream)
@@ -416,6 +468,10 @@ public sealed class FacebookReportImportService(AppDbContext db)
         }
 
         var kind = GetAny(row, ["Post Type", "Type", "Content Type"]);
+        if (string.IsNullOrWhiteSpace(kind) && !string.IsNullOrWhiteSpace(GetAny(row, ["Video asset ID", "Universal video ID"])))
+        {
+            kind = "Facebook video";
+        }
         var match = FacebookPostRegex.Match(id);
         var postId = match.Success ? match.Groups["id"].Value : id.Split('/').LastOrDefault(value => !string.IsNullOrWhiteSpace(value));
         return $"{(string.IsNullOrWhiteSpace(kind) ? "Facebook post" : kind)} {postId}".Trim();
