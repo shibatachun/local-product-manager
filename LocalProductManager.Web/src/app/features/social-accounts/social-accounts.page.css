@@ -137,6 +137,7 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .video-list button:hover,.video-list button.active { border-color:#b7d3dd; background:#edf5f7; }
 .video-list img { width:84px; aspect-ratio:16/9; border-radius:5px; object-fit:cover; background:#dce2e7; }
 .pin-kind { display:grid; place-items:center; width:84px; aspect-ratio:16/9; border-radius:5px; color:#fff; background:#bd081c; font-size:12px; font-weight:850; }
+.board-summary-list{display:grid;gap:7px;margin-bottom:10px;padding:10px;border:1px solid #e1e6ea;border-radius:7px;background:#fbfcfd}.board-summary-list>strong{font-size:12px}.board-summary-list a{display:grid;grid-template-columns:52px minmax(0,1fr);gap:9px;align-items:center;color:#17212b;text-decoration:none}.board-summary-list .pin-kind{width:52px}.board-summary-list b,.board-summary-list small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.board-summary-list small{margin-top:3px;color:#73808a;font-size:11px}
 .instagram-kind { display:grid; place-items:center; width:84px; aspect-ratio:16/9; border-radius:5px; color:#fff; background:#c13584; font-size:12px; font-weight:850; }
 .video-list strong,.video-list small,.video-list em { display:block; overflow:hidden; text-overflow:ellipsis; }
 .video-list strong { color:#17212b; font-size:13px; line-height:1.25; }

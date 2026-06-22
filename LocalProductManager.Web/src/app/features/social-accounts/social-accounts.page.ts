@@ -172,7 +172,8 @@ export class SocialAccountsPage {
       { label: 'Likes', value: item?.likes ?? 0, delta: item && previous ? item.likes - previous.likes : null, detail: 'Pinterest engagement mapped to likes' },
       { label: 'Comments', value: item?.comments ?? 0, delta: item && previous ? item.comments - previous.comments : null, detail: 'Not included in this report' },
       { label: 'Followers', value: snapshot?.channel.followers ?? 0, delta: null, detail: 'Not included in this report' },
-      { label: 'Pins', value: snapshot?.channel.pinCount ?? snapshot?.pins.length ?? 0, delta: null, detail: 'Imported pins' },
+      { label: 'Pins', value: snapshot?.channel.pinCount ?? snapshot?.pins.length ?? 0, delta: null, detail: 'Imported pins only' },
+      { label: 'Boards', value: snapshot?.boards.length ?? 0, delta: null, detail: 'Board totals are shown separately' },
     ];
   });
   readonly instagramStats = computed(() => {

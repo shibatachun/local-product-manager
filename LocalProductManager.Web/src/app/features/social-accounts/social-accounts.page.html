@@ -392,8 +392,18 @@
       <ng-template #nonYoutubeContent>
         <div class="video-workspace" *ngIf="selectedContentPlatform() === 'pinterest'; else nonPinterestContent">
           <div class="video-list">
+            <div class="board-summary-list" *ngIf="pinterestSnapshot()?.boards?.length">
+              <strong>Boards</strong>
+              <a *ngFor="let board of pinterestSnapshot()?.boards || []" [href]="board.url" target="_blank" rel="noreferrer">
+                <span class="pin-kind">BD</span>
+                <span>
+                  <b>{{ board.title }}</b>
+                  <small>{{ board.views | number }} impressions - {{ board.clicks | number }} clicks - {{ board.likes | number }} engagement</small>
+                </span>
+              </a>
+            </div>
             <button *ngFor="let pin of pinterestSnapshot()?.pins || []" type="button" [class.active]="selectedPinterestItem()?.id === pin.id" (click)="selectPinterestItem(pin.id)">
-              <span class="pin-kind">{{ pin.kind === 'board' ? 'BD' : 'PIN' }}</span>
+              <span class="pin-kind">PIN</span>
               <span>
                 <strong>{{ pin.title }}</strong>
                 <small>{{ pin.views | number }} impressions - {{ pin.clicks | number }} clicks - {{ pin.likes | number }} engagement</small>
@@ -407,11 +417,11 @@
           </div>
 
           <div class="video-detail" *ngIf="selectedPinterestItem() as pin; else noPinterestSelected">
-            <span class="pin-detail-mark">{{ pin.kind === 'board' ? 'Board' : 'Pin' }}</span>
+            <span class="pin-detail-mark">Pin</span>
             <div>
               <h3>{{ pin.title }}</h3>
               <p>{{ pin.views | number }} impressions Â· {{ pin.clicks | number }} clicks Â· {{ pin.likes | number }} engagement</p>
-              <a [href]="pin.url" target="_blank" rel="noreferrer">Open {{ pin.kind }}</a>
+              <a [href]="pin.url" target="_blank" rel="noreferrer">Open pin</a>
             </div>
           </div>
           <ng-template #noPinterestSelected>

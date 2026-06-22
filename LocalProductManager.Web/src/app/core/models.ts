@@ -396,6 +396,24 @@ export interface PinterestContentSnapshot {
       clicks: number;
     }[];
   }[];
+  boards: {
+    id: string;
+    title: string;
+    url: string;
+    kind: 'board' | string;
+    publishedAt: string | null;
+    views: number;
+    likes: number;
+    clicks: number;
+    comments: number;
+    metrics: {
+      snapshotDate: string;
+      views: number;
+      likes: number;
+      comments: number;
+      clicks: number;
+    }[];
+  }[];
 }
 
 export interface InstagramReportImportResult {

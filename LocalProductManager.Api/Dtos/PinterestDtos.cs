@@ -22,7 +22,8 @@ public sealed record PinterestReportImportResult(
 
 public sealed record PinterestContentSnapshotDto(
     PinterestContentChannelDto Channel,
-    IReadOnlyList<PinterestContentItemDto> Pins);
+    IReadOnlyList<PinterestContentItemDto> Pins,
+    IReadOnlyList<PinterestContentItemDto> Boards);
 
 public sealed record PinterestContentChannelDto(
     string Id,

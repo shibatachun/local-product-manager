@@ -163,6 +163,12 @@ public sealed class PinterestReportImportService(AppDbContext db)
             })
             .OrderByDescending(item => item.Views)
             .ToArray();
+        var pins = content
+            .Where(item => item.Kind == "pin")
+            .ToArray();
+        var boards = content
+            .Where(item => item.Kind == "board")
+            .ToArray();
 
         return new PinterestContentSnapshotDto(
             new PinterestContentChannelDto(
@@ -171,10 +177,11 @@ public sealed class PinterestReportImportService(AppDbContext db)
                 null,
                 latestMetric?.Followers ?? 0,
                 totalViews,
-                content.Count(item => item.Kind == "pin"),
+                pins.Length,
                 totalClicks,
                 "Pinterest CSV maps impressions to views, pin/outbound clicks to clicks, engagement to likes, and saves to shares."),
-            content);
+            pins,
+            boards);
     }
 
     private async Task<SocialAccount> UpsertAccountAsync(
