@@ -149,6 +149,7 @@ export class ProductManagerPage {
   readonly storeLinks = signal<StoreLink[]>([]);
   readonly newImageRoot = signal('');
   readonly imageHostPath = signal('');
+  readonly imageVersion = signal<Record<number, number>>({});
 
   readonly platformOptions: { value: Platform | ''; label: string }[] = [
     { value: '', label: 'All platforms' },
@@ -996,6 +997,7 @@ export class ProductManagerPage {
         imagePath: this.editForm.imagePath || null,
         imageSource: this.imageSourceFor(this.editForm.imagePath),
       });
+      this.bumpProductImageVersion(product.id);
       await this.loadProducts();
       await this.openDetail(product.id);
       this.showNotice('Product details saved.');
@@ -1058,6 +1060,7 @@ export class ProductManagerPage {
       const result = await this.api.useListingImage(product.id, listingUrl, platform);
       this.editForm.imagePath = result.imageUrl;
       this.detailMatchedImages.set([result.imageUrl]);
+      this.bumpProductImageVersion(product.id);
       await this.refreshSelected(product.id);
       this.showNotice('Online image loaded.');
     });
@@ -1082,6 +1085,8 @@ export class ProductManagerPage {
 
   chooseDetailImage(path: string): void {
     this.editForm.imagePath = path;
+    const product = this.selectedProduct();
+    if (product) this.bumpProductImageVersion(product.id);
   }
 
   async removeListing(listing: ProductListing): Promise<void> {
@@ -1442,7 +1447,10 @@ export class ProductManagerPage {
   }
 
   productImageUrl(productId: number, download = false): string {
-    return this.api.productImageUrl(productId, download);
+    const url = this.api.productImageUrl(productId, download);
+    const version = this.imageVersion()[productId];
+    if (!version || download) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}v=${version}`;
   }
 
   imagePreviewUrl(path: string): string {
@@ -1516,6 +1524,10 @@ export class ProductManagerPage {
     if (this.view() === 'marketing') {
       await this.loadMarketingProducts();
     }
+  }
+
+  private bumpProductImageVersion(productId: number): void {
+    this.imageVersion.update((versions) => ({ ...versions, [productId]: Date.now() }));
   }
 
   private syncListingDrafts(product: ProductDetail): void {
