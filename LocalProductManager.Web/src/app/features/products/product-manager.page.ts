@@ -21,7 +21,7 @@ import { ProductApiService } from '../../core/product-api.service';
 import { FileStoragePanelComponent } from './file-storage-panel.component';
 import { VideoTrendPanelComponent } from './video-trend-panel.component';
 
-type ViewMode = 'products' | 'pricing' | 'marketing' | 'storage' | 'videoTrend' | 'apiDocs';
+type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type PricingPlatform = Exclude<Platform, 'shopify'>;
 type AsinRelationshipRow = {
@@ -115,6 +115,12 @@ interface PlatformChoice {
   label: string;
   selected: boolean;
   url: string;
+}
+
+interface UnitOption {
+  value: string;
+  label: string;
+  factorToBase: number;
 }
 
 @Component({
@@ -343,10 +349,30 @@ export class ProductManagerPage {
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
-  readonly unitConverter = {
-    inches: null as number | null,
-    ounces: null as number | null,
+  readonly lengthConverter = {
+    amount: 1,
+    from: 'in',
+    to: 'cm',
   };
+  readonly weightConverter = {
+    amount: 16,
+    from: 'oz',
+    to: 'lb',
+  };
+  readonly lengthUnits: UnitOption[] = [
+    { value: 'in', label: 'Inch (in)', factorToBase: 0.0254 },
+    { value: 'ft', label: 'Foot (ft)', factorToBase: 0.3048 },
+    { value: 'yd', label: 'Yard (yd)', factorToBase: 0.9144 },
+    { value: 'mm', label: 'Millimeter (mm)', factorToBase: 0.001 },
+    { value: 'cm', label: 'Centimeter (cm)', factorToBase: 0.01 },
+    { value: 'm', label: 'Meter (m)', factorToBase: 1 },
+  ];
+  readonly weightUnits: UnitOption[] = [
+    { value: 'oz', label: 'Ounce (oz)', factorToBase: 28.349523125 },
+    { value: 'lb', label: 'Pound (lb)', factorToBase: 453.59237 },
+    { value: 'g', label: 'Gram (g)', factorToBase: 1 },
+    { value: 'kg', label: 'Kilogram (kg)', factorToBase: 1000 },
+  ];
   readonly pricingConfigs: Record<PricingPlatform, PricingPlatformConfig> = {
     walmart: {
       label: 'Walmart',
@@ -625,6 +651,7 @@ export class ProductManagerPage {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
       pricing: 'Cost planning',
+      unitConverter: 'Measurement tools',
       marketing: 'Amazon Attribution',
       storage: 'Server settings',
       videoTrend: 'Creative research',
@@ -637,12 +664,33 @@ export class ProductManagerPage {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
       pricing: 'Pricing estimator',
+      unitConverter: 'Unit converter',
       marketing: 'Marketing links',
       storage: 'File storage',
       videoTrend: 'Video trend',
       apiDocs: 'API documentation',
     };
     return labels[this.view()];
+  }
+
+  lengthConversion(): number {
+    return this.convertUnit(this.lengthConverter.amount, this.lengthConverter.from, this.lengthConverter.to, this.lengthUnits);
+  }
+
+  weightConversion(): number {
+    return this.convertUnit(this.weightConverter.amount, this.weightConverter.from, this.weightConverter.to, this.weightUnits);
+  }
+
+  swapLengthUnits(): void {
+    const from = this.lengthConverter.from;
+    this.lengthConverter.from = this.lengthConverter.to;
+    this.lengthConverter.to = from;
+  }
+
+  swapWeightUnits(): void {
+    const from = this.weightConverter.from;
+    this.weightConverter.from = this.weightConverter.to;
+    this.weightConverter.to = from;
   }
 
   onPricingPlatformChanged(platform: PricingPlatform): void {
@@ -1666,6 +1714,12 @@ export class ProductManagerPage {
 
   private imageSourceFor(path: string): 'local' | 'remote' {
     return this.isRemotePath(path) ? 'remote' : 'local';
+  }
+
+  private convertUnit(amount: number | null | undefined, from: string, to: string, units: UnitOption[]): number {
+    const fromUnit = units.find((unit) => unit.value === from) ?? units[0];
+    const toUnit = units.find((unit) => unit.value === to) ?? units[0];
+    return this.safeNumber(amount) * fromUnit.factorToBase / toUnit.factorToBase;
   }
 
   private async perform(action: () => Promise<void>, showErrors = true): Promise<void> {

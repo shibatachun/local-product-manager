@@ -8,6 +8,7 @@
     <nav aria-label="Main navigation">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
+      <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>U</span> Unit converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
       <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
@@ -28,7 +29,7 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'videoTrend' && view() !== 'apiDocs'">
+      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'apiDocs'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -188,12 +189,6 @@
                 <p>Estimate listing prices from quantity, package size, platform fees, and typical shipping tiers.</p>
               </div>
             </div>
-            <div class="unit-converter">
-              <label>Inches to cm<input type="number" min="0" step="0.01" [(ngModel)]="unitConverter.inches" placeholder="in" /></label>
-              <strong>{{ unit((unitConverter.inches || 0) * 2.54) }} cm</strong>
-              <label>Ounces to lb / g<input type="number" min="0" step="0.01" [(ngModel)]="unitConverter.ounces" placeholder="oz" /></label>
-              <strong>{{ unit((unitConverter.ounces || 0) / 16) }} lb · {{ unit((unitConverter.ounces || 0) * 28.3495) }} g</strong>
-            </div>
             <div class="pricing-form">
               <label>Platform
                 <select [ngModel]="pricingForm.platform" (ngModelChange)="onPricingPlatformChanged($event)">
@@ -301,6 +296,70 @@
     </ng-template>
 
     <ng-template #storageView>
+      <ng-container *ngIf="view() === 'unitConverter'; else fileStorageView">
+        <section class="unit-converter-page">
+          <article class="unit-card">
+            <div class="section-heading">
+              <div>
+                <h2>Length</h2>
+                <p>Convert between inch, foot, yard, millimeter, centimeter, and meter.</p>
+              </div>
+            </div>
+            <div class="converter-row">
+              <label>Value
+                <input type="number" step="0.0001" [(ngModel)]="lengthConverter.amount" />
+              </label>
+              <label>From
+                <select [(ngModel)]="lengthConverter.from">
+                  <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+              <button type="button" title="Swap units" (click)="swapLengthUnits()">⇄</button>
+              <label>To
+                <select [(ngModel)]="lengthConverter.to">
+                  <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+            </div>
+            <div class="converter-result">
+              <span>{{ number(lengthConverter.amount || 0) }} {{ lengthConverter.from }}</span>
+              <strong>{{ unit(lengthConversion()) }} {{ lengthConverter.to }}</strong>
+            </div>
+          </article>
+
+          <article class="unit-card">
+            <div class="section-heading">
+              <div>
+                <h2>Weight</h2>
+                <p>Convert between ounce, pound, gram, and kilogram.</p>
+              </div>
+            </div>
+            <div class="converter-row">
+              <label>Value
+                <input type="number" step="0.0001" [(ngModel)]="weightConverter.amount" />
+              </label>
+              <label>From
+                <select [(ngModel)]="weightConverter.from">
+                  <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+              <button type="button" title="Swap units" (click)="swapWeightUnits()">⇄</button>
+              <label>To
+                <select [(ngModel)]="weightConverter.to">
+                  <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+            </div>
+            <div class="converter-result">
+              <span>{{ number(weightConverter.amount || 0) }} {{ weightConverter.from }}</span>
+              <strong>{{ unit(weightConversion()) }} {{ weightConverter.to }}</strong>
+            </div>
+          </article>
+        </section>
+      </ng-container>
+    </ng-template>
+
+    <ng-template #fileStorageView>
       <ng-container *ngIf="view() === 'storage'; else videoTrendView">
         <app-file-storage-panel [currentUser]="currentUser()"></app-file-storage-panel>
       </ng-container>
