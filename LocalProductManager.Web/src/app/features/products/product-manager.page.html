@@ -188,7 +188,7 @@
                 <h2>Marketplace price planner</h2>
                 <p>Estimate listing prices from quantity, package size, platform fees, and typical shipping tiers.</p>
               </div>
-              <button class="unit-converter-trigger" type="button" (click)="unitConverterOpen.set(true)">Unit converter</button>
+              <button class="unit-converter-trigger" [class.active]="unitConverterOpen()" type="button" (click)="unitConverterOpen.set(!unitConverterOpen())">Unit converter</button>
             </div>
             <div class="pricing-form">
               <label>Platform
@@ -318,13 +318,12 @@
   </main>
 </div>
 
-<div class="backdrop" *ngIf="unitConverterOpen()" (click)="unitConverterOpen.set(false)"></div>
-<section class="modal unit-converter-modal" *ngIf="unitConverterOpen()" role="dialog" aria-modal="true">
+<section class="unit-converter-popover" *ngIf="unitConverterOpen()" role="dialog" aria-modal="false">
   <header>
     <div><p class="eyebrow">Measurement tools</p><h2>Unit converter</h2></div>
     <button class="icon-button" title="Close" (click)="unitConverterOpen.set(false)">×</button>
   </header>
-  <div class="modal-body compact-modal-body">
+  <div class="unit-converter-popover-body">
     <app-unit-converter-panel></app-unit-converter-panel>
   </div>
 </section>
