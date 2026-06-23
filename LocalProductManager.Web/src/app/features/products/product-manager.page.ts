@@ -51,6 +51,10 @@ interface PricingEstimate {
   unitFirstMileRmb: number;
   unitLandedCostRmb: number;
   totalLandedCostRmb: number;
+  unitProductWeight: number;
+  packagingWeight: number;
+  totalProductWeight: number;
+  totalPackageWeight: number;
   rmbToUsdRate: number;
   exchangeRateDate: string;
   exchangeRateSource: string;
@@ -104,6 +108,7 @@ interface PricingInput {
   quantity: number;
   unitCost: number | null;
   unitWeight: number | null;
+  packagingWeight: number | null;
   length: number | null;
   width: number | null;
   height: number | null;
@@ -238,6 +243,7 @@ export class ProductManagerPage {
     quantity: 1,
     productCost: 0,
     weight: 1,
+    packagingWeight: 0.25,
     length: 6,
     width: 4,
     height: 2,
@@ -250,6 +256,7 @@ export class ProductManagerPage {
     category: 'general',
     logistics: 'usps-ground',
     quantity: 1,
+    packagingWeight: 0.25,
     packagingCost: 0.65,
     targetMarginPercent: 20,
     bufferPercent: 5,
@@ -277,7 +284,7 @@ export class ProductManagerPage {
         this.logistics(
           'walmart-wfs',
           'Walmart WFS',
-          'WFS fulfillment estimate. Adds 0.25 lb packaging weight, rounds up, and includes pick, pack, ship, support, and standard packaging. Storage, returns, peak, hazmat, apparel, oversize, and low-price surcharges are not included.',
+          'WFS fulfillment estimate. Uses the explicit packaging weight field, rounds up, and includes pick, pack, ship, support, and standard packaging. Storage, returns, peak, hazmat, apparel, oversize, and low-price surcharges are not included.',
           139,
           [
             [1, 3.45],
@@ -289,7 +296,7 @@ export class ProductManagerPage {
             { max: 500, cost: 17.55, baseAbove: 51, perLb: 0.4 },
           ],
           0.8,
-          { weightPaddingLb: 0.25, includePackagingReserve: false },
+          { includePackagingReserve: false },
         ),
         this.logistics('usps-ground', 'USPS Ground Advantage', 'Common light parcel option for seller-fulfilled orders.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
         this.logistics('ups-ground', 'UPS Ground', 'Useful for heavier boxes and commercial pickups.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
@@ -1098,6 +1105,7 @@ export class ProductManagerPage {
       quantity: this.pricingForm.quantity,
       unitCost: this.pricingForm.productCost,
       unitWeight: this.pricingForm.weight,
+      packagingWeight: this.pricingForm.packagingWeight,
       length: this.pricingForm.length,
       width: this.pricingForm.width,
       height: this.pricingForm.height,
@@ -1115,6 +1123,7 @@ export class ProductManagerPage {
       quantity: this.detailPricingForm.quantity,
       unitCost: product.cost,
       unitWeight: product.weight,
+      packagingWeight: this.detailPricingForm.packagingWeight,
       length: product.length,
       width: product.width,
       height: product.height,
@@ -1130,8 +1139,9 @@ export class ProductManagerPage {
     const category = config.categories.find((item) => item.value === input.category) ?? config.categories[0];
     const quantity = Math.max(1, Math.round(this.safeNumber(input.quantity)));
     const unitProductCostRmb = this.safeNumber(input.unitCost);
-    const unitWeight = Math.max(0, this.safeNumber(input.unitWeight));
-    const unitWeightGrams = unitWeight * 453.59237;
+    const unitProductWeight = Math.max(0, this.safeNumber(input.unitWeight));
+    const packagingWeight = Math.max(0, this.safeNumber(input.packagingWeight));
+    const unitWeightGrams = unitProductWeight * 453.59237;
     const unitFirstMileRmb = unitWeightGrams * 0.05;
     const unitLandedCostRmb = unitProductCostRmb + unitFirstMileRmb;
     const totalLandedCostRmb = unitLandedCostRmb * quantity;
@@ -1139,7 +1149,8 @@ export class ProductManagerPage {
     const rmbToUsdRate = this.safeNumber(exchangeRate.rate) || 0.14;
     const unitCost = unitLandedCostRmb * rmbToUsdRate;
     const totalCost = totalLandedCostRmb * rmbToUsdRate;
-    const totalWeight = unitWeight * quantity;
+    const totalProductWeight = unitProductWeight * quantity;
+    const totalPackageWeight = totalProductWeight + packagingWeight;
     const length = Math.max(0, this.safeNumber(input.length));
     const width = Math.max(0, this.safeNumber(input.width));
     const height = Math.max(0, this.safeNumber(input.height));
@@ -1148,7 +1159,8 @@ export class ProductManagerPage {
     const bufferRate = this.safePercent(input.bufferPercent);
     const cubicInches = length * width * height;
     const dimensionalWeight = cubicInches > 0 ? cubicInches / logistics.dimDivisor : 0;
-    const billableWeight = Math.max(1, Math.ceil(Math.max(totalWeight, dimensionalWeight) + (logistics.weightPaddingLb ?? 0)));
+    const carrierPaddingWeight = logistics.weightPaddingLb ?? 0;
+    const billableWeight = Math.max(1, Math.ceil(Math.max(totalPackageWeight, dimensionalWeight) + carrierPaddingWeight));
     const shippingCost = this.estimateLogisticsCost(billableWeight, logistics);
     const fixedCost = totalCost + shippingCost + packaging + config.fixedFee + config.listingFee;
     const breakEvenVariableRate = category.feeRate + config.processingRate + bufferRate;
@@ -1174,6 +1186,10 @@ export class ProductManagerPage {
       rmbToUsdRate,
       exchangeRateDate: exchangeRate.date,
       exchangeRateSource: exchangeRate.source,
+      unitProductWeight,
+      packagingWeight,
+      totalProductWeight,
+      totalPackageWeight,
       totalCost,
       cubicInches,
       dimensionalWeight,
@@ -1188,11 +1204,12 @@ export class ProductManagerPage {
         { label: 'Landed cost (RMB)', value: this.rmb(totalLandedCostRmb), note: `(${this.rmb(unitProductCostRmb)} product + ${this.rmb(unitFirstMileRmb)} first-mile) x ${quantity} unit(s).` },
         { label: 'RMB to USD', value: `${this.unit(rmbToUsdRate)} USD/RMB`, note: `${exchangeRate.source}, rate date ${exchangeRate.date}. ${this.rmb(totalLandedCostRmb)} x ${this.unit(rmbToUsdRate)} = ${this.currency(totalCost)}.` },
         { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} landed unit cost x ${quantity} = ${this.currency(totalCost)} product cost in USD.` },
-        { label: 'Total weight', value: `${this.number(totalWeight)} lb`, note: `${this.number(unitWeight)} lb per unit x ${quantity}.` },
+        { label: 'Product weight', value: `${this.number(totalProductWeight)} lb`, note: `${this.number(unitProductWeight)} lb per unit x ${quantity}. Product weight is also used for first-mile RMB freight.` },
+        { label: 'Package actual weight', value: `${this.number(totalPackageWeight)} lb`, note: `${this.number(totalProductWeight)} lb product weight + ${this.number(packagingWeight)} lb packaging weight.` },
         { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / ${logistics.dimDivisor} = ${this.number(dimensionalWeight)} lb.` },
-        { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight${logistics.weightPaddingLb ? `, adds ${this.number(logistics.weightPaddingLb)} lb packaging weight` : ''}, then rounds up.` },
+        { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of package actual weight and dimensional weight${carrierPaddingWeight ? `, adds ${this.number(carrierPaddingWeight)} lb carrier/program padding` : ''}, then rounds up.` },
         { label: logistics.label, value: this.currency(shippingCost), note: logistics.note },
-        { label: 'Packaging reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
+        { label: 'Packaging cost reserve', value: this.currency(packaging), note: 'Box, mailer, label, tape, and small handling material reserve.' },
         { label: `${config.label} category fee`, value: `${this.number(category.feeRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${category.note}` },
         { label: 'Processing/fixed fees', value: `${this.number(config.processingRate * 100)}% + ${this.currency(config.fixedFee + config.listingFee)}`, note: `${this.currency(processingFee + config.listingFee)} at the suggested price.` },
         { label: 'Risk buffer', value: `${this.number(bufferRate * 100)}%`, note: `${this.currency(buffer)} reserve for returns, price changes, and small fee drift.` },
@@ -1527,6 +1544,7 @@ export class ProductManagerPage {
     }
     this.detailPricingForm.logistics = config.defaultLogistics;
     this.detailPricingForm.quantity = 1;
+    this.detailPricingForm.packagingWeight = 0.25;
     this.detailPricingForm.targetMarginPercent = config.marginPercent;
     this.detailPricingForm.bufferPercent = config.bufferPercent;
     this.detailPricingResult.set(null);

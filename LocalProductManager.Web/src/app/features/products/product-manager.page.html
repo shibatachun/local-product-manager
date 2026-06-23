@@ -221,8 +221,11 @@
               <label>Unit product cost (RMB)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" placeholder="0.00" />
               </label>
-              <label>Unit weight (lb)
+              <label>Product weight (lb)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" placeholder="1.00" />
+              </label>
+              <label>Packaging weight (lb)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingWeight" placeholder="0.25" />
               </label>
               <label>Length (in)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.length" />
@@ -233,7 +236,7 @@
               <label>Height (in)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.height" />
               </label>
-              <label>Packaging reserve
+              <label>Packaging cost reserve ($)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingCost" />
               </label>
               <label>Target margin %
@@ -246,7 +249,7 @@
             <div class="pricing-live-summary">
               <span>Landed cost <strong>{{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</strong></span>
               <span>RMB→USD <strong>{{ unit(pricingDerived().rmbToUsdRate) }}</strong></span>
-              <span>Total weight <strong>{{ number(pricingDerived().quantity * pricingForm.weight) }} lb</strong></span>
+              <span>Package weight <strong>{{ number(pricingDerived().totalPackageWeight) }} lb</strong></span>
               <span>Billable weight <strong>{{ pricingDerived().billableWeight }} lb</strong></span>
             </div>
             <button class="primary calculate-button" type="button" (click)="calculatePricing()">Calculate price</button>
@@ -266,6 +269,7 @@
               <span>{{ estimate.logistics }}</span>
               <span>{{ estimate.quantity }} unit(s)</span>
               <span>RMB→USD: {{ unit(estimate.rmbToUsdRate) }}</span>
+              <span>Package weight: {{ number(estimate.totalPackageWeight) }} lb</span>
               <span>Billable weight: {{ estimate.billableWeight }} lb</span>
               <span>Dimensional weight: {{ number(estimate.dimensionalWeight) }} lb</span>
             </div>
@@ -288,6 +292,7 @@
                 <span>{{ pricingDerived().logistics }}</span>
                 <span>Landed cost: {{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</span>
                 <span>RMB→USD: {{ unit(pricingDerived().rmbToUsdRate) }}</span>
+                <span>Package weight: {{ number(pricingDerived().totalPackageWeight) }} lb</span>
                 <span>Billable weight: {{ pricingDerived().billableWeight }} lb</span>
               </div>
             </div>
@@ -510,7 +515,8 @@
             <button type="button" (click)="adjustDetailPricingQuantity(1)">+</button>
           </div>
         </div>
-        <label>Packaging reserve<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingCost" /></label>
+        <label>Packaging weight (lb)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingWeight" /></label>
+        <label>Packaging cost reserve ($)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingCost" /></label>
         <label>Target margin %<input type="number" min="0" max="80" step="1" [(ngModel)]="detailPricingForm.targetMarginPercent" /></label>
         <label>Risk buffer %<input type="number" min="0" max="30" step="1" [(ngModel)]="detailPricingForm.bufferPercent" /></label>
         <button class="primary" type="button" (click)="calculateDetailPricing()">Calculate suggested price</button>
@@ -518,6 +524,7 @@
       <div class="detail-pricing-summary">
         <span>Landed cost <strong>{{ rmb(detailPricingDerived(product).totalLandedCostRmb) }} / {{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
         <span>RMB→USD <strong>{{ unit(detailPricingDerived(product).rmbToUsdRate) }}</strong></span>
+        <span>Package weight <strong>{{ number(detailPricingDerived(product).totalPackageWeight) }} lb</strong></span>
         <span>Billable weight <strong>{{ detailPricingDerived(product).billableWeight }} lb</strong></span>
         <span *ngIf="detailPricingResult() as estimate">Suggested <strong>{{ currency(estimate.suggestedPrice) }}</strong></span>
         <span *ngIf="detailPricingResult() as estimate">Break-even <strong>{{ currency(estimate.breakEvenPrice) }}</strong></span>
