@@ -146,6 +146,7 @@ export class ProductManagerPage {
   readonly loading = signal(false);
   readonly wizardOpen = signal(false);
   readonly importOpen = signal(false);
+  readonly unitConverterOpen = signal(false);
   readonly detailOpen = signal(false);
   readonly wizardStep = signal(1);
   readonly notice = signal('');

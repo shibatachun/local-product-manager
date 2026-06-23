@@ -1,6 +1,8 @@
 .pricing-page{display:grid;grid-template-columns:minmax(360px,460px) minmax(0,1fr);gap:16px;align-items:start}
 .pricing-panel,.estimate-panel{border:1px solid #dce2e7;border-radius:8px;background:#fff}
 .pricing-panel{padding:22px}.pricing-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.unit-converter-trigger{min-height:34px;padding:0 11px;border:1px solid #c9d2d8;border-radius:6px;color:#334e68;background:#fff;font-size:12px;font-weight:750}
+.unit-converter-trigger:hover{border-color:#8fb7c3;background:#edf7f9}
 .pricing-form label,.quantity-control{display:grid;gap:6px;color:#55646f;font-size:12px;font-weight:750}
 .pricing-form label:nth-child(-n+2){grid-column:1/-1}.quantity-control>div{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:6px}
 .quantity-control button{min-height:40px;border:1px solid #cfd7dd;border-radius:6px;background:#fff;font-size:18px;font-weight:850}
