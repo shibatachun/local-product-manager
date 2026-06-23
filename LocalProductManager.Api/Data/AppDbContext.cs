@@ -12,6 +12,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SocialAccount> SocialAccounts => Set<SocialAccount>();
     public DbSet<SocialMetricSnapshot> SocialMetricSnapshots => Set<SocialMetricSnapshot>();
     public DbSet<SocialVideoMetricSnapshot> SocialVideoMetricSnapshots => Set<SocialVideoMetricSnapshot>();
+    public DbSet<SocialDailyMetricDelta> SocialDailyMetricDeltas => Set<SocialDailyMetricDelta>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
     public DbSet<VideoTrendItem> VideoTrendItems => Set<VideoTrendItem>();
@@ -110,6 +111,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(metric => metric.PlatformVideoId).HasMaxLength(128).IsRequired();
             entity.Property(metric => metric.Title).HasMaxLength(512).IsRequired();
             entity.Property(metric => metric.ThumbnailUrl).HasMaxLength(2048);
+            entity.HasOne(metric => metric.SocialAccount)
+                .WithMany()
+                .HasForeignKey(metric => metric.SocialAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SocialDailyMetricDelta>(entity =>
+        {
+            entity.ToTable("social_daily_metric_deltas");
+            entity.HasIndex(metric => new { metric.SocialAccountId, metric.Scope, metric.MetricKey, metric.SnapshotDate }).IsUnique();
+            entity.Property(metric => metric.Scope).HasMaxLength(32).IsRequired();
+            entity.Property(metric => metric.MetricKey).HasMaxLength(160).IsRequired();
+            entity.Property(metric => metric.Title).HasMaxLength(512).IsRequired();
             entity.HasOne(metric => metric.SocialAccount)
                 .WithMany()
                 .HasForeignKey(metric => metric.SocialAccountId)

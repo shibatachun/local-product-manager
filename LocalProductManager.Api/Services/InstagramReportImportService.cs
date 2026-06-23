@@ -56,13 +56,26 @@ public sealed class InstagramReportImportService(AppDbContext db)
 
         var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
         var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-        metric.Views = (previousMetric?.Views ?? 0) + totals.Views;
-        metric.Likes = (previousMetric?.Likes ?? 0) + totals.Likes;
-        metric.Comments = (previousMetric?.Comments ?? 0) + totals.Comments;
-        metric.Shares = (previousMetric?.Shares ?? 0) + totals.Shares;
-        metric.Followers = (previousMetric?.Followers ?? 0) + totals.Followers;
-        metric.Clicks = previousMetric?.Clicks ?? 0;
+        metric.Views = totals.Views;
+        metric.Likes = totals.Likes;
+        metric.Comments = totals.Comments;
+        metric.Shares = totals.Shares;
+        metric.Followers = totals.Followers;
+        metric.Clicks = 0;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
+        await UpsertDailyDeltaAsync(
+            account.Id,
+            "account",
+            "__account__",
+            account.AccountName,
+            snapshotDate,
+            views: Delta(totals.Views, previousMetric?.Views),
+            likes: Delta(totals.Likes, previousMetric?.Likes),
+            comments: Delta(totals.Comments, previousMetric?.Comments),
+            clicks: 0,
+            shares: Delta(totals.Shares, previousMetric?.Shares),
+            followers: Delta(totals.Followers, previousMetric?.Followers),
+            cancellationToken);
 
         foreach (var row in records)
         {
@@ -256,11 +269,28 @@ public sealed class InstagramReportImportService(AppDbContext db)
         metric.ThumbnailUrl = null;
         metric.PublishedAt = ParseDateTime(Get(row, "Publish time"));
         var previous = await PreviousContentMetricAsync(accountId, id, snapshotDate, cancellationToken);
-        metric.Views = (previous?.Views ?? 0) + ParseInt(Get(row, "Views"));
-        metric.Likes = (previous?.Likes ?? 0) + ParseInt(Get(row, "Likes"));
-        metric.Comments = (previous?.Comments ?? 0) + ParseInt(Get(row, "Comments"));
-        metric.Clicks = (previous?.Clicks ?? 0) + ParseInt(Get(row, "Saves"));
+        var views = ParseInt(Get(row, "Views"));
+        var likes = ParseInt(Get(row, "Likes"));
+        var comments = ParseInt(Get(row, "Comments"));
+        var saves = ParseInt(Get(row, "Saves"));
+        metric.Views = views;
+        metric.Likes = likes;
+        metric.Comments = comments;
+        metric.Clicks = saves;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
+        await UpsertDailyDeltaAsync(
+            accountId,
+            "content",
+            id,
+            metric.Title,
+            snapshotDate,
+            Delta(views, previous?.Views),
+            Delta(likes, previous?.Likes),
+            Delta(comments, previous?.Comments),
+            Delta(saves, previous?.Clicks),
+            shares: 0,
+            followers: 0,
+            cancellationToken);
     }
 
     private async Task<SocialMetricSnapshot?> PreviousAccountMetricAsync(
@@ -272,6 +302,51 @@ public sealed class InstagramReportImportService(AppDbContext db)
             .Where(item => item.SocialAccountId == accountId && item.SnapshotDate < snapshotDate)
             .OrderByDescending(item => item.SnapshotDate)
             .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task UpsertDailyDeltaAsync(
+        int accountId,
+        string scope,
+        string metricKey,
+        string title,
+        DateOnly snapshotDate,
+        int views,
+        int likes,
+        int comments,
+        int clicks,
+        int shares,
+        int followers,
+        CancellationToken cancellationToken)
+    {
+        var delta = await db.SocialDailyMetricDeltas.FirstOrDefaultAsync(
+            item => item.SocialAccountId == accountId &&
+                item.Scope == scope &&
+                item.MetricKey == metricKey &&
+                item.SnapshotDate == snapshotDate,
+            cancellationToken);
+        if (delta is null)
+        {
+            delta = new SocialDailyMetricDelta
+            {
+                SocialAccountId = accountId,
+                Scope = scope,
+                MetricKey = metricKey,
+                SnapshotDate = snapshotDate
+            };
+            db.SocialDailyMetricDeltas.Add(delta);
+        }
+
+        delta.Title = title;
+        delta.Views = views;
+        delta.Likes = likes;
+        delta.Comments = comments;
+        delta.Clicks = clicks;
+        delta.Shares = shares;
+        delta.Followers = followers;
+        delta.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static int Delta(int current, int? previous) =>
+        previous.HasValue ? Math.Max(0, current - previous.Value) : Math.Max(0, current);
 
     private async Task<SocialVideoMetricSnapshot?> PreviousContentMetricAsync(
         int accountId,

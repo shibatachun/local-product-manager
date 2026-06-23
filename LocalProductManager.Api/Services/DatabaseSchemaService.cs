@@ -108,6 +108,29 @@ public sealed class DatabaseSchemaService
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_social_video_metric_snapshots_SocialAccountId_PlatformVideoId_SnapshotDate ON social_video_metric_snapshots (SocialAccountId, PlatformVideoId, SnapshotDate)");
         db.Database.ExecuteSqlRaw(
             """
+            CREATE TABLE IF NOT EXISTS social_daily_metric_deltas (
+                Id INTEGER NOT NULL CONSTRAINT PK_social_daily_metric_deltas PRIMARY KEY AUTOINCREMENT,
+                SocialAccountId INTEGER NOT NULL,
+                Scope TEXT NOT NULL,
+                MetricKey TEXT NOT NULL,
+                Title TEXT NOT NULL,
+                SnapshotDate TEXT NOT NULL,
+                Clicks INTEGER NOT NULL,
+                Likes INTEGER NOT NULL,
+                Views INTEGER NOT NULL,
+                Comments INTEGER NOT NULL,
+                Shares INTEGER NOT NULL,
+                Followers INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CONSTRAINT FK_social_daily_metric_deltas_social_accounts_SocialAccountId
+                    FOREIGN KEY (SocialAccountId) REFERENCES social_accounts (Id) ON DELETE CASCADE
+            )
+            """);
+        db.Database.ExecuteSqlRaw(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_social_daily_metric_deltas_SocialAccountId_Scope_MetricKey_SnapshotDate ON social_daily_metric_deltas (SocialAccountId, Scope, MetricKey, SnapshotDate)");
+        db.Database.ExecuteSqlRaw(
+            """
             CREATE TABLE IF NOT EXISTS app_users (
                 Id INTEGER NOT NULL CONSTRAINT PK_app_users PRIMARY KEY AUTOINCREMENT,
                 UserName TEXT NOT NULL,
@@ -185,6 +208,11 @@ public sealed class DatabaseSchemaService
         db.Database.ExecuteSqlRaw(
             $"""
             DELETE FROM social_metric_snapshots
+            WHERE SocialAccountId IN ({demoAccountFilter})
+            """);
+        db.Database.ExecuteSqlRaw(
+            $"""
+            DELETE FROM social_daily_metric_deltas
             WHERE SocialAccountId IN ({demoAccountFilter})
             """);
         db.Database.ExecuteSqlRaw(

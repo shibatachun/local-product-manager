@@ -127,6 +127,11 @@ public sealed class SocialAiAnalysisService(
             .Include(metric => metric.SocialAccount)
             .Where(metric => metric.SnapshotDate >= comparison.From && metric.SnapshotDate <= comparison.To)
             .ToListAsync(cancellationToken);
+        var dailyDeltas = await db.SocialDailyMetricDeltas
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .ToListAsync(cancellationToken);
 
         var lines = new StringBuilder();
         lines.AppendLine("You are a practical marketing analyst for a small ecommerce business.");
@@ -150,6 +155,7 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine("You must cover every platform/account listed in Account snapshot deltas, even when the values are flat or changed by only 1.");
         lines.AppendLine("For each platform/account, summarize views, likes, comments, clicks, shares, and followers when present, including unchanged values and small changes.");
         lines.AppendLine("Use the delta rows as the required platform-by-platform review data. Highlight unusual movement only after the complete review.");
+        lines.AppendLine("When Stored daily deltas are present, use them as the source of daily and weekly change totals.");
         lines.AppendLine("Daily reports compare the target day with the previous available snapshot and include year-to-date context.");
         lines.AppendLine("Weekly reports compare the selected week with the previous week.");
         lines.AppendLine($"Period: {normalizedPeriod}");
@@ -188,6 +194,35 @@ public sealed class SocialAiAnalysisService(
                 $"- {group.Key}: views={group.Sum(item => item.Current.Views)}, likes={group.Sum(item => item.Current.Likes)}, " +
                 $"comments={group.Sum(item => item.Current.Comments)}, clicks={group.Sum(item => item.Current.Clicks)}, " +
                 $"shares={group.Sum(item => item.Current.Shares)}, followers={group.Sum(item => item.Current.Followers)}");
+        }
+
+        lines.AppendLine();
+        lines.AppendLine("Stored daily deltas in the current period:");
+        foreach (var group in dailyDeltas
+            .Where(item => item.Scope == "account")
+            .GroupBy(item => new { item.SocialAccount!.Platform, item.SocialAccount.AccountName })
+            .OrderBy(group => group.Key.Platform)
+            .ThenBy(group => group.Key.AccountName))
+        {
+            lines.AppendLine(
+                $"- {group.Key.Platform} / {group.Key.AccountName}: rows={group.Count()}, " +
+                $"viewsDelta={group.Sum(item => item.Views)}, likesDelta={group.Sum(item => item.Likes)}, " +
+                $"commentsDelta={group.Sum(item => item.Comments)}, clicksDelta={group.Sum(item => item.Clicks)}, " +
+                $"sharesDelta={group.Sum(item => item.Shares)}, followersDelta={group.Sum(item => item.Followers)}");
+        }
+
+        lines.AppendLine();
+        lines.AppendLine("Top content daily deltas in the current period:");
+        foreach (var row in dailyDeltas
+            .Where(item => item.Scope == "content")
+            .OrderByDescending(item => item.Views)
+            .ThenByDescending(item => item.Likes)
+            .Take(25))
+        {
+            lines.AppendLine(
+                $"- {row.SocialAccount?.Platform} / {row.SocialAccount?.AccountName}: {row.Title}; " +
+                $"date={row.SnapshotDate:yyyy-MM-dd}, viewsDelta={row.Views}, likesDelta={row.Likes}, " +
+                $"commentsDelta={row.Comments}, clicksDelta={row.Clicks}");
         }
 
         lines.AppendLine();

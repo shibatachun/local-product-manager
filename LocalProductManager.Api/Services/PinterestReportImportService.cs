@@ -34,18 +34,6 @@ public sealed class PinterestReportImportService(AppDbContext db)
         var accountInfo = ExtractAccountInfo(boardRows, pinRows);
         var account = await UpsertAccountAsync(accountInfo, cancellationToken);
 
-        var orderedDailyRows = dailyRows.OrderBy(row => row.Date).ToArray();
-        var runningViews = orderedDailyRows.Length > 0
-            ? await PreviousAccountViewsAsync(account.Id, orderedDailyRows[0].Date, cancellationToken)
-            : 0;
-        foreach (var row in orderedDailyRows)
-        {
-            runningViews += row.Impressions;
-            var metric = await GetOrCreateMetricAsync(account.Id, row.Date, cancellationToken);
-            metric.Views = runningViews;
-            metric.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
         var boardTotals = boardRows.Aggregate(
             new PinterestBoardTotals(),
             (totals, row) => totals with
@@ -56,15 +44,32 @@ public sealed class PinterestReportImportService(AppDbContext db)
                 OutboundClicks = totals.OutboundClicks + ParseInt(row.GetValueOrDefault("Outbound clicks")),
                 Saves = totals.Saves + ParseInt(row.GetValueOrDefault("Saves"))
             });
-        if (boardRows.Count > 0)
-        {
-            var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
-            var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-            metric.Likes = (previousMetric?.Likes ?? 0) + boardTotals.Engagement;
-            metric.Clicks = (previousMetric?.Clicks ?? 0) + boardTotals.PinClicks + boardTotals.OutboundClicks;
-            metric.Shares = (previousMetric?.Shares ?? 0) + boardTotals.Saves;
-            metric.UpdatedAt = DateTimeOffset.UtcNow;
-        }
+        var currentViews = boardTotals.Impressions > 0
+            ? boardTotals.Impressions
+            : dailyRows.Sum(row => row.Impressions);
+        var currentClicks = boardTotals.PinClicks + boardTotals.OutboundClicks;
+        var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
+        var accountMetric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
+        accountMetric.Views = currentViews;
+        accountMetric.Likes = boardTotals.Engagement;
+        accountMetric.Clicks = currentClicks;
+        accountMetric.Shares = boardTotals.Saves;
+        accountMetric.Comments = 0;
+        accountMetric.Followers = previousMetric?.Followers ?? 0;
+        accountMetric.UpdatedAt = DateTimeOffset.UtcNow;
+        await UpsertDailyDeltaAsync(
+            account.Id,
+            "account",
+            "__account__",
+            account.AccountName,
+            snapshotDate,
+            Delta(currentViews, previousMetric?.Views),
+            Delta(boardTotals.Engagement, previousMetric?.Likes),
+            0,
+            Delta(currentClicks, previousMetric?.Clicks),
+            Delta(boardTotals.Saves, previousMetric?.Shares),
+            0,
+            cancellationToken);
 
         foreach (var row in boardRows)
         {
@@ -299,20 +304,24 @@ public sealed class PinterestReportImportService(AppDbContext db)
             : title;
         metric.ThumbnailUrl = null;
         var previous = await PreviousContentMetricAsync(accountId, contentUrl, snapshotDate, cancellationToken);
-        metric.Views = (previous?.Views ?? 0) + views;
-        metric.Likes = (previous?.Likes ?? 0) + likes;
-        metric.Clicks = (previous?.Clicks ?? 0) + clicks;
-        metric.Comments = previous?.Comments ?? 0;
+        metric.Views = views;
+        metric.Likes = likes;
+        metric.Clicks = clicks;
+        metric.Comments = 0;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    private async Task<int> PreviousAccountViewsAsync(
-        int accountId,
-        DateOnly snapshotDate,
-        CancellationToken cancellationToken)
-    {
-        var previous = await PreviousAccountMetricAsync(accountId, snapshotDate, cancellationToken);
-        return previous?.Views ?? 0;
+        await UpsertDailyDeltaAsync(
+            accountId,
+            "content",
+            contentUrl,
+            metric.Title,
+            snapshotDate,
+            Delta(views, previous?.Views),
+            Delta(likes, previous?.Likes),
+            comments: 0,
+            Delta(clicks, previous?.Clicks),
+            shares: 0,
+            followers: 0,
+            cancellationToken);
     }
 
     private async Task<SocialMetricSnapshot?> PreviousAccountMetricAsync(
@@ -337,6 +346,51 @@ public sealed class PinterestReportImportService(AppDbContext db)
                 item.SnapshotDate < snapshotDate)
             .OrderByDescending(item => item.SnapshotDate)
             .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task UpsertDailyDeltaAsync(
+        int accountId,
+        string scope,
+        string metricKey,
+        string title,
+        DateOnly snapshotDate,
+        int views,
+        int likes,
+        int comments,
+        int clicks,
+        int shares,
+        int followers,
+        CancellationToken cancellationToken)
+    {
+        var delta = await db.SocialDailyMetricDeltas.FirstOrDefaultAsync(
+            item => item.SocialAccountId == accountId &&
+                item.Scope == scope &&
+                item.MetricKey == metricKey &&
+                item.SnapshotDate == snapshotDate,
+            cancellationToken);
+        if (delta is null)
+        {
+            delta = new SocialDailyMetricDelta
+            {
+                SocialAccountId = accountId,
+                Scope = scope,
+                MetricKey = metricKey,
+                SnapshotDate = snapshotDate
+            };
+            db.SocialDailyMetricDeltas.Add(delta);
+        }
+
+        delta.Title = title;
+        delta.Views = views;
+        delta.Likes = likes;
+        delta.Comments = comments;
+        delta.Clicks = clicks;
+        delta.Shares = shares;
+        delta.Followers = followers;
+        delta.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static int Delta(int current, int? previous) =>
+        previous.HasValue ? Math.Max(0, current - previous.Value) : Math.Max(0, current);
 
     private static string NormalizePinterestUrl(string url)
     {
