@@ -146,7 +146,10 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine("### Next Actions");
         lines.AppendLine("### Data Caveats");
         lines.AppendLine("Keep both languages practical and specific. Do not invent metrics that are not present.");
-        lines.AppendLine("Use the delta rows as the primary signal. If a value changed by 1, mention it when it is relevant.");
+        lines.AppendLine("Do not only analyze the strongest or most eye-catching numbers.");
+        lines.AppendLine("You must cover every platform/account listed in Account snapshot deltas, even when the values are flat or changed by only 1.");
+        lines.AppendLine("For each platform/account, summarize views, likes, comments, clicks, shares, and followers when present, including unchanged values and small changes.");
+        lines.AppendLine("Use the delta rows as the required platform-by-platform review data. Highlight unusual movement only after the complete review.");
         lines.AppendLine("Daily reports compare the target day with the previous available snapshot and include year-to-date context.");
         lines.AppendLine("Weekly reports compare the selected week with the previous week.");
         lines.AppendLine($"Period: {normalizedPeriod}");
