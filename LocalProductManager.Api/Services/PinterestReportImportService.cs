@@ -34,10 +34,15 @@ public sealed class PinterestReportImportService(AppDbContext db)
         var accountInfo = ExtractAccountInfo(boardRows, pinRows);
         var account = await UpsertAccountAsync(accountInfo, cancellationToken);
 
-        foreach (var row in dailyRows)
+        var orderedDailyRows = dailyRows.OrderBy(row => row.Date).ToArray();
+        var runningViews = orderedDailyRows.Length > 0
+            ? await PreviousAccountViewsAsync(account.Id, orderedDailyRows[0].Date, cancellationToken)
+            : 0;
+        foreach (var row in orderedDailyRows)
         {
+            runningViews += row.Impressions;
             var metric = await GetOrCreateMetricAsync(account.Id, row.Date, cancellationToken);
-            metric.Views = row.Impressions;
+            metric.Views = runningViews;
             metric.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
@@ -53,10 +58,11 @@ public sealed class PinterestReportImportService(AppDbContext db)
             });
         if (boardRows.Count > 0)
         {
+            var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
             var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-            metric.Likes = boardTotals.Engagement;
-            metric.Clicks = boardTotals.PinClicks + boardTotals.OutboundClicks;
-            metric.Shares = boardTotals.Saves;
+            metric.Likes = (previousMetric?.Likes ?? 0) + boardTotals.Engagement;
+            metric.Clicks = (previousMetric?.Clicks ?? 0) + boardTotals.PinClicks + boardTotals.OutboundClicks;
+            metric.Shares = (previousMetric?.Shares ?? 0) + boardTotals.Saves;
             metric.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
@@ -131,8 +137,8 @@ public sealed class PinterestReportImportService(AppDbContext db)
             .OrderByDescending(item => item.SnapshotDate)
             .ToListAsync(cancellationToken);
         var latestMetric = accountMetrics.FirstOrDefault();
-        var totalViews = accountMetrics.Sum(item => item.Views);
-        var totalClicks = accountMetrics.Sum(item => item.Clicks);
+        var totalViews = latestMetric?.Views ?? 0;
+        var totalClicks = latestMetric?.Clicks ?? 0;
         var contentRows = await db.SocialVideoMetricSnapshots
             .AsNoTracking()
             .Where(item => item.SocialAccountId == account.Id)
@@ -292,12 +298,45 @@ public sealed class PinterestReportImportService(AppDbContext db)
             ? $"Board: {title}"
             : title;
         metric.ThumbnailUrl = null;
-        metric.Views = views;
-        metric.Likes = likes;
-        metric.Clicks = clicks;
-        metric.Comments = 0;
+        var previous = await PreviousContentMetricAsync(accountId, contentUrl, snapshotDate, cancellationToken);
+        metric.Views = (previous?.Views ?? 0) + views;
+        metric.Likes = (previous?.Likes ?? 0) + likes;
+        metric.Clicks = (previous?.Clicks ?? 0) + clicks;
+        metric.Comments = previous?.Comments ?? 0;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    private async Task<int> PreviousAccountViewsAsync(
+        int accountId,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken)
+    {
+        var previous = await PreviousAccountMetricAsync(accountId, snapshotDate, cancellationToken);
+        return previous?.Views ?? 0;
+    }
+
+    private async Task<SocialMetricSnapshot?> PreviousAccountMetricAsync(
+        int accountId,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId && item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<SocialVideoMetricSnapshot?> PreviousContentMetricAsync(
+        int accountId,
+        string id,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId &&
+                item.PlatformVideoId == id &&
+                item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
 
     private static string NormalizePinterestUrl(string url)
     {

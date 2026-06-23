@@ -926,7 +926,10 @@ export class SocialAccountsPage {
   }
 
   private isTotalSnapshotMetric(platform: SocialPlatform, key: SocialMetricKey): boolean {
-    return (platform === 'youtube' && key !== 'clicks') || platform === 'instagram';
+    return platform === 'instagram' ||
+      platform === 'facebook' ||
+      platform === 'pinterest' ||
+      (platform === 'youtube' && key !== 'clicks');
   }
 
   private pointerSvgX(event: MouseEvent): number {

@@ -98,13 +98,14 @@ public sealed class FacebookReportImportService(AppDbContext db)
                 Followers = current.Followers + ReadMetric(row, FacebookFollowerKeys)
             });
 
+        var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
         var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-        metric.Views = totals.Views;
-        metric.Likes = totals.Likes;
-        metric.Comments = totals.Comments;
-        metric.Shares = totals.Shares;
-        metric.Clicks = totals.Clicks;
-        metric.Followers = totals.Followers;
+        metric.Views = (previousMetric?.Views ?? 0) + totals.Views;
+        metric.Likes = (previousMetric?.Likes ?? 0) + totals.Likes;
+        metric.Comments = (previousMetric?.Comments ?? 0) + totals.Comments;
+        metric.Shares = (previousMetric?.Shares ?? 0) + totals.Shares;
+        metric.Clicks = (previousMetric?.Clicks ?? 0) + totals.Clicks;
+        metric.Followers = (previousMetric?.Followers ?? 0) + totals.Followers;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
 
         foreach (var row in records)
@@ -302,12 +303,36 @@ public sealed class FacebookReportImportService(AppDbContext db)
         metric.Title = BuildTitle(row, id);
         metric.ThumbnailUrl = null;
         metric.PublishedAt = ParseDateTime(GetAny(row, FacebookPublishedAtKeys));
-        metric.Views = ReadMetric(row, FacebookViewKeys);
-        metric.Likes = ReadMetric(row, FacebookLikeKeys);
-        metric.Comments = ReadMetric(row, FacebookCommentKeys);
-        metric.Clicks = ReadMetric(row, FacebookClickKeys);
+        var previous = await PreviousContentMetricAsync(accountId, id, snapshotDate, cancellationToken);
+        metric.Views = (previous?.Views ?? 0) + ReadMetric(row, FacebookViewKeys);
+        metric.Likes = (previous?.Likes ?? 0) + ReadMetric(row, FacebookLikeKeys);
+        metric.Comments = (previous?.Comments ?? 0) + ReadMetric(row, FacebookCommentKeys);
+        metric.Clicks = (previous?.Clicks ?? 0) + ReadMetric(row, FacebookClickKeys);
         metric.UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    private async Task<SocialMetricSnapshot?> PreviousAccountMetricAsync(
+        int accountId,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId && item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<SocialVideoMetricSnapshot?> PreviousContentMetricAsync(
+        int accountId,
+        string id,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId &&
+                item.PlatformVideoId == id &&
+                item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
 
     private static bool IsPostRow(IReadOnlyDictionary<string, string> row) =>
         !string.IsNullOrWhiteSpace(GetAny(row, FacebookIdKeys)) ||

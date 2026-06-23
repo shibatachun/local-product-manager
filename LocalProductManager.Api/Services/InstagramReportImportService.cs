@@ -54,13 +54,14 @@ public sealed class InstagramReportImportService(AppDbContext db)
                 Followers = current.Followers + ParseInt(Get(row, "Follows"))
             });
 
+        var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
         var metric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);
-        metric.Views = totals.Views;
-        metric.Likes = totals.Likes;
-        metric.Comments = totals.Comments;
-        metric.Shares = totals.Shares;
-        metric.Followers = totals.Followers;
-        metric.Clicks = 0;
+        metric.Views = (previousMetric?.Views ?? 0) + totals.Views;
+        metric.Likes = (previousMetric?.Likes ?? 0) + totals.Likes;
+        metric.Comments = (previousMetric?.Comments ?? 0) + totals.Comments;
+        metric.Shares = (previousMetric?.Shares ?? 0) + totals.Shares;
+        metric.Followers = (previousMetric?.Followers ?? 0) + totals.Followers;
+        metric.Clicks = previousMetric?.Clicks ?? 0;
         metric.UpdatedAt = DateTimeOffset.UtcNow;
 
         foreach (var row in records)
@@ -254,12 +255,36 @@ public sealed class InstagramReportImportService(AppDbContext db)
         metric.Title = BuildTitle(Get(row, "Description"), Get(row, "Post type"), id);
         metric.ThumbnailUrl = null;
         metric.PublishedAt = ParseDateTime(Get(row, "Publish time"));
-        metric.Views = ParseInt(Get(row, "Views"));
-        metric.Likes = ParseInt(Get(row, "Likes"));
-        metric.Comments = ParseInt(Get(row, "Comments"));
-        metric.Clicks = ParseInt(Get(row, "Saves"));
+        var previous = await PreviousContentMetricAsync(accountId, id, snapshotDate, cancellationToken);
+        metric.Views = (previous?.Views ?? 0) + ParseInt(Get(row, "Views"));
+        metric.Likes = (previous?.Likes ?? 0) + ParseInt(Get(row, "Likes"));
+        metric.Comments = (previous?.Comments ?? 0) + ParseInt(Get(row, "Comments"));
+        metric.Clicks = (previous?.Clicks ?? 0) + ParseInt(Get(row, "Saves"));
         metric.UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    private async Task<SocialMetricSnapshot?> PreviousAccountMetricAsync(
+        int accountId,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId && item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<SocialVideoMetricSnapshot?> PreviousContentMetricAsync(
+        int accountId,
+        string id,
+        DateOnly snapshotDate,
+        CancellationToken cancellationToken) =>
+        await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Where(item => item.SocialAccountId == accountId &&
+                item.PlatformVideoId == id &&
+                item.SnapshotDate < snapshotDate)
+            .OrderByDescending(item => item.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
 
     private static InstagramAccountInfo ExtractAccountInfo(IReadOnlyList<Dictionary<string, string>> rows)
     {
