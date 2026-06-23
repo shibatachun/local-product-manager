@@ -153,6 +153,12 @@ export interface StoreLink {
   url: string | null;
 }
 
+export interface RmbToUsdRate {
+  rate: number;
+  date: string;
+  source: string;
+}
+
 export type VideoTrendPlatform = 'youtube' | 'instagram' | 'tiktok' | 'pinterest' | 'facebook' | 'other';
 
 export interface VideoTrendItem {

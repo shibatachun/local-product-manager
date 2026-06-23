@@ -36,6 +36,7 @@ builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();
 builder.Services.AddHttpClient<MetaOAuthService>();
 builder.Services.AddHttpClient<SocialAiAnalysisService>();
+builder.Services.AddHttpClient<ExchangeRateService>();
 builder.Services.AddHostedService<YouTubeDailyMetricsHostedService>();
 builder.Services.AddHostedService<MetaDailyMetricsHostedService>();
 builder.Services.AddHostedService<SocialAiAnalysisHostedService>();

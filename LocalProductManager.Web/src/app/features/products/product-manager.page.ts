@@ -45,6 +45,13 @@ interface PricingEstimate {
   categoryRate: number;
   quantity: number;
   unitCost: number;
+  unitProductCostRmb: number;
+  unitFirstMileRmb: number;
+  unitLandedCostRmb: number;
+  totalLandedCostRmb: number;
+  rmbToUsdRate: number;
+  exchangeRateDate: string;
+  exchangeRateSource: string;
   totalCost: number;
   cubicInches: number;
   dimensionalWeight: number;
@@ -462,6 +469,7 @@ export class ProductManagerPage {
     { value: 'etsy', label: 'Etsy' },
   ];
   readonly pricingResult = signal<PricingEstimate | null>(null);
+  readonly rmbToUsdRate = signal({ rate: 0.14, date: 'fallback', source: 'Fallback estimate' });
   readonly detailPricingResult = signal<PricingEstimate | null>(null);
 
   readonly stats = computed(() => {
@@ -486,7 +494,7 @@ export class ProductManagerPage {
   );
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks()]);
+    await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks(), this.loadRmbToUsdRate(false)]);
   }
 
   async loadCurrentUser(): Promise<void> {
@@ -652,13 +660,25 @@ export class ProductManagerPage {
     this.pricingResult.set(null);
   }
 
-  calculatePricing(): void {
+  async loadRmbToUsdRate(showErrors = true): Promise<void> {
+    try {
+      this.rmbToUsdRate.set(await this.api.rmbToUsdRate());
+      this.pricingResult.set(null);
+      this.detailPricingResult.set(null);
+    } catch {
+      if (showErrors) this.showNotice('Could not fetch RMB to USD rate. Using fallback estimate.');
+    }
+  }
+
+  async calculatePricing(): Promise<void> {
+    await this.loadRmbToUsdRate(false);
     this.pricingResult.set(this.calculatePricingEstimate());
   }
 
-  calculateDetailPricing(): void {
+  async calculateDetailPricing(): Promise<void> {
     const product = this.selectedProduct();
     if (!product) return;
+    await this.loadRmbToUsdRate(false);
     this.detailPricingResult.set(this.calculatePricingEstimateForProduct(product));
   }
 
@@ -1200,9 +1220,16 @@ export class ProductManagerPage {
     const logistics = config.logistics.find((item) => item.value === input.logistics) ?? config.logistics[0];
     const category = config.categories.find((item) => item.value === input.category) ?? config.categories[0];
     const quantity = Math.max(1, Math.round(this.safeNumber(input.quantity)));
-    const unitCost = this.safeNumber(input.unitCost);
-    const totalCost = unitCost * quantity;
+    const unitProductCostRmb = this.safeNumber(input.unitCost);
     const unitWeight = Math.max(0, this.safeNumber(input.unitWeight));
+    const unitWeightGrams = unitWeight * 453.59237;
+    const unitFirstMileRmb = unitWeightGrams * 0.05;
+    const unitLandedCostRmb = unitProductCostRmb + unitFirstMileRmb;
+    const totalLandedCostRmb = unitLandedCostRmb * quantity;
+    const exchangeRate = this.rmbToUsdRate();
+    const rmbToUsdRate = this.safeNumber(exchangeRate.rate) || 0.14;
+    const unitCost = unitLandedCostRmb * rmbToUsdRate;
+    const totalCost = totalLandedCostRmb * rmbToUsdRate;
     const totalWeight = unitWeight * quantity;
     const length = Math.max(0, this.safeNumber(input.length));
     const width = Math.max(0, this.safeNumber(input.width));
@@ -1231,6 +1258,13 @@ export class ProductManagerPage {
       categoryRate: category.feeRate,
       quantity,
       unitCost,
+      unitProductCostRmb,
+      unitFirstMileRmb,
+      unitLandedCostRmb,
+      totalLandedCostRmb,
+      rmbToUsdRate,
+      exchangeRateDate: exchangeRate.date,
+      exchangeRateSource: exchangeRate.source,
       totalCost,
       cubicInches,
       dimensionalWeight,
@@ -1240,7 +1274,11 @@ export class ProductManagerPage {
       suggestedPrice,
       estimatedProfit,
       steps: [
-        { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} unit cost x ${quantity} = ${this.currency(totalCost)} product cost.` },
+        { label: 'Product cost (RMB)', value: this.rmb(unitProductCostRmb), note: `Input product cost is RMB before currency conversion.` },
+        { label: 'First-mile freight (RMB)', value: this.rmb(unitFirstMileRmb), note: `0.05 RMB x ${this.number(unitWeightGrams)} g = ${this.rmb(unitFirstMileRmb)} per unit.` },
+        { label: 'Landed cost (RMB)', value: this.rmb(totalLandedCostRmb), note: `(${this.rmb(unitProductCostRmb)} product + ${this.rmb(unitFirstMileRmb)} first-mile) x ${quantity} unit(s).` },
+        { label: 'RMB to USD', value: `${this.unit(rmbToUsdRate)} USD/RMB`, note: `${exchangeRate.source}, rate date ${exchangeRate.date}. ${this.rmb(totalLandedCostRmb)} x ${this.unit(rmbToUsdRate)} = ${this.currency(totalCost)}.` },
+        { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} landed unit cost x ${quantity} = ${this.currency(totalCost)} product cost in USD.` },
         { label: 'Total weight', value: `${this.number(totalWeight)} lb`, note: `${this.number(unitWeight)} lb per unit x ${quantity}.` },
         { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / ${logistics.dimDivisor} = ${this.number(dimensionalWeight)} lb.` },
         { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of total actual weight and dimensional weight${logistics.weightPaddingLb ? `, adds ${this.number(logistics.weightPaddingLb)} lb packaging weight` : ''}, then rounds up.` },
@@ -1301,6 +1339,10 @@ export class ProductManagerPage {
 
   currency(value: number): string {
     return `$${this.safeNumber(value).toFixed(2)}`;
+  }
+
+  rmb(value: number): string {
+    return `¥${this.safeNumber(value).toFixed(2)}`;
   }
 
   number(value: number): string {

@@ -67,7 +67,7 @@
 
       <section class="table-wrap">
         <table>
-          <thead><tr><th>Product</th><th>SKU</th><th>Cost</th><th>Weight</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>SKU</th><th>Cost (RMB)</th><th>Weight</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
           <tbody>
             <ng-container *ngFor="let product of products()">
             <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
@@ -81,7 +81,7 @@
                 </button>
               </td>
               <td><code>{{ product.sku }}</code><small class="sku-caption" *ngIf="product.productType === 'parent'">Parent</small></td>
-              <td>{{ product.cost === null ? '—' : ('$' + (product.cost | number:'1.2-2')) }}</td>
+              <td>{{ product.cost === null ? '—' : ('¥' + (product.cost | number:'1.2-2')) }}</td>
               <td>{{ product.weight === null ? '—' : (product.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of product.platforms">{{ platformLabel(platform) }}</span><span class="muted" *ngIf="!product.platforms.length">Not listed</span></td>
               <td>{{ product.updatedAt | date:'MMM d, y' }}</td>
@@ -96,7 +96,7 @@
                 </button>
               </td>
               <td><code>{{ child.sku }}</code><small class="sku-caption" *ngIf="child.skuBase">Base {{ child.skuBase }}</small></td>
-              <td>{{ child.cost === null ? '—' : ('$' + (child.cost | number:'1.2-2')) }}</td>
+              <td>{{ child.cost === null ? '—' : ('¥' + (child.cost | number:'1.2-2')) }}</td>
               <td>{{ child.weight === null ? '—' : (child.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of child.platforms">{{ platformLabel(platform) }}</span></td>
               <td>{{ child.updatedAt | date:'MMM d, y' }}</td>
@@ -222,7 +222,7 @@
                   <button type="button" (click)="adjustPricingQuantity(1)">+</button>
                 </div>
               </div>
-              <label>Unit product cost
+              <label>Unit product cost (RMB)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" placeholder="0.00" />
               </label>
               <label>Unit weight (lb)
@@ -248,7 +248,8 @@
               </label>
             </div>
             <div class="pricing-live-summary">
-              <span>Total cost <strong>{{ currency(pricingDerived().totalCost) }}</strong></span>
+              <span>Landed cost <strong>{{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</strong></span>
+              <span>RMB→USD <strong>{{ unit(pricingDerived().rmbToUsdRate) }}</strong></span>
               <span>Total weight <strong>{{ number(pricingDerived().quantity * pricingForm.weight) }} lb</strong></span>
               <span>Billable weight <strong>{{ pricingDerived().billableWeight }} lb</strong></span>
             </div>
@@ -261,12 +262,14 @@
               <div><span>Break-even price</span><strong>{{ currency(estimate.breakEvenPrice) }}</strong></div>
               <div><span>Estimated profit</span><strong>{{ currency(estimate.estimatedProfit) }}</strong></div>
               <div><span>Shipping estimate</span><strong>{{ currency(estimate.shippingCost) }}</strong></div>
+              <div><span>Landed cost</span><strong>{{ rmb(estimate.totalLandedCostRmb) }}</strong></div>
             </div>
             <div class="estimate-meta">
               <span>{{ platformLabel(estimate.platform) }}</span>
               <span>{{ estimate.category }}: {{ number(estimate.categoryRate * 100) }}%</span>
               <span>{{ estimate.logistics }}</span>
               <span>{{ estimate.quantity }} unit(s)</span>
+              <span>RMB→USD: {{ unit(estimate.rmbToUsdRate) }}</span>
               <span>Billable weight: {{ estimate.billableWeight }} lb</span>
               <span>Dimensional weight: {{ number(estimate.dimensionalWeight) }} lb</span>
             </div>
@@ -287,7 +290,8 @@
                 <span>{{ platformLabel(pricingForm.platform) }}</span>
                 <span>{{ pricingDerived().category }}: {{ number(pricingDerived().categoryRate * 100) }}%</span>
                 <span>{{ pricingDerived().logistics }}</span>
-                <span>Total cost: {{ currency(pricingDerived().totalCost) }}</span>
+                <span>Landed cost: {{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</span>
+                <span>RMB→USD: {{ unit(pricingDerived().rmbToUsdRate) }}</span>
                 <span>Billable weight: {{ pricingDerived().billableWeight }} lb</span>
               </div>
             </div>
@@ -388,7 +392,7 @@
           <option *ngFor="let option of pricingConfigs.walmart.categories" [value]="option.value">{{ option.label }}</option>
         </select>
       </label>
-      <label>Cost<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
+      <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
       <label>Weight<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
@@ -477,7 +481,7 @@
             <option *ngFor="let option of detailPricingCategoryOptions()" [value]="option.value">{{ option.label }}</option>
           </select>
         </label>
-        <label>Cost<input type="number" step="0.01" [(ngModel)]="editForm.cost" /></label>
+        <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.cost" /></label>
         <label>Weight<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>
@@ -495,7 +499,7 @@
       </div>
     </section>
     <section>
-      <div class="section-heading"><div><h3>Suggested pricing</h3><p>Uses saved cost, weight, dimensions, category, and logistics.</p></div></div>
+      <div class="section-heading"><div><h3>Suggested pricing</h3><p>Uses saved RMB cost, first-mile freight, weight, dimensions, category, and logistics.</p></div></div>
       <div class="detail-pricing-grid">
         <label>Platform
           <select [ngModel]="detailPricingForm.platform" (ngModelChange)="onDetailPricingPlatformChanged($event)">
@@ -526,7 +530,8 @@
         <button class="primary" type="button" (click)="calculateDetailPricing()">Calculate suggested price</button>
       </div>
       <div class="detail-pricing-summary">
-        <span>Total cost <strong>{{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
+        <span>Landed cost <strong>{{ rmb(detailPricingDerived(product).totalLandedCostRmb) }} / {{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
+        <span>RMB→USD <strong>{{ unit(detailPricingDerived(product).rmbToUsdRate) }}</strong></span>
         <span>Billable weight <strong>{{ detailPricingDerived(product).billableWeight }} lb</strong></span>
         <span *ngIf="detailPricingResult() as estimate">Suggested <strong>{{ currency(estimate.suggestedPrice) }}</strong></span>
         <span *ngIf="detailPricingResult() as estimate">Break-even <strong>{{ currency(estimate.breakEvenPrice) }}</strong></span>

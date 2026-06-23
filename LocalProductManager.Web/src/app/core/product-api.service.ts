@@ -16,6 +16,7 @@ import {
   ProductDuplicateCheck,
   ProductListItem,
   ProductListing,
+  RmbToUsdRate,
   StoreLink,
 } from './models';
 
@@ -211,5 +212,9 @@ export class ProductApiService {
 
   saveStoreLink(platform: Platform, url: string | null): Promise<StoreLink> {
     return firstValueFrom(this.http.put<StoreLink>(`${this.baseUrl}/store-links/${platform}`, { url }));
+  }
+
+  rmbToUsdRate(): Promise<RmbToUsdRate> {
+    return firstValueFrom(this.http.get<RmbToUsdRate>(`${this.baseUrl}/exchange-rates/rmb-to-usd`));
   }
 }
