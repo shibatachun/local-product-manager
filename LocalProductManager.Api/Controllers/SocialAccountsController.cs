@@ -9,7 +9,11 @@ namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/social-accounts")]
-public sealed class SocialAccountsController(AppDbContext db, AuthService auth) : ControllerBase
+public sealed class SocialAccountsController(
+    AppDbContext db,
+    AuthService auth,
+    MetaOAuthService meta,
+    SocialFetchLogService fetchLogs) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<SocialAccountDto>>> GetAll(
@@ -132,10 +136,34 @@ public sealed class SocialAccountsController(AppDbContext db, AuthService auth) 
         var accounts = await db.SocialAccounts.CountAsync(
             account => account.IsActive,
             cancellationToken);
+        var imported = 0;
+        var messages = new List<string>();
+        try
+        {
+            imported += await meta.SyncAsync(db, cancellationToken);
+            messages.Add("Meta synced.");
+            await fetchLogs.RecordAsync(
+                "social-accounts-sync",
+                "success",
+                imported,
+                "Meta sync completed from the Social Accounts Sync API button.",
+                cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            messages.Add($"Meta skipped: {ex.Message}");
+            await fetchLogs.RecordAsync("social-accounts-sync", "skipped", 0, ex.Message, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            messages.Add($"Meta failed: {ex.Message}");
+            await fetchLogs.RecordAsync("social-accounts-sync", "failed", 0, ex.Message, cancellationToken);
+        }
+
         return Ok(new SocialSyncResult(
             accounts,
-            0,
-            "API connectors are reserved for a later integration."));
+            imported,
+            messages.Count > 0 ? string.Join(" ", messages) : "No API connectors are configured."));
     }
 
     [HttpGet("debug")]

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
+using LocalProductManager.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LocalProductManager.Api.Services;
@@ -107,16 +108,24 @@ public sealed class SocialAiAnalysisService(
         DateOnly to,
         CancellationToken cancellationToken)
     {
+        var normalizedPeriod = NormalizePeriod(period);
+        var comparison = ResolveComparisonRange(normalizedPeriod, from, to);
+        var ytdFrom = new DateOnly(to.Year, 1, 1);
         var accounts = await db.SocialAccounts
             .AsNoTracking()
             .Include(account => account.Metrics)
             .OrderBy(account => account.Platform)
             .ThenBy(account => account.AccountName)
             .ToListAsync(cancellationToken);
-        var videoRows = await db.SocialVideoMetricSnapshots
+        var currentContentRows = await db.SocialVideoMetricSnapshots
             .AsNoTracking()
             .Include(metric => metric.SocialAccount)
             .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .ToListAsync(cancellationToken);
+        var comparisonContentRows = await db.SocialVideoMetricSnapshots
+            .AsNoTracking()
+            .Include(metric => metric.SocialAccount)
+            .Where(metric => metric.SnapshotDate >= comparison.From && metric.SnapshotDate <= comparison.To)
             .ToListAsync(cancellationToken);
 
         var lines = new StringBuilder();
@@ -137,40 +146,70 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine("### Next Actions");
         lines.AppendLine("### Data Caveats");
         lines.AppendLine("Keep both languages practical and specific. Do not invent metrics that are not present.");
-        lines.AppendLine($"Period: {NormalizePeriod(period)}");
-        lines.AppendLine($"Date range: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+        lines.AppendLine("Use the delta rows as the primary signal. If a value changed by 1, mention it when it is relevant.");
+        lines.AppendLine("Daily reports compare the target day with the previous available snapshot and include year-to-date context.");
+        lines.AppendLine("Weekly reports compare the selected week with the previous week.");
+        lines.AppendLine($"Period: {normalizedPeriod}");
+        lines.AppendLine($"Current date range: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+        lines.AppendLine($"Comparison date range: {comparison.From:yyyy-MM-dd} to {comparison.To:yyyy-MM-dd}");
+        lines.AppendLine($"YTD context range: {ytdFrom:yyyy-MM-dd} to {to:yyyy-MM-dd}");
         lines.AppendLine();
-        lines.AppendLine("Account snapshots:");
+        lines.AppendLine("Account snapshot deltas:");
 
+        var anyMetrics = false;
+        var currentRows = new List<(SocialAccount Account, SocialMetricSnapshot Current)>();
         foreach (var account in accounts)
         {
-            var metrics = account.Metrics
-                .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
-                .OrderBy(metric => metric.SnapshotDate)
-                .ToArray();
-            if (metrics.Length == 0) continue;
-
-            var first = metrics.First();
-            var last = metrics.Last();
+            var current = LatestMetric(account, from, to);
+            if (current is null) continue;
+            anyMetrics = true;
+            currentRows.Add((account, current));
+            var previous = LatestMetric(account, comparison.From, comparison.To) ??
+                PreviousMetricBefore(account, from);
+            var ytdFirst = FirstMetric(account, ytdFrom, to);
             lines.AppendLine(
-                $"- {account.Platform} / {account.AccountName}: rows={metrics.Length}, " +
-                $"views {first.Views}->{last.Views}, likes {first.Likes}->{last.Likes}, comments {first.Comments}->{last.Comments}, " +
-                $"clicks {first.Clicks}->{last.Clicks}, shares {first.Shares}->{last.Shares}, followers {first.Followers}->{last.Followers}");
+                $"- {account.Platform} / {account.AccountName}: currentDate={current.SnapshotDate:yyyy-MM-dd}, " +
+                MetricChange("views", current.Views, previous?.Views, ytdFirst?.Views) + "; " +
+                MetricChange("likes", current.Likes, previous?.Likes, ytdFirst?.Likes) + "; " +
+                MetricChange("comments", current.Comments, previous?.Comments, ytdFirst?.Comments) + "; " +
+                MetricChange("clicks", current.Clicks, previous?.Clicks, ytdFirst?.Clicks) + "; " +
+                MetricChange("shares", current.Shares, previous?.Shares, ytdFirst?.Shares) + "; " +
+                MetricChange("followers", current.Followers, previous?.Followers, ytdFirst?.Followers));
         }
 
         lines.AppendLine();
-        lines.AppendLine("Top content rows in the period:");
-        foreach (var row in videoRows
+        lines.AppendLine("Current period platform totals:");
+        foreach (var group in currentRows.GroupBy(item => item.Account.Platform).OrderBy(group => group.Key))
+        {
+            lines.AppendLine(
+                $"- {group.Key}: views={group.Sum(item => item.Current.Views)}, likes={group.Sum(item => item.Current.Likes)}, " +
+                $"comments={group.Sum(item => item.Current.Comments)}, clicks={group.Sum(item => item.Current.Clicks)}, " +
+                $"shares={group.Sum(item => item.Current.Shares)}, followers={group.Sum(item => item.Current.Followers)}");
+        }
+
+        lines.AppendLine();
+        lines.AppendLine("Top content rows in the current period:");
+        foreach (var row in currentContentRows
+            .GroupBy(row => new { row.SocialAccountId, row.PlatformVideoId })
+            .Select(group => group.OrderByDescending(row => row.SnapshotDate).First())
             .OrderByDescending(row => row.Views)
             .ThenByDescending(row => row.Likes)
             .Take(25))
         {
+            var previous = comparisonContentRows
+                .Where(item => item.SocialAccountId == row.SocialAccountId && item.PlatformVideoId == row.PlatformVideoId)
+                .OrderByDescending(item => item.SnapshotDate)
+                .FirstOrDefault();
             lines.AppendLine(
                 $"- {row.SocialAccount?.Platform} / {row.SocialAccount?.AccountName}: {row.Title}; " +
-                $"date={row.SnapshotDate:yyyy-MM-dd}, views={row.Views}, likes={row.Likes}, comments={row.Comments}, clicks={row.Clicks}");
+                $"date={row.SnapshotDate:yyyy-MM-dd}, " +
+                MetricChange("views", row.Views, previous?.Views, null) + "; " +
+                MetricChange("likes", row.Likes, previous?.Likes, null) + "; " +
+                MetricChange("comments", row.Comments, previous?.Comments, null) + "; " +
+                MetricChange("clicks", row.Clicks, previous?.Clicks, null));
         }
 
-        if (!accounts.Any(account => account.Metrics.Any(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)))
+        if (!anyMetrics)
         {
             lines.AppendLine("- No account metric snapshots found in this period.");
         }
@@ -249,11 +288,61 @@ public sealed class SocialAiAnalysisService(
         return (date, date);
     }
 
+    private static (DateOnly From, DateOnly To) ResolveComparisonRange(string period, DateOnly from, DateOnly to)
+    {
+        if (NormalizePeriod(period) == "weekly")
+        {
+            return (from.AddDays(-7), to.AddDays(-7));
+        }
+
+        return (from.AddDays(-1), to.AddDays(-1));
+    }
+
     private static string NormalizePeriod(string period) =>
         string.Equals(period, "weekly", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(period, "week", StringComparison.OrdinalIgnoreCase)
             ? "weekly"
             : "daily";
+
+    private static SocialMetricSnapshot? LatestMetric(SocialAccount account, DateOnly from, DateOnly to) =>
+        account.Metrics
+            .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .OrderByDescending(metric => metric.SnapshotDate)
+            .FirstOrDefault();
+
+    private static SocialMetricSnapshot? FirstMetric(SocialAccount account, DateOnly from, DateOnly to) =>
+        account.Metrics
+            .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .OrderBy(metric => metric.SnapshotDate)
+            .FirstOrDefault();
+
+    private static SocialMetricSnapshot? PreviousMetricBefore(SocialAccount account, DateOnly date) =>
+        account.Metrics
+            .Where(metric => metric.SnapshotDate < date)
+            .OrderByDescending(metric => metric.SnapshotDate)
+            .FirstOrDefault();
+
+    private static string MetricChange(string label, int current, int? previous, int? ytdStart)
+    {
+        var previousText = previous.HasValue
+            ? $"{previous.Value}->{current}, delta={current - previous.Value}, pct={PercentChange(previous.Value, current)}"
+            : $"current={current}, previous=missing";
+        var ytdText = ytdStart.HasValue
+            ? $", ytdDelta={current - ytdStart.Value}, ytdPct={PercentChange(ytdStart.Value, current)}"
+            : "";
+        return $"{label} {previousText}{ytdText}";
+    }
+
+    private static string PercentChange(int previous, int current)
+    {
+        if (previous == 0)
+        {
+            return current == 0 ? "0%" : "new";
+        }
+
+        var percent = ((current - previous) * 100.0) / previous;
+        return $"{percent:0.##}%";
+    }
 
     private bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
     private string? ApiKey =>

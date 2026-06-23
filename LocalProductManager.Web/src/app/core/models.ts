@@ -363,6 +363,18 @@ export interface PinterestAuthStatus {
   isAdminHost: boolean;
 }
 
+export interface MetaAuthStatus {
+  isConfigured: boolean;
+  isConnected: boolean;
+  userId: string | null;
+  userName: string | null;
+  facebookPages: number;
+  instagramAccounts: number;
+  message: string | null;
+  redirectUri: string;
+  isAdminHost: boolean;
+}
+
 export interface PinterestReportImportResult {
   accountId: number;
   dailyRowsImported: number;

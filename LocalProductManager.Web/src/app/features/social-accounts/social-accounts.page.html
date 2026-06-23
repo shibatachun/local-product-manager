@@ -67,7 +67,7 @@
         </div>
 
         <ng-template #nonYoutubeConnect>
-          <div class="connect-card" *ngIf="accountForm.platform === 'pinterest'; else disabledConnect">
+          <div class="connect-card" *ngIf="accountForm.platform === 'pinterest'; else nonPinterestConnect">
             <div class="connect-identity">
               <img class="channel-avatar" *ngIf="pinterestStatus()?.accountThumbnailUrl; else pinterestMark" [src]="pinterestStatus()?.accountThumbnailUrl || ''" alt="" />
               <ng-template #pinterestMark><span class="platform-mark pinterest">P</span></ng-template>
@@ -82,6 +82,27 @@
                 Sync
               </button>
               <button type="button" (click)="disconnectPinterest()" [disabled]="!pinterestStatus()?.isConnected || loading()">
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </ng-template>
+
+        <ng-template #nonPinterestConnect>
+          <div class="connect-card" *ngIf="accountForm.platform === 'facebook' || accountForm.platform === 'instagram'; else disabledConnect">
+            <div class="connect-identity">
+              <span class="platform-mark meta">M</span>
+              <strong>{{ metaStatus()?.isConnected ? 'Meta connected' : 'Connect Meta' }}</strong>
+              <small>{{ metaHelperText() }}</small>
+            </div>
+            <div class="connect-actions">
+              <button type="button" *ngIf="!metaStatus()?.isConnected" (click)="connectMeta()" [disabled]="loading()">
+                Connect Meta
+              </button>
+              <button class="primary" type="button" (click)="syncMeta()" [disabled]="!metaStatus()?.isConnected || loading()">
+                Sync
+              </button>
+              <button type="button" (click)="disconnectMeta()" [disabled]="!metaStatus()?.isConnected || loading()">
                 Disconnect
               </button>
             </div>

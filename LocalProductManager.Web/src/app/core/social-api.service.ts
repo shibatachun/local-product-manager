@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -104,6 +104,22 @@ export class SocialApiService {
   pinterestPins(accountId?: number | null): Promise<PinterestContentSnapshot> {
     const query = accountId ? `?accountId=${accountId}` : '';
     return firstValueFrom(this.http.get<PinterestContentSnapshot>(`${this.baseUrl}/pinterest/pins${query}`));
+  }
+
+  metaStatus(): Promise<MetaAuthStatus> {
+    return firstValueFrom(this.http.get<MetaAuthStatus>(`${this.baseUrl}/meta/auth/status`));
+  }
+
+  metaAuthStart(): Promise<{ authorizationUrl: string; redirectUri: string }> {
+    return firstValueFrom(this.http.get<{ authorizationUrl: string; redirectUri: string }>(`${this.baseUrl}/meta/auth/start`));
+  }
+
+  metaSync(): Promise<SocialSyncResult> {
+    return firstValueFrom(this.http.post<SocialSyncResult>(`${this.baseUrl}/meta/sync`, {}));
+  }
+
+  metaDisconnect(): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/meta/auth/disconnect`, {}));
   }
 
   instagramImportReport(file: File): Promise<InstagramReportImportResult> {

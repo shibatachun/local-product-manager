@@ -2,7 +2,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CurrentUser, FacebookContentSnapshot, InstagramContentSnapshot, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
+import { CurrentUser, FacebookContentSnapshot, InstagramContentSnapshot, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
 
@@ -23,6 +23,7 @@ export class SocialAccountsPage {
   readonly loading = signal(false);
   readonly youtubeStatus = signal<YouTubeAuthStatus | null>(null);
   readonly pinterestStatus = signal<PinterestAuthStatus | null>(null);
+  readonly metaStatus = signal<MetaAuthStatus | null>(null);
   readonly youtubeSnapshot = signal<YouTubeDebugSnapshot | null>(null);
   readonly pinterestSnapshot = signal<PinterestContentSnapshot | null>(null);
   readonly instagramSnapshot = signal<InstagramContentSnapshot | null>(null);
@@ -55,6 +56,7 @@ export class SocialAccountsPage {
   readonly chartBottom = 272;
   private youtubePollTimer: number | null = null;
   private pinterestPollTimer: number | null = null;
+  private metaPollTimer: number | null = null;
 
   readonly range = {
     from: this.toDateInput(this.addDays(new Date(), -30)),
@@ -298,7 +300,7 @@ export class SocialAccountsPage {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus(), this.loadAiAnalysisStatus(), this.loadAiReports(false)]);
+    await Promise.all([this.loadCurrentUser(), this.load(), this.loadYouTubeStatus(), this.loadPinterestStatus(), this.loadMetaStatus(), this.loadAiAnalysisStatus(), this.loadAiReports(false)]);
     await this.loadSelectedAccountContent();
   }
 
@@ -504,6 +506,14 @@ export class SocialAccountsPage {
     }
   }
 
+  async loadMetaStatus(): Promise<void> {
+    try {
+      this.metaStatus.set(await this.api.metaStatus());
+    } catch {
+      this.metaStatus.set(null);
+    }
+  }
+
   async connectYouTube(): Promise<void> {
     const status = this.youtubeStatus();
     if (!this.canManageSocial()) {
@@ -618,6 +628,53 @@ export class SocialAccountsPage {
       await this.loadPinterestStatus();
       await this.load();
       this.showNotice('Pinterest authorization disconnected.');
+    });
+  }
+
+  async connectMeta(): Promise<void> {
+    const status = this.metaStatus();
+    if (!this.canManageSocial()) {
+      return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
+    }
+    if (status?.isConfigured === false) {
+      return this.showNotice(status.message || 'Set Meta OAuth ClientId and ClientSecret first.');
+    }
+    if (this.runningOnLanHost) {
+      return this.showNotice('Open http://localhost:5077/social-accounts on the server computer to connect Meta.');
+    }
+
+    await this.perform(async () => {
+      const result = await this.api.metaAuthStart();
+      const popup = window.open(result.authorizationUrl, 'metaOAuth', 'width=760,height=800');
+      if (!popup) {
+        location.href = result.authorizationUrl;
+        return;
+      }
+      this.startMetaStatusPolling(popup);
+      this.showNotice('Complete Meta authorization in the popup, then click Sync Meta.');
+    });
+  }
+
+  async syncMeta(): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('Sync is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.metaSync();
+      await Promise.all([this.load(), this.loadMetaStatus()]);
+      await this.loadFetchLogs(false);
+      const platform = this.accountForm.platform === 'instagram' ? 'instagram' : 'facebook';
+      await this.selectConnectedPlatformAccount(platform);
+      this.selectedChartPlatforms.update(current => new Set([...Array.from(current), platform]));
+      this.showNotice(result.status);
+    });
+  }
+
+  async disconnectMeta(): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('Disconnect is only available on the host computer.');
+    if (!confirm('Disconnect Meta authorization on this server? Stored Facebook/Instagram snapshots will remain.')) return;
+    await this.perform(async () => {
+      await this.api.metaDisconnect();
+      await this.loadMetaStatus();
+      this.showNotice('Meta authorization disconnected. Stored Facebook/Instagram data was kept.');
     });
   }
 
@@ -969,6 +1026,17 @@ export class SocialAccountsPage {
     return status.message || 'Open Pinterest authorization';
   }
 
+  metaHelperText(): string {
+    const status = this.metaStatus();
+    if (!status) return 'Checking Meta connection...';
+    if (!this.canManageSocial()) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
+    if (status.isConnected) {
+      return `${status.userName || 'Meta account'} - ${status.facebookPages} Facebook page(s), ${status.instagramAccounts} Instagram account(s)`;
+    }
+    if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
+    return status.message || 'Connect Facebook Pages and Instagram Professional accounts through Meta';
+  }
+
   private startYouTubeStatusPolling(popup: Window): void {
     if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
     this.youtubePollTimer = window.setInterval(async () => {
@@ -988,6 +1056,18 @@ export class SocialAccountsPage {
       if (this.pinterestStatus()?.isConnected || popup.closed) {
         if (this.pinterestPollTimer) window.clearInterval(this.pinterestPollTimer);
         this.pinterestPollTimer = null;
+        await this.load();
+      }
+    }, 1200);
+  }
+
+  private startMetaStatusPolling(popup: Window): void {
+    if (this.metaPollTimer) window.clearInterval(this.metaPollTimer);
+    this.metaPollTimer = window.setInterval(async () => {
+      await this.loadMetaStatus();
+      if (this.metaStatus()?.isConnected || popup.closed) {
+        if (this.metaPollTimer) window.clearInterval(this.metaPollTimer);
+        this.metaPollTimer = null;
         await this.load();
       }
     }, 1200);
