@@ -19,6 +19,7 @@ export class AdminPage {
   readonly notice = signal('');
   readonly loading = signal(false);
   readonly loginForm = { userName: 'admin123', password: '' };
+  readonly resetForm = { password: '' };
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -62,6 +63,38 @@ export class AdminPage {
       const saved = await this.auth.updateUser(user);
       this.users.update(users => users.map(item => item.id === saved.id ? saved : item));
       this.show(`${saved.userName} permissions saved.`);
+    });
+  }
+
+  exportSocialData(): void {
+    window.location.href = this.auth.socialDataExportUrl();
+  }
+
+  async onSocialDataImportSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+    if (!confirm('Import this social data backup? This only replaces social account snapshots, content snapshots, and daily deltas. Product and user data will not be changed.')) return;
+
+    await this.run(async () => {
+      const result = await this.auth.importSocialData(file);
+      this.show(`${result.status} Account snapshots: ${result.accountSnapshots}, content snapshots: ${result.contentSnapshots}, daily deltas: ${result.dailyDeltas}.`);
+    });
+  }
+
+  async resetSocialData(): Promise<void> {
+    if (!this.resetForm.password) {
+      this.show('Enter the admin password before resetting social data.');
+      return;
+    }
+    const confirmed = confirm('Reset all social snapshots, content snapshots, and daily delta data? Social accounts will remain. Products, users, and attribution data will not be changed.');
+    if (!confirmed) return;
+
+    await this.run(async () => {
+      const result = await this.auth.resetSocialData(this.resetForm.password);
+      this.resetForm.password = '';
+      this.show(`${result.status} Account snapshots: ${result.accountSnapshots}, content snapshots: ${result.contentSnapshots}, daily deltas: ${result.dailyDeltas}.`);
     });
   }
 

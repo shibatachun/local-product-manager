@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { AppUserAdmin, AuthAdminSnapshot, CurrentUser } from './models';
+import { AppUserAdmin, AuthAdminSnapshot, CurrentUser, SocialDataMaintenanceResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthApiService {
@@ -32,6 +32,22 @@ export class AuthApiService {
       canEditAttribution: user.canEditAttribution,
       canManageSocial: user.canManageSocial,
       canImportData: user.canImportData,
+    }));
+  }
+
+  socialDataExportUrl(): string {
+    return `${this.baseUrl}/social-data/export`;
+  }
+
+  importSocialData(file: File): Promise<SocialDataMaintenanceResult> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<SocialDataMaintenanceResult>(`${this.baseUrl}/social-data/import`, data));
+  }
+
+  resetSocialData(adminPassword: string): Promise<SocialDataMaintenanceResult> {
+    return firstValueFrom(this.http.post<SocialDataMaintenanceResult>(`${this.baseUrl}/social-data/reset`, {
+      adminPassword,
     }));
   }
 }

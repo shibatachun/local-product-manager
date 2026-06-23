@@ -23,6 +23,27 @@
   </section>
 
   <ng-container *ngIf="currentUser()?.isAdmin">
+    <section class="panel maintenance-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Social data maintenance</h2>
+          <p>Only social account snapshots, content/video snapshots, and daily deltas are affected.</p>
+        </div>
+      </div>
+      <div class="maintenance-actions">
+        <button type="button" (click)="exportSocialData()" [disabled]="loading()">Export social data</button>
+        <label class="file-action">
+          Import social data
+          <input type="file" accept=".json,application/json" (change)="onSocialDataImportSelected($event)" />
+        </label>
+        <div class="reset-box">
+          <input [(ngModel)]="resetForm.password" type="password" placeholder="Admin password" />
+          <button class="danger" type="button" (click)="resetSocialData()" [disabled]="loading()">Reset social data</button>
+        </div>
+      </div>
+      <p class="danger-note">Reset keeps social accounts, products, users, listings, attribution links, and file storage settings. It clears metric snapshots, content snapshots, and daily delta rows so reports can be re-imported with the new algorithm.</p>
+    </section>
+
     <section class="panel">
       <div class="section-heading">
         <div>

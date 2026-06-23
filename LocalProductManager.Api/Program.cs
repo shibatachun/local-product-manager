@@ -31,6 +31,7 @@ builder.Services.AddScoped<PinterestReportImportService>();
 builder.Services.AddScoped<InstagramReportImportService>();
 builder.Services.AddScoped<FacebookReportImportService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<SocialDataMaintenanceService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();
 builder.Services.AddHttpClient<MetaOAuthService>();

@@ -18,6 +18,15 @@ export interface AuthAdminSnapshot {
   sessions: UserSessionAdmin[];
 }
 
+export interface SocialDataMaintenanceResult {
+  status: string;
+  accounts: number;
+  accountSnapshots: number;
+  contentSnapshots: number;
+  dailyDeltas: number;
+  completedAt: string;
+}
+
 export interface AppUserAdmin {
   id: number;
   userName: string;
