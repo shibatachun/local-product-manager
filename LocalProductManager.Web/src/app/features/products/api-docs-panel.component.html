@@ -1,0 +1,27 @@
+<section class="api-docs-page">
+  <div class="api-docs-hero">
+    <div>
+      <p class="eyebrow">Local Product Manager</p>
+      <h2>System and API reference</h2>
+      <p>The backend API is served from <code>{{ apiBaseUrl }}</code>. Use this page as the in-app reference for products, imports, file proxying, marketing links, social analytics, and AI reports.</p>
+    </div>
+    <a href="/PROJECT_DOCUMENTATION.md" target="_blank" rel="noreferrer">Open full project document</a>
+  </div>
+
+  <div class="api-docs-grid">
+    <article class="api-doc-card" *ngFor="let section of sections">
+      <div>
+        <h3>{{ section.title }}</h3>
+        <p>{{ section.description }}</p>
+      </div>
+      <ul>
+        <li *ngFor="let endpoint of section.endpoints"><code>{{ endpoint }}</code></li>
+      </ul>
+    </article>
+  </div>
+
+  <div class="api-docs-note">
+    <strong>Permission model</strong>
+    <p>Admin-only actions include imports, storage root changes, social account connect/disconnect, manual metrics, attribution edits, user management, and AI report execution. Guest and regular users can browse allowed product, file, marketing, and analytics data without modifying protected records.</p>
+  </div>
+</section>

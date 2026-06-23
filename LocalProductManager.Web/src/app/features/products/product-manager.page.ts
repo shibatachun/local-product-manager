@@ -20,6 +20,8 @@ import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService } from '../../core/product-api.service';
 import { FileStoragePanelComponent } from './file-storage-panel.component';
 import { VideoTrendPanelComponent } from './video-trend-panel.component';
+import { UnitConverterPanelComponent } from './unit-converter-panel.component';
+import { ApiDocsPanelComponent } from './api-docs-panel.component';
 
 type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
@@ -117,17 +119,16 @@ interface PlatformChoice {
   url: string;
 }
 
-interface UnitOption {
-  value: string;
-  label: string;
-  factorToBase: number;
-}
-
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent],
   templateUrl: './product-manager.page.html',
-  styleUrl: './product-manager.page.css',
+  styleUrls: [
+    './product-manager.page.css',
+    './product-manager.pricing.css',
+    './product-manager.modals.css',
+    './product-manager.detail.css',
+  ],
 })
 export class ProductManagerPage {
   readonly api = inject(ProductApiService);
@@ -185,103 +186,6 @@ export class ProductManagerPage {
     { value: 'standalone', label: 'Singles' },
     { value: 'family-one', label: 'One / family' },
   ];
-  readonly apiDocumentationSections = [
-    {
-      title: 'Authentication and permissions',
-      description: 'Local login controls admin-only actions. The host admin can manage users, storage roots, imports, attribution links, social accounts, and AI reports.',
-      endpoints: [
-        'GET /api/auth/me - current user/session',
-        'POST /api/auth/login - login as admin or another local user',
-        'POST /api/auth/logout - end current session',
-        'GET /api/auth/users - admin user list',
-        'PUT /api/auth/users/{userId} - update user role and permissions',
-      ],
-    },
-    {
-      title: 'Products and marketplace listings',
-      description: 'Product records store SKU, name, cost, category, weight, dimensions, image path, variation grouping, store listings, and Amazon ASIN relationships.',
-      endpoints: [
-        'GET /api/products - search/filter product list',
-        'GET /api/products/export - download product Excel workbook',
-        'GET /api/products/{productId} - product detail',
-        'GET /api/products/duplicate-check - SKU duplicate check',
-        'POST /api/products - create product',
-        'PUT /api/products/{productId} - update product',
-        'DELETE /api/products/{productId} - delete product',
-        'GET/POST/PUT/DELETE /api/products/{productId}/listings - manage platform listing URLs',
-        'GET/POST/PUT/DELETE /api/products/{productId}/amazon-asins - manage ASINs',
-      ],
-    },
-    {
-      title: 'Imports and Amazon Attribution',
-      description: 'CSV imports create Amazon products from Business Reports and load Amazon Attribution links by SKU or five-digit SKU family matching.',
-      endpoints: [
-        'POST /api/imports/amazon-business-report - import Amazon products and variation families',
-        'POST /api/imports/amazon-attributions - import one attribution CSV',
-        'POST /api/imports/amazon-attribution-files - bulk import attribution CSV files',
-        'GET /api/products/{productId}/amazon-attributions - attribution links for one product',
-        'PUT /api/products/{productId}/amazon-attributions/{platform} - save one channel link',
-        'POST /api/products/{productId}/amazon-attributions/import - import a product attribution CSV',
-      ],
-    },
-    {
-      title: 'Images and file storage',
-      description: 'The server can browse local or network folders, proxy previews/downloads for LAN clients, match SKU image folders, and fetch remote marketplace image previews without downloading them into product records.',
-      endpoints: [
-        'GET/POST/DELETE /api/images/roots - manage server storage roots',
-        'POST /api/images/match - match SKU against a folder or direct product image folder',
-        'GET /api/images/host/browse - browse a configured server path',
-        'GET /api/images/preview - preview/download a server-accessible file',
-        'GET /api/images/remote-preview - proxy remote image preview',
-        'POST /api/images/from-listing - extract image candidates from marketplace listing URL',
-        'GET /api/products/{productId}/image - preview product image through server',
-        'POST /api/products/{productId}/image/from-amazon - use Amazon image',
-        'POST /api/products/{productId}/image/from-listing - use listing image',
-      ],
-    },
-    {
-      title: 'Social accounts and analytics',
-      description: 'Social Accounts stores YouTube/Pinterest/Instagram reports, account snapshots, content snapshots, charts, debug tables, and fetch logs. Manual imports are admin-only.',
-      endpoints: [
-        'GET/POST/PUT/DELETE /api/social-accounts - manage social accounts',
-        'POST /api/social-accounts/{accountId}/metrics - save manual metric snapshot',
-        'GET /api/social-accounts/debug - host-only raw debug snapshot',
-        'GET /api/social-fetch-logs - fetch/import/AI log history',
-        'POST /api/social-fetch-logs/archive - archive logs to server logging folder',
-        'GET/POST /api/youtube/auth/* - YouTube OAuth connect/disconnect',
-        'POST /api/youtube/sync - fetch YouTube channel/video data',
-        'GET /api/youtube/videos - stored YouTube video metrics',
-        'POST /api/pinterest/report/import - import Pinterest analytics CSV',
-        'GET /api/pinterest/pins - stored Pinterest pin metrics',
-        'POST /api/instagram/report/import - import Instagram CSV',
-        'GET /api/instagram/posts - stored Instagram post/reel metrics',
-        'POST /api/facebook/report/import - import Facebook CSV',
-        'GET /api/facebook/posts - stored Facebook post metrics',
-      ],
-    },
-    {
-      title: 'Video trend research',
-      description: 'A research library for competitor/social videos. Links are parsed by platform when possible, with title, author, thumbnail/embed fields saved for study.',
-      endpoints: [
-        'GET /api/video-trends - list saved trend items',
-        'GET /api/video-trends?platform=youtube - filter by platform',
-        'POST /api/video-trends - add a trend link',
-        'DELETE /api/video-trends/{id} - remove a trend item',
-      ],
-    },
-    {
-      title: 'Store links, pricing, and AI analysis',
-      description: 'Store links open marketplace shops from the homepage. Pricing is calculated client-side from platform/category/logistics rules. Gemini AI reports are generated by the server and saved locally.',
-      endpoints: [
-        'GET /api/store-links - store homepage URLs',
-        'PUT /api/store-links/{platform} - save store URL',
-        'GET /api/social-ai-analysis/status - Gemini configuration and report folder',
-        'GET /api/social-ai-analysis/reports - recent saved AI reports',
-        'POST /api/social-ai-analysis/run - run daily or weekly bilingual report',
-      ],
-    },
-  ];
-
   readonly createForm = {
     sku: '',
     productName: '',
@@ -349,30 +253,6 @@ export class ProductManagerPage {
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
-  readonly lengthConverter = {
-    amount: 1,
-    from: 'in',
-    to: 'cm',
-  };
-  readonly weightConverter = {
-    amount: 16,
-    from: 'oz',
-    to: 'lb',
-  };
-  readonly lengthUnits: UnitOption[] = [
-    { value: 'in', label: 'Inch (in)', factorToBase: 0.0254 },
-    { value: 'ft', label: 'Foot (ft)', factorToBase: 0.3048 },
-    { value: 'yd', label: 'Yard (yd)', factorToBase: 0.9144 },
-    { value: 'mm', label: 'Millimeter (mm)', factorToBase: 0.001 },
-    { value: 'cm', label: 'Centimeter (cm)', factorToBase: 0.01 },
-    { value: 'm', label: 'Meter (m)', factorToBase: 1 },
-  ];
-  readonly weightUnits: UnitOption[] = [
-    { value: 'oz', label: 'Ounce (oz)', factorToBase: 28.349523125 },
-    { value: 'lb', label: 'Pound (lb)', factorToBase: 453.59237 },
-    { value: 'g', label: 'Gram (g)', factorToBase: 1 },
-    { value: 'kg', label: 'Kilogram (kg)', factorToBase: 1000 },
-  ];
   readonly pricingConfigs: Record<PricingPlatform, PricingPlatformConfig> = {
     walmart: {
       label: 'Walmart',
@@ -671,26 +551,6 @@ export class ProductManagerPage {
       apiDocs: 'API documentation',
     };
     return labels[this.view()];
-  }
-
-  lengthConversion(): number {
-    return this.convertUnit(this.lengthConverter.amount, this.lengthConverter.from, this.lengthConverter.to, this.lengthUnits);
-  }
-
-  weightConversion(): number {
-    return this.convertUnit(this.weightConverter.amount, this.weightConverter.from, this.weightConverter.to, this.weightUnits);
-  }
-
-  swapLengthUnits(): void {
-    const from = this.lengthConverter.from;
-    this.lengthConverter.from = this.lengthConverter.to;
-    this.lengthConverter.to = from;
-  }
-
-  swapWeightUnits(): void {
-    const from = this.weightConverter.from;
-    this.weightConverter.from = this.weightConverter.to;
-    this.weightConverter.to = from;
   }
 
   onPricingPlatformChanged(platform: PricingPlatform): void {
@@ -1714,12 +1574,6 @@ export class ProductManagerPage {
 
   private imageSourceFor(path: string): 'local' | 'remote' {
     return this.isRemotePath(path) ? 'remote' : 'local';
-  }
-
-  private convertUnit(amount: number | null | undefined, from: string, to: string, units: UnitOption[]): number {
-    const fromUnit = units.find((unit) => unit.value === from) ?? units[0];
-    const toUnit = units.find((unit) => unit.value === to) ?? units[0];
-    return this.safeNumber(amount) * fromUnit.factorToBase / toUnit.factorToBase;
   }
 
   private async perform(action: () => Promise<void>, showErrors = true): Promise<void> {

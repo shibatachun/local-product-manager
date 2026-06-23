@@ -1,0 +1,59 @@
+<section class="unit-converter-page">
+  <article class="unit-card">
+    <div class="section-heading">
+      <div>
+        <h2>Length</h2>
+        <p>Convert between inch, foot, yard, millimeter, centimeter, and meter.</p>
+      </div>
+    </div>
+    <div class="converter-row">
+      <label>Value
+        <input type="number" step="0.0001" [(ngModel)]="lengthConverter.amount" />
+      </label>
+      <label>From
+        <select [(ngModel)]="lengthConverter.from">
+          <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <button type="button" title="Swap units" (click)="swapLengthUnits()">⇄</button>
+      <label>To
+        <select [(ngModel)]="lengthConverter.to">
+          <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+    </div>
+    <div class="converter-result">
+      <span>{{ number(lengthConverter.amount || 0) }} {{ lengthConverter.from }}</span>
+      <strong>{{ unit(lengthConversion()) }} {{ lengthConverter.to }}</strong>
+    </div>
+  </article>
+
+  <article class="unit-card">
+    <div class="section-heading">
+      <div>
+        <h2>Weight</h2>
+        <p>Convert between ounce, pound, gram, and kilogram.</p>
+      </div>
+    </div>
+    <div class="converter-row">
+      <label>Value
+        <input type="number" step="0.0001" [(ngModel)]="weightConverter.amount" />
+      </label>
+      <label>From
+        <select [(ngModel)]="weightConverter.from">
+          <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <button type="button" title="Swap units" (click)="swapWeightUnits()">⇄</button>
+      <label>To
+        <select [(ngModel)]="weightConverter.to">
+          <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+    </div>
+    <div class="converter-result">
+      <span>{{ number(weightConverter.amount || 0) }} {{ weightConverter.from }}</span>
+      <strong>{{ unit(weightConversion()) }} {{ weightConverter.to }}</strong>
+    </div>
+  </article>
+</section>
