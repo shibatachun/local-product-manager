@@ -152,7 +152,7 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine("### Data Caveats");
         lines.AppendLine("Keep both languages practical and specific. Do not invent metrics that are not present.");
         lines.AppendLine("Do not only analyze the strongest or most eye-catching numbers.");
-        lines.AppendLine("You must cover every platform/account listed in Account snapshot deltas, even when the values are flat or changed by only 1.");
+        lines.AppendLine("You must cover every platform/account listed in Account coverage, even when the values are flat, missing for the period, or changed by only 1.");
         lines.AppendLine("For each platform/account, summarize views, likes, comments, clicks, shares, and followers when present, including unchanged values and small changes.");
         lines.AppendLine("Use the delta rows as the required platform-by-platform review data. Highlight unusual movement only after the complete review.");
         lines.AppendLine("When Stored daily deltas are present, use them as the source of daily and weekly change totals.");
@@ -163,19 +163,29 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine($"Comparison date range: {comparison.From:yyyy-MM-dd} to {comparison.To:yyyy-MM-dd}");
         lines.AppendLine($"YTD context range: {ytdFrom:yyyy-MM-dd} to {to:yyyy-MM-dd}");
         lines.AppendLine();
-        lines.AppendLine("Account snapshot deltas:");
+        lines.AppendLine("Account coverage:");
 
         var anyMetrics = false;
-        var currentRows = new List<(SocialAccount Account, SocialMetricSnapshot Current)>();
+        var accountRows = new List<(SocialAccount Account, SocialMetricSnapshot? Current)>();
         foreach (var account in accounts)
         {
             var current = LatestMetric(account, from, to);
-            if (current is null) continue;
-            anyMetrics = true;
-            currentRows.Add((account, current));
             var previous = LatestMetric(account, comparison.From, comparison.To) ??
                 PreviousMetricBefore(account, from);
             var ytdFirst = FirstMetric(account, ytdFrom, to);
+            accountRows.Add((account, current));
+            if (current is null)
+            {
+                lines.AppendLine(
+                    $"- {account.Platform} / {account.AccountName}: currentSnapshot=none in {from:yyyy-MM-dd} to {to:yyyy-MM-dd}; " +
+                    $"previousSnapshot={(previous is null ? "none" : previous.SnapshotDate.ToString("yyyy-MM-dd"))}; " +
+                    "views current=0, previous=missing; likes current=0, previous=missing; " +
+                    "comments current=0, previous=missing; clicks current=0, previous=missing; " +
+                    "shares current=0, previous=missing; followers current=0, previous=missing");
+                continue;
+            }
+
+            anyMetrics = true;
             lines.AppendLine(
                 $"- {account.Platform} / {account.AccountName}: currentDate={current.SnapshotDate:yyyy-MM-dd}, " +
                 MetricChange("views", current.Views, previous?.Views, ytdFirst?.Views) + "; " +
@@ -188,27 +198,29 @@ public sealed class SocialAiAnalysisService(
 
         lines.AppendLine();
         lines.AppendLine("Current period platform totals:");
-        foreach (var group in currentRows.GroupBy(item => item.Account.Platform).OrderBy(group => group.Key))
+        foreach (var group in accountRows.GroupBy(item => item.Account.Platform).OrderBy(group => group.Key))
         {
             lines.AppendLine(
-                $"- {group.Key}: views={group.Sum(item => item.Current.Views)}, likes={group.Sum(item => item.Current.Likes)}, " +
-                $"comments={group.Sum(item => item.Current.Comments)}, clicks={group.Sum(item => item.Current.Clicks)}, " +
-                $"shares={group.Sum(item => item.Current.Shares)}, followers={group.Sum(item => item.Current.Followers)}");
+                $"- {group.Key}: accounts={group.Count()}, accountsWithCurrentSnapshots={group.Count(item => item.Current is not null)}, " +
+                $"views={group.Sum(item => item.Current?.Views ?? 0)}, likes={group.Sum(item => item.Current?.Likes ?? 0)}, " +
+                $"comments={group.Sum(item => item.Current?.Comments ?? 0)}, clicks={group.Sum(item => item.Current?.Clicks ?? 0)}, " +
+                $"shares={group.Sum(item => item.Current?.Shares ?? 0)}, followers={group.Sum(item => item.Current?.Followers ?? 0)}");
         }
 
         lines.AppendLine();
         lines.AppendLine("Stored daily deltas in the current period:");
-        foreach (var group in dailyDeltas
+        var accountDeltas = dailyDeltas
             .Where(item => item.Scope == "account")
-            .GroupBy(item => new { item.SocialAccount!.Platform, item.SocialAccount.AccountName })
-            .OrderBy(group => group.Key.Platform)
-            .ThenBy(group => group.Key.AccountName))
+            .GroupBy(item => item.SocialAccountId)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        foreach (var account in accounts)
         {
+            var rows = accountDeltas.GetValueOrDefault(account.Id) ?? [];
             lines.AppendLine(
-                $"- {group.Key.Platform} / {group.Key.AccountName}: rows={group.Count()}, " +
-                $"viewsDelta={group.Sum(item => item.Views)}, likesDelta={group.Sum(item => item.Likes)}, " +
-                $"commentsDelta={group.Sum(item => item.Comments)}, clicksDelta={group.Sum(item => item.Clicks)}, " +
-                $"sharesDelta={group.Sum(item => item.Shares)}, followersDelta={group.Sum(item => item.Followers)}");
+                $"- {account.Platform} / {account.AccountName}: rows={rows.Length}, " +
+                $"viewsDelta={rows.Sum(item => item.Views)}, likesDelta={rows.Sum(item => item.Likes)}, " +
+                $"commentsDelta={rows.Sum(item => item.Comments)}, clicksDelta={rows.Sum(item => item.Clicks)}, " +
+                $"sharesDelta={rows.Sum(item => item.Shares)}, followersDelta={rows.Sum(item => item.Followers)}");
         }
 
         lines.AppendLine();
