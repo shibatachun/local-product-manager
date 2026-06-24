@@ -130,8 +130,11 @@ public sealed class SocialAiAnalysisService(
         var dailyDeltas = await db.SocialDailyMetricDeltas
             .AsNoTracking()
             .Include(metric => metric.SocialAccount)
-            .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .Where(metric => metric.SnapshotDate <= to)
             .ToListAsync(cancellationToken);
+        var currentPeriodDeltas = dailyDeltas
+            .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
+            .ToArray();
 
         var lines = new StringBuilder();
         lines.AppendLine("You are a practical marketing analyst for a small ecommerce business.");
@@ -169,9 +172,14 @@ public sealed class SocialAiAnalysisService(
         var accountRows = new List<(SocialAccount Account, SocialMetricSnapshot? Current)>();
         foreach (var account in accounts)
         {
-            var current = LatestMetric(account, from, to);
-            var previous = LatestMetric(account, comparison.From, comparison.To) ??
-                PreviousMetricBefore(account, from);
+            var current = LatestMetric(account, from, to) ??
+                LatestMetricOnOrBefore(account, to);
+            var currentInPeriod = current is not null &&
+                current.SnapshotDate >= from &&
+                current.SnapshotDate <= to;
+            var previous = current is not null
+                ? PreviousMetricBefore(account, current.SnapshotDate)
+                : LatestMetric(account, comparison.From, comparison.To) ?? PreviousMetricBefore(account, from);
             var ytdFirst = FirstMetric(account, ytdFrom, to);
             accountRows.Add((account, current));
             if (current is null)
@@ -188,6 +196,7 @@ public sealed class SocialAiAnalysisService(
             anyMetrics = true;
             lines.AppendLine(
                 $"- {account.Platform} / {account.AccountName}: currentDate={current.SnapshotDate:yyyy-MM-dd}, " +
+                $"currentInRequestedPeriod={currentInPeriod}, " +
                 MetricChange("views", current.Views, previous?.Views, ytdFirst?.Views) + "; " +
                 MetricChange("likes", current.Likes, previous?.Likes, ytdFirst?.Likes) + "; " +
                 MetricChange("comments", current.Comments, previous?.Comments, ytdFirst?.Comments) + "; " +
@@ -208,16 +217,33 @@ public sealed class SocialAiAnalysisService(
         }
 
         lines.AppendLine();
-        lines.AppendLine("Stored daily deltas in the current period:");
-        var accountDeltas = dailyDeltas
+        lines.AppendLine("Stored daily deltas in the current period or latest available before the report date:");
+        var currentAccountDeltas = currentPeriodDeltas
             .Where(item => item.Scope == "account")
             .GroupBy(item => item.SocialAccountId)
             .ToDictionary(group => group.Key, group => group.ToArray());
+        var latestAvailableAccountDelta = dailyDeltas
+            .Where(item => item.Scope == "account")
+            .GroupBy(item => item.SocialAccountId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(item => item.SnapshotDate)
+                    .Take(1)
+                    .ToArray());
         foreach (var account in accounts)
         {
-            var rows = accountDeltas.GetValueOrDefault(account.Id) ?? [];
+            var rows = currentAccountDeltas.GetValueOrDefault(account.Id) ?? [];
+            var source = "currentPeriod";
+            if (rows.Length == 0)
+            {
+                rows = latestAvailableAccountDelta.GetValueOrDefault(account.Id) ?? [];
+                source = rows.Length > 0 ? "latestAvailableOutsidePeriod" : "none";
+            }
+
             lines.AppendLine(
-                $"- {account.Platform} / {account.AccountName}: rows={rows.Length}, " +
+                $"- {account.Platform} / {account.AccountName}: source={source}, rows={rows.Length}, " +
+                $"dates={FormatDateList(rows.Select(item => item.SnapshotDate))}, " +
                 $"viewsDelta={rows.Sum(item => item.Views)}, likesDelta={rows.Sum(item => item.Likes)}, " +
                 $"commentsDelta={rows.Sum(item => item.Comments)}, clicksDelta={rows.Sum(item => item.Clicks)}, " +
                 $"sharesDelta={rows.Sum(item => item.Shares)}, followersDelta={rows.Sum(item => item.Followers)}");
@@ -225,7 +251,7 @@ public sealed class SocialAiAnalysisService(
 
         lines.AppendLine();
         lines.AppendLine("Top content daily deltas in the current period:");
-        foreach (var row in dailyDeltas
+        foreach (var row in currentPeriodDeltas
             .Where(item => item.Scope == "content")
             .OrderByDescending(item => item.Views)
             .ThenByDescending(item => item.Likes)
@@ -360,6 +386,12 @@ public sealed class SocialAiAnalysisService(
             .OrderByDescending(metric => metric.SnapshotDate)
             .FirstOrDefault();
 
+    private static SocialMetricSnapshot? LatestMetricOnOrBefore(SocialAccount account, DateOnly date) =>
+        account.Metrics
+            .Where(metric => metric.SnapshotDate <= date)
+            .OrderByDescending(metric => metric.SnapshotDate)
+            .FirstOrDefault();
+
     private static SocialMetricSnapshot? FirstMetric(SocialAccount account, DateOnly from, DateOnly to) =>
         account.Metrics
             .Where(metric => metric.SnapshotDate >= from && metric.SnapshotDate <= to)
@@ -392,6 +424,16 @@ public sealed class SocialAiAnalysisService(
 
         var percent = ((current - previous) * 100.0) / previous;
         return $"{percent:0.##}%";
+    }
+
+    private static string FormatDateList(IEnumerable<DateOnly> dates)
+    {
+        var values = dates
+            .Distinct()
+            .OrderBy(date => date)
+            .Select(date => date.ToString("yyyy-MM-dd"))
+            .ToArray();
+        return values.Length == 0 ? "none" : string.Join(",", values);
     }
 
     private bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
