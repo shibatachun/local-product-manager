@@ -44,9 +44,10 @@ public sealed class PinterestReportImportService(AppDbContext db)
                 OutboundClicks = totals.OutboundClicks + ParseInt(row.GetValueOrDefault("Outbound clicks")),
                 Saves = totals.Saves + ParseInt(row.GetValueOrDefault("Saves"))
             });
-        var currentViews = boardTotals.Impressions > 0
-            ? boardTotals.Impressions
-            : dailyRows.Sum(row => row.Impressions);
+        var dailyImpressions = dailyRows.Sum(row => row.Impressions);
+        var currentViews = dailyImpressions > 0
+            ? dailyImpressions
+            : boardTotals.Impressions;
         var currentClicks = boardTotals.PinClicks + boardTotals.OutboundClicks;
         var previousMetric = await PreviousAccountMetricAsync(account.Id, snapshotDate, cancellationToken);
         var accountMetric = await GetOrCreateMetricAsync(account.Id, snapshotDate, cancellationToken);

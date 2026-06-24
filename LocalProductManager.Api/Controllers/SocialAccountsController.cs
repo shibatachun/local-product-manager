@@ -200,10 +200,18 @@ public sealed class SocialAccountsController(
             .AsNoTracking()
             .Include(metric => metric.SocialAccount)
             .ToListAsync(cancellationToken);
+        var allDailyDeltas = await db.SocialDailyMetricDeltas
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
         var latestByAccount = allMetrics
             .GroupBy(metric => metric.SocialAccountId)
             .Select(group => group.OrderByDescending(metric => metric.SnapshotDate).First())
+            .ToArray();
+        var latestDeltaByAccount = allDailyDeltas
+            .Where(delta => delta.Scope == "account" && delta.MetricKey == "__account__")
+            .GroupBy(delta => delta.SocialAccountId)
+            .Select(group => group.OrderByDescending(delta => delta.SnapshotDate).First())
             .ToArray();
         var platformTotals = accounts
             .GroupBy(account => account.Platform)
@@ -217,19 +225,22 @@ public sealed class SocialAccountsController(
                 var latestMetrics = latestByAccount
                     .Where(metric => accountIds.Contains(metric.SocialAccountId))
                     .ToArray();
+                var latestDeltas = latestDeltaByAccount
+                    .Where(delta => accountIds.Contains(delta.SocialAccountId))
+                    .ToArray();
                 return new SocialDebugPlatformTotalDto(
                     platform,
                     group.Count(),
                     platformMetrics.Length,
+                    latestDeltas.Sum(metric => metric.Views),
+                    latestDeltas.Sum(metric => metric.Likes),
+                    latestDeltas.Sum(metric => metric.Comments),
+                    latestDeltas.Sum(metric => metric.Shares),
+                    latestDeltas.Sum(metric => metric.Followers),
                     latestMetrics.Sum(metric => metric.Views),
                     latestMetrics.Sum(metric => metric.Likes),
                     latestMetrics.Sum(metric => metric.Comments),
-                    latestMetrics.Sum(metric => metric.Shares),
-                    latestMetrics.Sum(metric => metric.Followers),
-                    platformMetrics.Sum(metric => metric.Views),
-                    platformMetrics.Sum(metric => metric.Likes),
-                    platformMetrics.Sum(metric => metric.Comments),
-                    platformMetrics.Sum(metric => metric.Clicks));
+                    latestMetrics.Sum(metric => metric.Clicks));
             })
             .OrderBy(total => total.Platform)
             .ToArray();
@@ -243,7 +254,8 @@ public sealed class SocialAccountsController(
             })
             .Select(group =>
             {
-                var latestRows = group
+                var rowsForTotal = RowsForContentTotal(group);
+                var latestRows = rowsForTotal
                     .GroupBy(metric => metric.PlatformVideoId)
                     .Select(videoGroup => videoGroup.OrderByDescending(metric => metric.SnapshotDate).First())
                     .ToArray();
@@ -297,6 +309,21 @@ public sealed class SocialAccountsController(
                 metric.UpdatedAt)).ToArray(),
             platformTotals,
             latestVideoTotals));
+    }
+
+    private static IEnumerable<SocialVideoMetricSnapshot> RowsForContentTotal(
+        IEnumerable<SocialVideoMetricSnapshot> rows)
+    {
+        var materialized = rows.ToArray();
+        if (!materialized.Any(row => string.Equals(row.SocialAccount?.Platform, "pinterest", StringComparison.OrdinalIgnoreCase)))
+        {
+            return materialized;
+        }
+
+        var pins = materialized
+            .Where(row => !row.Title.StartsWith("Board:", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return pins.Length > 0 ? pins : materialized;
     }
 
     private static SocialAccountDto ToDto(SocialAccount account, DateOnly? from, DateOnly? to)
