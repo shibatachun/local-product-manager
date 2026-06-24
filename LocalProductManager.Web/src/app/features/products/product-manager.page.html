@@ -239,6 +239,9 @@
               <label>Packaging cost reserve ($)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingCost" />
               </label>
+              <label>Target profit ($)
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.targetProfit" (ngModelChange)="pricingResult.set(null)" />
+              </label>
               <label>Target margin %
                 <input type="number" min="0" max="80" step="1" [(ngModel)]="pricingForm.targetMarginPercent" />
               </label>
@@ -260,6 +263,7 @@
               <div><span>Suggested listing price</span><strong>{{ currency(estimate.suggestedPrice) }}</strong></div>
               <div><span>Break-even price</span><strong>{{ currency(estimate.breakEvenPrice) }}</strong></div>
               <div><span>Estimated profit</span><strong>{{ currency(estimate.estimatedProfit) }}</strong></div>
+              <div><span>Target profit</span><strong>{{ estimate.targetProfitEnabled ? currency(estimate.targetProfit) : 'Margin mode' }}</strong></div>
               <div><span>Shipping estimate</span><strong>{{ currency(estimate.shippingCost) }}</strong></div>
               <div><span>Landed cost</span><strong>{{ rmb(estimate.totalLandedCostRmb) }}</strong></div>
             </div>
@@ -517,6 +521,7 @@
         </div>
         <label>Packaging weight (lb)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingWeight" /></label>
         <label>Packaging cost reserve ($)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingCost" /></label>
+        <label>Target profit ($)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.targetProfit" /></label>
         <label>Target margin %<input type="number" min="0" max="80" step="1" [(ngModel)]="detailPricingForm.targetMarginPercent" /></label>
         <label>Risk buffer %<input type="number" min="0" max="30" step="1" [(ngModel)]="detailPricingForm.bufferPercent" /></label>
         <button class="primary" type="button" (click)="calculateDetailPricing()">Calculate suggested price</button>

@@ -66,6 +66,8 @@ interface PricingEstimate {
   breakEvenPrice: number;
   suggestedPrice: number;
   estimatedProfit: number;
+  targetProfit: number;
+  targetProfitEnabled: boolean;
   steps: PricingStep[];
 }
 
@@ -113,6 +115,7 @@ interface PricingInput {
   width: number | null;
   height: number | null;
   packagingCost: number | null;
+  targetProfit: number | null;
   targetMarginPercent: number | null;
   bufferPercent: number | null;
 }
@@ -248,6 +251,7 @@ export class ProductManagerPage {
     width: 4,
     height: 2,
     packagingCost: 0.65,
+    targetProfit: 0,
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
@@ -258,6 +262,7 @@ export class ProductManagerPage {
     quantity: 1,
     packagingWeight: 0.25,
     packagingCost: 0.65,
+    targetProfit: 0,
     targetMarginPercent: 20,
     bufferPercent: 5,
   };
@@ -567,6 +572,7 @@ export class ProductManagerPage {
     this.pricingForm.category = config.defaultCategory;
     this.pricingForm.logistics = config.defaultLogistics;
     this.pricingForm.targetMarginPercent = config.marginPercent;
+    this.pricingForm.targetProfit = 0;
     this.pricingForm.bufferPercent = config.bufferPercent;
     this.pricingResult.set(null);
   }
@@ -1110,6 +1116,7 @@ export class ProductManagerPage {
       width: this.pricingForm.width,
       height: this.pricingForm.height,
       packagingCost: this.pricingForm.packagingCost,
+      targetProfit: this.pricingForm.targetProfit,
       targetMarginPercent: this.pricingForm.targetMarginPercent,
       bufferPercent: this.pricingForm.bufferPercent,
     });
@@ -1128,6 +1135,7 @@ export class ProductManagerPage {
       width: product.width,
       height: product.height,
       packagingCost: this.detailPricingForm.packagingCost,
+      targetProfit: this.detailPricingForm.targetProfit,
       targetMarginPercent: this.detailPricingForm.targetMarginPercent,
       bufferPercent: this.detailPricingForm.bufferPercent,
     });
@@ -1155,6 +1163,8 @@ export class ProductManagerPage {
     const width = Math.max(0, this.safeNumber(input.width));
     const height = Math.max(0, this.safeNumber(input.height));
     const packaging = logistics.includePackagingReserve === false ? 0 : this.safeNumber(input.packagingCost);
+    const targetProfit = Math.max(0, this.safeNumber(input.targetProfit));
+    const targetProfitEnabled = targetProfit > 0;
     const marginRate = this.safePercent(input.targetMarginPercent);
     const bufferRate = this.safePercent(input.bufferPercent);
     const cubicInches = length * width * height;
@@ -1166,7 +1176,9 @@ export class ProductManagerPage {
     const breakEvenVariableRate = category.feeRate + config.processingRate + bufferRate;
     const suggestedVariableRate = breakEvenVariableRate + marginRate;
     const breakEvenPrice = fixedCost / Math.max(0.01, 1 - breakEvenVariableRate);
-    const suggestedPrice = fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
+    const suggestedPrice = targetProfitEnabled
+      ? (fixedCost + targetProfit) / Math.max(0.01, 1 - breakEvenVariableRate)
+      : fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
     const platformFee = suggestedPrice * category.feeRate;
     const processingFee = suggestedPrice * config.processingRate + config.fixedFee;
     const buffer = suggestedPrice * bufferRate;
@@ -1198,6 +1210,8 @@ export class ProductManagerPage {
       breakEvenPrice,
       suggestedPrice,
       estimatedProfit,
+      targetProfit,
+      targetProfitEnabled,
       steps: [
         { label: 'Product cost (RMB)', value: this.rmb(unitProductCostRmb), note: `Input product cost is RMB before currency conversion.` },
         { label: 'First-mile freight (RMB)', value: this.rmb(unitFirstMileRmb), note: `0.05 RMB x ${this.number(unitWeightGrams)} g = ${this.rmb(unitFirstMileRmb)} per unit.` },
@@ -1213,7 +1227,9 @@ export class ProductManagerPage {
         { label: `${config.label} category fee`, value: `${this.number(category.feeRate * 100)}%`, note: `${this.currency(platformFee)} at the suggested price. ${category.note}` },
         { label: 'Processing/fixed fees', value: `${this.number(config.processingRate * 100)}% + ${this.currency(config.fixedFee + config.listingFee)}`, note: `${this.currency(processingFee + config.listingFee)} at the suggested price.` },
         { label: 'Risk buffer', value: `${this.number(bufferRate * 100)}%`, note: `${this.currency(buffer)} reserve for returns, price changes, and small fee drift.` },
-        { label: 'Target margin', value: `${this.number(marginRate * 100)}%`, note: `${this.currency(estimatedProfit)} estimated profit at the suggested price.` },
+        targetProfitEnabled
+          ? { label: 'Target profit', value: this.currency(targetProfit), note: `Suggested price is calculated to leave about ${this.currency(targetProfit)} after product cost, shipping, platform fees, processing fees, and buffer.` }
+          : { label: 'Target margin', value: `${this.number(marginRate * 100)}%`, note: `${this.currency(estimatedProfit)} estimated profit at the suggested price.` },
       ],
     };
   }
@@ -1545,6 +1561,7 @@ export class ProductManagerPage {
     this.detailPricingForm.logistics = config.defaultLogistics;
     this.detailPricingForm.quantity = 1;
     this.detailPricingForm.packagingWeight = 0.25;
+    this.detailPricingForm.targetProfit = 0;
     this.detailPricingForm.targetMarginPercent = config.marginPercent;
     this.detailPricingForm.bufferPercent = config.bufferPercent;
     this.detailPricingResult.set(null);
