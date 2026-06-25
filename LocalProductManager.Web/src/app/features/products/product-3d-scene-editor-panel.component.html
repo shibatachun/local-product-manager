@@ -7,7 +7,7 @@
     </div>
     <div class="renderer-status">
       <span>{{ renderer }}</span>
-      <strong>Adapter slot ready</strong>
+      <strong>{{ webGpuSupported ? 'WebGPU available' : 'WebGL2 fallback ready' }}</strong>
     </div>
   </div>
 
@@ -15,13 +15,16 @@
     <aside class="asset-panel">
       <div class="panel-heading">
         <h3>Scene assets</h3>
-        <button type="button">Import model</button>
+        <label class="model-import-button">
+          {{ loadingModel ? 'Loading...' : 'Import model' }}
+          <input type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" (change)="importModel($event)" />
+        </label>
       </div>
       <div class="asset-list">
         <button type="button" class="asset-row active">
           <span>GLB</span>
-          <strong>Product model</strong>
-          <small>Waiting for model loader</small>
+          <strong>{{ modelName }}</strong>
+          <small>{{ modelStatus }}</small>
         </button>
         <button type="button" class="asset-row">
           <span>HDR</span>
@@ -42,15 +45,13 @@
         <div>
           <button type="button">Frame</button>
           <button type="button">Preview</button>
-          <button type="button">Export</button>
+          <button type="button" (click)="resetDemo()">Reset demo</button>
         </div>
       </div>
-      <div class="scene-viewport">
-        <div class="viewport-grid"></div>
-        <div class="model-placeholder">
-          <span>3D</span>
-          <strong>Renderer mount point</strong>
-          <small>Attach Three.js canvas or WebGPU renderer here.</small>
+      <div class="scene-viewport" #viewportHost>
+        <div class="viewport-badge">
+          <strong>Three.js live scene</strong>
+          <span>{{ modelStatus }}</span>
         </div>
       </div>
     </section>
@@ -74,19 +75,20 @@
         </select>
       </label>
       <label>Product scale
-        <input type="number" min="0.1" max="10" step="0.1" [(ngModel)]="productScale" />
+        <input type="number" min="0.1" max="10" step="0.1" [(ngModel)]="productScale" (ngModelChange)="applySceneOptions()" />
       </label>
       <div class="toggle-list">
-        <label><input type="checkbox" [(ngModel)]="gridVisible" /> Grid</label>
-        <label><input type="checkbox" [(ngModel)]="shadowsEnabled" /> Shadows</label>
-        <label><input type="checkbox" [(ngModel)]="turntableEnabled" /> Turntable</label>
+        <label><input type="checkbox" [(ngModel)]="gridVisible" (ngModelChange)="applySceneOptions()" /> Grid</label>
+        <label><input type="checkbox" [(ngModel)]="shadowsEnabled" (ngModelChange)="applySceneOptions()" /> Shadows</label>
+        <label><input type="checkbox" [(ngModel)]="turntableEnabled" (ngModelChange)="applySceneOptions()" /> Turntable</label>
       </div>
       <div class="integration-card">
         <strong>Integration notes</strong>
-        <span>Renderer service</span>
-        <span>GLTF/GLB loader</span>
+        <span>Renderer service active</span>
+        <span>GLTF/GLB loader active</span>
         <span>Texture pipeline</span>
         <span>Snapshot/export endpoint</span>
+        <span>Animations loaded: {{ animationCount }}</span>
       </div>
     </aside>
   </div>
