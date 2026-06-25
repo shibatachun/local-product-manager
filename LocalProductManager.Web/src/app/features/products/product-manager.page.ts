@@ -22,8 +22,9 @@ import { FileStoragePanelComponent } from './file-storage-panel.component';
 import { VideoTrendPanelComponent } from './video-trend-panel.component';
 import { UnitConverterPanelComponent } from './unit-converter-panel.component';
 import { ApiDocsPanelComponent } from './api-docs-panel.component';
+import { Product3dSceneEditorPanelComponent } from './product-3d-scene-editor-panel.component';
 
-type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'apiDocs';
+type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type PricingPlatform = Exclude<Platform, 'shopify'>;
 type AsinRelationshipRow = {
@@ -129,7 +130,7 @@ interface PlatformChoice {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -548,6 +549,7 @@ export class ProductManagerPage {
       marketing: 'Amazon Attribution',
       storage: 'Server settings',
       videoTrend: 'Creative research',
+      sceneEditor: '3D workspace',
       apiDocs: 'Developer reference',
     };
     return labels[this.view()];
@@ -561,6 +563,7 @@ export class ProductManagerPage {
       marketing: 'Marketing links',
       storage: 'File storage',
       videoTrend: 'Video trend',
+      sceneEditor: 'Product 3D Scene Editor',
       apiDocs: 'API documentation',
     };
     return labels[this.view()];

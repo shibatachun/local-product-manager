@@ -12,6 +12,7 @@
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
       <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
+      <button [class.active]="view() === 'sceneEditor'" (click)="changeView('sceneEditor')"><span>3D</span> Product 3D Scene Editor</button>
       <button [class.active]="view() === 'apiDocs'" (click)="changeView('apiDocs')"><span>API</span> API documentation</button>
       <a routerLink="/admin"><span>AD</span> Admin</a>
       <a routerLink="/test"><span>⌘</span> API Test</a>
@@ -29,7 +30,7 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'apiDocs'">
+      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'sceneEditor' && view() !== 'apiDocs'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -317,8 +318,13 @@
       </ng-container>
     </ng-template>
     <ng-template #videoTrendView>
-      <ng-container *ngIf="view() === 'videoTrend'; else apiDocsView">
+      <ng-container *ngIf="view() === 'videoTrend'; else sceneEditorView">
         <app-video-trend-panel [currentUser]="currentUser()"></app-video-trend-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #sceneEditorView>
+      <ng-container *ngIf="view() === 'sceneEditor'; else apiDocsView">
+        <app-product-3d-scene-editor-panel></app-product-3d-scene-editor-panel>
       </ng-container>
     </ng-template>
     <ng-template #apiDocsView>
