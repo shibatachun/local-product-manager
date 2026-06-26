@@ -39,6 +39,24 @@ button,.model-import-button { min-height:32px; padding:0 10px; border:1px solid 
 .integration-card { display:grid; gap:7px; padding:12px; border:1px solid #d6e1e6; border-radius:7px; background:#f4f8fa; }
 .integration-card strong { font-size:13px; }
 .integration-card span { color:#667781; font-size:12px; }
+.loader-log-card { display:grid; min-height:0; border:1px solid #d6e1e6; border-radius:7px; overflow:hidden; background:#fff; }
+.loader-log-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid #e2e8ec; background:#f7fafb; }
+.loader-log-heading div { display:grid; gap:2px; }
+.loader-log-heading strong { font-size:13px; }
+.loader-log-heading span { color:#70818d; font-size:11px; }
+.loader-log-heading button { min-height:28px; padding:0 8px; font-size:12px; }
+.loader-log-heading button:disabled { color:#9aa7b0; cursor:not-allowed; }
+.loader-log-list { display:grid; align-content:start; gap:8px; max-height:230px; padding:10px; overflow:auto; }
+.loader-log-row { display:grid; grid-template-columns:64px minmax(0,1fr); gap:9px; padding:8px; border:1px solid #e4eaee; border-left-width:4px; border-radius:6px; background:#fbfcfd; }
+.loader-log-row time { color:#768691; font-size:11px; font-weight:800; }
+.loader-log-row div { display:grid; gap:3px; min-width:0; }
+.loader-log-row strong { overflow:hidden; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.loader-log-row span { color:#61717c; font-size:11px; line-height:1.35; overflow-wrap:anywhere; }
+.loader-log-row.log-info { border-left-color:#3c6f88; }
+.loader-log-row.log-success { border-left-color:#2f8f66; }
+.loader-log-row.log-warning { border-left-color:#c08a20; }
+.loader-log-row.log-error { border-left-color:#c34235; background:#fff8f7; }
+.loader-log-empty { min-height:92px; display:grid; place-items:center; padding:14px; color:#788894; font-size:12px; text-align:center; }
 
 @media (max-width: 1120px) {
   .scene-layout { grid-template-columns:220px minmax(0,1fr); }

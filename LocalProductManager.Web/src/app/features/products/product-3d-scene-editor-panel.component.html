@@ -90,6 +90,27 @@
         <span>Snapshot/export endpoint</span>
         <span>Animations loaded: {{ animationCount }}</span>
       </div>
+      <div class="loader-log-card">
+        <div class="loader-log-heading">
+          <div>
+            <strong>Loader log</strong>
+            <span>{{ loaderLogs.length }} event{{ loaderLogs.length === 1 ? '' : 's' }}</span>
+          </div>
+          <button type="button" (click)="clearLoaderLogs()" [disabled]="!loaderLogs.length">Clear</button>
+        </div>
+        <div class="loader-log-list" *ngIf="loaderLogs.length; else emptyLoaderLog">
+          <div class="loader-log-row" *ngFor="let entry of loaderLogs" [class]="'log-' + entry.level">
+            <time>{{ entry.time }}</time>
+            <div>
+              <strong>{{ entry.message }}</strong>
+              <span *ngIf="entry.detail">{{ entry.detail }}</span>
+            </div>
+          </div>
+        </div>
+        <ng-template #emptyLoaderLog>
+          <div class="loader-log-empty">Import a GLB or GLTF model to see each loading step here.</div>
+        </ng-template>
+      </div>
     </aside>
   </div>
 </section>
