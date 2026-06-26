@@ -26,15 +26,24 @@ export class Product3dModelLoaderService {
       throw new Error('Only GLB and GLTF model files are supported.');
     }
 
+    if (file.size > 75 * 1024 * 1024) {
+      log('warning', 'Large model file', 'Network-drive reads can take a while. If this hangs, try copying the model locally or exporting a smaller GLB.');
+    }
+
     log('info', extension === 'glb' ? 'Reading binary GLB data' : 'Reading text GLTF data');
+    await this.yieldToBrowser();
     const data = extension === 'glb'
-      ? await this.readArrayBuffer(file)
-      : await this.readText(file);
+      ? await this.readArrayBuffer(file, log)
+      : await this.readText(file, log);
     log(
       'success',
       'File read complete',
       data instanceof ArrayBuffer ? `${this.formatBytes(data.byteLength)} loaded into memory` : `${data.length.toLocaleString()} characters loaded`,
     );
+
+    if (typeof data === 'string') {
+      this.inspectGltfJson(data, log);
+    }
 
     log('info', 'Starting GLTF parser', 'If loading stops here, the model may reference missing external .bin or texture files, or the parser is blocked.');
     await this.yieldToBrowser();
@@ -66,25 +75,64 @@ export class Product3dModelLoaderService {
     }
   }
 
-  private readArrayBuffer(file: File): Promise<ArrayBuffer> {
-    return this.withTimeout(new Promise<ArrayBuffer>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error ?? new Error('Unable to read model file.'));
-      reader.onload = () => {
-        if (reader.result instanceof ArrayBuffer) resolve(reader.result);
-        else reject(new Error('Model file did not read as binary data.'));
-      };
-      reader.readAsArrayBuffer(file);
-    }), 10000, 'Reading model file timed out.');
+  private async readArrayBuffer(file: File, log: ProductModelLoadLogger): Promise<ArrayBuffer> {
+    log('info', 'Browser file read started', 'Using File.arrayBuffer()');
+    try {
+      const buffer = await this.withTimeout(
+        file.arrayBuffer(),
+        20000,
+        'Reading model file timed out. The file may be on a slow network share or blocked by the browser.',
+      );
+      log('success', 'Browser file read finished', this.formatBytes(buffer.byteLength));
+      return buffer;
+    } catch (error) {
+      log('error', 'Browser file read failed', error instanceof Error ? error.message : 'Unknown binary read error.');
+      throw error;
+    }
   }
 
-  private readText(file: File): Promise<string> {
-    return this.withTimeout(new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error ?? new Error('Unable to read model file.'));
-      reader.onload = () => resolve(String(reader.result ?? ''));
-      reader.readAsText(file);
-    }), 10000, 'Reading model file timed out.');
+  private async readText(file: File, log: ProductModelLoadLogger): Promise<string> {
+    log('info', 'Browser file read started', 'Using File.text()');
+    try {
+      const text = await this.withTimeout(
+        file.text(),
+        20000,
+        'Reading GLTF text timed out. The file may be on a slow network share or blocked by the browser.',
+      );
+      log('success', 'Browser text read finished', `${text.length.toLocaleString()} characters`);
+      return text;
+    } catch (error) {
+      log('error', 'Browser text read failed', error instanceof Error ? error.message : 'Unknown text read error.');
+      throw error;
+    }
+  }
+
+  private inspectGltfJson(text: string, log: ProductModelLoadLogger): void {
+    try {
+      const parsed = JSON.parse(text) as {
+        asset?: { version?: string; generator?: string };
+        scenes?: unknown[];
+        buffers?: Array<{ uri?: string }>;
+        images?: Array<{ uri?: string }>;
+      };
+      const externalBuffers = (parsed.buffers ?? []).filter((buffer) => buffer.uri && !buffer.uri.startsWith('data:'));
+      const externalImages = (parsed.images ?? []).filter((image) => image.uri && !image.uri.startsWith('data:'));
+      log(
+        'info',
+        'GLTF JSON inspected',
+        `asset ${parsed.asset?.version ?? 'unknown'} | ${parsed.scenes?.length ?? 0} scene(s) | generator ${parsed.asset?.generator ?? 'unknown'}`,
+      );
+      if (externalBuffers.length || externalImages.length) {
+        log(
+          'warning',
+          'External GLTF dependencies detected',
+          `${externalBuffers.length} buffer file(s), ${externalImages.length} image file(s). Single-file import cannot read sibling files yet; export as .glb if parsing fails.`,
+        );
+      }
+    } catch (error) {
+      log('error', 'GLTF JSON validation failed', error instanceof Error ? error.message : 'The text file is not valid JSON.');
+      throw new Error('The selected .gltf file is not valid JSON.');
+    }
   }
 
   private formatBytes(bytes: number): string {
