@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnDestroy, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import * as THREE from 'three';
 import { Product3dModelLoaderService, ProductModelLoadLogLevel } from './product-3d-model-loader.service';
@@ -67,6 +67,16 @@ export class Product3dSceneEditorPanelComponent implements AfterViewInit, OnDest
 
   ngOnDestroy(): void {
     this.rendererService.dispose();
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleGlobalKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+      const undone = this.rendererService.undoLastAction();
+      if (!undone) return;
+      event.preventDefault();
+      this.addLoaderLog('info', 'Undo applied', undone);
+    }
   }
 
   async importModel(event: Event): Promise<void> {

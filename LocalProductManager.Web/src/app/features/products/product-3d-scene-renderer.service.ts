@@ -11,6 +11,24 @@ export interface ProductSceneRenderOptions {
 
 export type ProductSceneSelectionHandler = (object: THREE.Object3D | null) => void;
 
+interface SceneObjectTransformSnapshot {
+  object: THREE.Object3D;
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  scale: THREE.Vector3;
+}
+
+interface SceneCameraSnapshot {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  target: THREE.Vector3;
+}
+
+interface SceneUndoEntry {
+  label: string;
+  restore: () => void;
+}
+
 @Injectable()
 export class Product3dSceneRendererService {
   private host: HTMLElement | null = null;
@@ -31,10 +49,15 @@ export class Product3dSceneRendererService {
   private draggingObject: THREE.Object3D | null = null;
   private dragPlane = new THREE.Plane();
   private dragOffset = new THREE.Vector3();
+  private dragStartSnapshot: SceneObjectTransformSnapshot | null = null;
+  private dragMoved = false;
   private keyboardFocused = false;
   private pressedKeys = new Set<string>();
+  private cameraMoveSnapshot: SceneCameraSnapshot | null = null;
+  private cameraMoved = false;
   private lastFrameTime = 0;
   private selectionHandler: ProductSceneSelectionHandler | null = null;
+  private undoStack: SceneUndoEntry[] = [];
   private options: ProductSceneRenderOptions = {
     gridVisible: true,
     shadowsEnabled: true,
@@ -126,6 +149,9 @@ export class Product3dSceneRendererService {
     this.controls = null;
     this.pressedKeys.clear();
     this.draggingObject = null;
+    this.dragStartSnapshot = null;
+    this.cameraMoveSnapshot = null;
+    this.undoStack = [];
     this.selectionHandler = null;
     this.clearObject(this.productModel);
     this.clearObject(this.demoMesh);
@@ -161,6 +187,14 @@ export class Product3dSceneRendererService {
     }
     const object = this.scene?.getObjectByProperty('uuid', uuid) ?? null;
     this.selectObject(object);
+  }
+
+  undoLastAction(): string | null {
+    this.finishKeyboardMove();
+    const entry = this.undoStack.pop();
+    if (!entry) return null;
+    entry.restore();
+    return entry.label;
   }
 
   private addLights(): void {
@@ -297,6 +331,7 @@ export class Product3dSceneRendererService {
     if (!canvas) return;
     canvas.addEventListener('focus', () => { this.keyboardFocused = true; });
     canvas.addEventListener('blur', () => {
+      this.finishKeyboardMove();
       this.keyboardFocused = false;
       this.pressedKeys.clear();
     });
@@ -309,6 +344,9 @@ export class Product3dSceneRendererService {
     });
     canvas.addEventListener('keyup', (event) => {
       this.pressedKeys.delete(event.key.toLowerCase());
+      if (!this.pressedKeys.size) {
+        this.finishKeyboardMove();
+      }
     });
   }
 
@@ -339,6 +377,8 @@ export class Product3dSceneRendererService {
     if (!intersection) return;
     this.dragOffset.copy(intersection).sub(worldPosition);
     this.draggingObject = dragTarget;
+    this.dragStartSnapshot = this.snapshotObjectTransform(dragTarget);
+    this.dragMoved = false;
     this.controls!.enabled = false;
     canvas.setPointerCapture(event.pointerId);
   };
@@ -352,6 +392,9 @@ export class Product3dSceneRendererService {
     const targetWorldPosition = intersection.sub(this.dragOffset);
     const parent = this.draggingObject.parent;
     const targetLocalPosition = parent ? parent.worldToLocal(targetWorldPosition.clone()) : targetWorldPosition;
+    if (this.draggingObject.position.distanceToSquared(targetLocalPosition) > 0.000001) {
+      this.dragMoved = true;
+    }
     this.draggingObject.position.copy(targetLocalPosition);
   };
 
@@ -360,7 +403,13 @@ export class Product3dSceneRendererService {
     if (canvas?.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
+    if (this.draggingObject && this.dragStartSnapshot && this.dragMoved) {
+      const snapshot = this.dragStartSnapshot;
+      this.pushUndo('Move 3D node', () => this.restoreObjectTransform(snapshot));
+    }
     this.draggingObject = null;
+    this.dragStartSnapshot = null;
+    this.dragMoved = false;
     if (this.controls) this.controls.enabled = true;
   };
 
@@ -422,12 +471,9 @@ export class Product3dSceneRendererService {
     if (!this.keyboardFocused || !this.camera || !this.controls || !this.pressedKeys.size) return;
 
     const speed = 3.2 * deltaSeconds;
-    const forward = new THREE.Vector3();
-    this.camera.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
 
-    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
     const movement = new THREE.Vector3();
     if (this.pressedKeys.has('w')) movement.add(forward);
     if (this.pressedKeys.has('s')) movement.sub(forward);
@@ -436,7 +482,58 @@ export class Product3dSceneRendererService {
     if (!movement.lengthSq()) return;
 
     movement.normalize().multiplyScalar(speed);
+    if (!this.cameraMoveSnapshot) {
+      this.cameraMoveSnapshot = this.snapshotCamera();
+      this.cameraMoved = false;
+    }
     this.camera.position.add(movement);
     this.controls.target.add(movement);
+    this.cameraMoved = true;
+  }
+
+  private snapshotObjectTransform(object: THREE.Object3D): SceneObjectTransformSnapshot {
+    return {
+      object,
+      position: object.position.clone(),
+      quaternion: object.quaternion.clone(),
+      scale: object.scale.clone(),
+    };
+  }
+
+  private restoreObjectTransform(snapshot: SceneObjectTransformSnapshot): void {
+    snapshot.object.position.copy(snapshot.position);
+    snapshot.object.quaternion.copy(snapshot.quaternion);
+    snapshot.object.scale.copy(snapshot.scale);
+    snapshot.object.updateMatrixWorld(true);
+    this.selectionBox?.update();
+  }
+
+  private snapshotCamera(): SceneCameraSnapshot {
+    return {
+      position: this.camera?.position.clone() ?? new THREE.Vector3(),
+      quaternion: this.camera?.quaternion.clone() ?? new THREE.Quaternion(),
+      target: this.controls?.target.clone() ?? new THREE.Vector3(),
+    };
+  }
+
+  private restoreCamera(snapshot: SceneCameraSnapshot): void {
+    if (!this.camera || !this.controls) return;
+    this.camera.position.copy(snapshot.position);
+    this.camera.quaternion.copy(snapshot.quaternion);
+    this.controls.target.copy(snapshot.target);
+    this.controls.update();
+  }
+
+  private finishKeyboardMove(): void {
+    if (this.cameraMoveSnapshot && this.cameraMoved) {
+      const snapshot = this.cameraMoveSnapshot;
+      this.pushUndo('Move camera', () => this.restoreCamera(snapshot));
+    }
+    this.cameraMoveSnapshot = null;
+    this.cameraMoved = false;
+  }
+
+  private pushUndo(label: string, restore: () => void): void {
+    this.undoStack = [...this.undoStack, { label, restore }].slice(-80);
   }
 }
