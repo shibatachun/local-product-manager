@@ -22,6 +22,24 @@ button,.model-import-button { min-height:32px; padding:0 10px; border:1px solid 
 .asset-row strong,.asset-row small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asset-row small { color:#73818c; font-size:11px; }
 .asset-row.active { border-color:#9ec5d0; background:#edf8fa; }
+.node-tree-card { display:grid; min-height:0; margin-top:14px; border:1px solid #d6e1e6; border-radius:7px; overflow:hidden; background:#fff; }
+.node-tree-heading { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #e2e8ec; background:#f7fafb; }
+.node-tree-heading div { display:grid; gap:2px; }
+.node-tree-heading strong { font-size:13px; }
+.node-tree-heading span { color:#70818d; font-size:11px; }
+.node-tree-list { display:grid; align-content:start; max-height:310px; overflow:auto; padding:6px; }
+.node-row { display:flex; align-items:center; gap:7px; width:100%; min-height:38px; padding:5px 7px; border:1px solid transparent; background:transparent; text-align:left; }
+.node-row:hover { border-color:#d9e3e8; background:#f7fafb; }
+.node-row.selected { border-color:#e6c055; background:#fff8df; }
+.node-indent { flex:0 0 auto; height:1px; }
+.node-type { flex:0 0 auto; display:grid; place-items:center; width:24px; height:24px; border-radius:5px; color:#fff; background:#53616d; font-size:10px; font-weight:850; }
+.node-row.mesh-node .node-type { background:#3c6f88; }
+.node-row.bone-node .node-type { background:#8a6f2a; }
+.node-copy { display:grid; gap:1px; min-width:0; }
+.node-copy strong,.node-copy small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.node-copy strong { font-size:12px; }
+.node-copy small { color:#72828e; font-size:10px; }
+.node-tree-empty { min-height:104px; display:grid; place-items:center; padding:14px; color:#788894; font-size:12px; text-align:center; }
 .viewport-panel { display:grid; grid-template-rows:auto minmax(0,1fr); min-width:0; background:#eef2f5; }
 .viewport-topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; min-height:48px; padding:0 14px; border-bottom:1px solid #dce2e7; background:#fff; }
 .viewport-topbar span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:800; }

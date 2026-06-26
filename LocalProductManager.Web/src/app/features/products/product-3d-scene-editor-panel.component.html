@@ -37,6 +37,34 @@
           <small>PBR texture slots</small>
         </button>
       </div>
+      <div class="node-tree-card">
+        <div class="node-tree-heading">
+          <div>
+            <strong>Node hierarchy</strong>
+            <span>{{ modelNodes.length }} node{{ modelNodes.length === 1 ? '' : 's' }}</span>
+          </div>
+        </div>
+        <div class="node-tree-list" *ngIf="modelNodes.length; else emptyNodeTree">
+          <button
+            type="button"
+            class="node-row"
+            *ngFor="let node of modelNodes"
+            [class.selected]="node.uuid === selectedNodeUuid"
+            [class.mesh-node]="node.isMesh"
+            [class.bone-node]="node.isBone"
+            (click)="selectNode(node)">
+            <span class="node-indent" [style.width.px]="node.depth * 14"></span>
+            <span class="node-type">{{ node.isBone ? 'B' : node.isMesh ? 'M' : 'N' }}</span>
+            <span class="node-copy">
+              <strong>{{ node.name }}</strong>
+              <small>{{ node.type }} · {{ node.childCount }} child{{ node.childCount === 1 ? '' : 'ren' }}</small>
+            </span>
+          </button>
+        </div>
+        <ng-template #emptyNodeTree>
+          <div class="node-tree-empty">Import a GLB model to inspect meshes, groups, and bones.</div>
+        </ng-template>
+      </div>
     </aside>
 
     <section class="viewport-panel">
@@ -52,6 +80,7 @@
         <div class="viewport-badge">
           <strong>Three.js live scene</strong>
           <span>{{ modelStatus }}</span>
+          <span>Click viewport for WASD camera. Select a mesh, then drag it.</span>
         </div>
       </div>
     </section>

@@ -9,6 +9,8 @@ export interface ProductSceneRenderOptions {
   productScale: number;
 }
 
+export type ProductSceneSelectionHandler = (object: THREE.Object3D | null) => void;
+
 @Injectable()
 export class Product3dSceneRendererService {
   private host: HTMLElement | null = null;
@@ -20,8 +22,19 @@ export class Product3dSceneRendererService {
   private frameId = 0;
   private demoMesh: THREE.Object3D | null = null;
   private productModel: THREE.Object3D | null = null;
+  private selectedObject: THREE.Object3D | null = null;
+  private selectionBox: THREE.BoxHelper | null = null;
   private grid: THREE.GridHelper | null = null;
   private floor: THREE.Mesh | null = null;
+  private raycaster = new THREE.Raycaster();
+  private pointer = new THREE.Vector2();
+  private draggingObject: THREE.Object3D | null = null;
+  private dragPlane = new THREE.Plane();
+  private dragOffset = new THREE.Vector3();
+  private keyboardFocused = false;
+  private pressedKeys = new Set<string>();
+  private lastFrameTime = 0;
+  private selectionHandler: ProductSceneSelectionHandler | null = null;
   private options: ProductSceneRenderOptions = {
     gridVisible: true,
     shadowsEnabled: true,
@@ -43,6 +56,7 @@ export class Product3dSceneRendererService {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = this.options.shadowsEnabled;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.domElement.tabIndex = 0;
     host.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -52,6 +66,8 @@ export class Product3dSceneRendererService {
     this.addLights();
     this.addFloor();
     this.addDemoModel();
+    this.addPointerEvents();
+    this.addKeyboardEvents();
     this.applyOptions(options);
     this.resize();
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -83,6 +99,7 @@ export class Product3dSceneRendererService {
     if (!this.scene) return;
     this.clearObject(this.productModel);
     this.productModel = model;
+    this.selectObject(null);
     this.productModel.name = model.name || 'Imported product model';
     this.normalizeModel(this.productModel);
     this.scene.add(this.productModel);
@@ -95,6 +112,7 @@ export class Product3dSceneRendererService {
   resetDemo(): void {
     this.clearObject(this.productModel);
     this.productModel = null;
+    this.selectObject(null);
     if (this.demoMesh) {
       this.demoMesh.visible = true;
     }
@@ -106,8 +124,12 @@ export class Product3dSceneRendererService {
     this.resizeObserver = null;
     this.controls?.dispose();
     this.controls = null;
+    this.pressedKeys.clear();
+    this.draggingObject = null;
+    this.selectionHandler = null;
     this.clearObject(this.productModel);
     this.clearObject(this.demoMesh);
+    this.clearObject(this.selectionBox);
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.geometry?.dispose();
@@ -125,6 +147,20 @@ export class Product3dSceneRendererService {
     this.productModel = null;
     this.grid = null;
     this.floor = null;
+    this.selectionBox = null;
+  }
+
+  onSelectionChanged(handler: ProductSceneSelectionHandler | null): void {
+    this.selectionHandler = handler;
+  }
+
+  selectObjectByUuid(uuid: string | null): void {
+    if (!uuid) {
+      this.selectObject(null);
+      return;
+    }
+    const object = this.scene?.getObjectByProperty('uuid', uuid) ?? null;
+    this.selectObject(object);
   }
 
   private addLights(): void {
@@ -210,14 +246,18 @@ export class Product3dSceneRendererService {
     return Number(this.productModel?.userData['productScale']) || 1;
   }
 
-  private renderLoop = (): void => {
+  private renderLoop = (time = performance.now()): void => {
     if (!this.renderer || !this.scene || !this.camera) return;
     this.frameId = requestAnimationFrame(this.renderLoop);
+    const deltaSeconds = Math.min(0.05, Math.max(0, (time - this.lastFrameTime) / 1000 || 0));
+    this.lastFrameTime = time;
+    this.moveCameraFromKeyboard(deltaSeconds);
     if (this.options.turntableEnabled) {
       const object = this.productModel ?? this.demoMesh;
       if (object) object.rotation.y += 0.008;
     }
     this.controls?.update();
+    this.selectionBox?.update();
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -240,5 +280,163 @@ export class Product3dSceneRendererService {
         materials.forEach((material) => material.dispose());
       }
     });
+  }
+
+  private addPointerEvents(): void {
+    const canvas = this.renderer?.domElement;
+    if (!canvas) return;
+    canvas.addEventListener('pointerdown', this.handlePointerDown);
+    canvas.addEventListener('pointermove', this.handlePointerMove);
+    canvas.addEventListener('pointerup', this.handlePointerUp);
+    canvas.addEventListener('pointercancel', this.handlePointerUp);
+    canvas.addEventListener('pointerleave', this.handlePointerUp);
+  }
+
+  private addKeyboardEvents(): void {
+    const canvas = this.renderer?.domElement;
+    if (!canvas) return;
+    canvas.addEventListener('focus', () => { this.keyboardFocused = true; });
+    canvas.addEventListener('blur', () => {
+      this.keyboardFocused = false;
+      this.pressedKeys.clear();
+    });
+    canvas.addEventListener('keydown', (event) => {
+      const key = event.key.toLowerCase();
+      if (['w', 'a', 's', 'd'].includes(key)) {
+        event.preventDefault();
+        this.pressedKeys.add(key);
+      }
+    });
+    canvas.addEventListener('keyup', (event) => {
+      this.pressedKeys.delete(event.key.toLowerCase());
+    });
+  }
+
+  private handlePointerDown = (event: PointerEvent): void => {
+    const canvas = this.renderer?.domElement;
+    if (!canvas || !this.camera) return;
+    canvas.focus();
+    this.keyboardFocused = true;
+    this.updatePointer(event);
+
+    const clickedObject = this.findIntersectedObject();
+    if (clickedObject) {
+      this.selectObject(clickedObject);
+    }
+
+    const dragTarget = this.selectedObject && this.isDraggable(this.selectedObject)
+      ? this.selectedObject
+      : null;
+    if (!dragTarget || !this.pointerHitsObject(dragTarget)) return;
+
+    const worldPosition = new THREE.Vector3();
+    dragTarget.getWorldPosition(worldPosition);
+    const cameraDirection = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraDirection);
+    this.dragPlane.setFromNormalAndCoplanarPoint(cameraDirection, worldPosition);
+
+    const intersection = this.intersectDragPlane();
+    if (!intersection) return;
+    this.dragOffset.copy(intersection).sub(worldPosition);
+    this.draggingObject = dragTarget;
+    this.controls!.enabled = false;
+    canvas.setPointerCapture(event.pointerId);
+  };
+
+  private handlePointerMove = (event: PointerEvent): void => {
+    if (!this.draggingObject) return;
+    this.updatePointer(event);
+    const intersection = this.intersectDragPlane();
+    if (!intersection) return;
+
+    const targetWorldPosition = intersection.sub(this.dragOffset);
+    const parent = this.draggingObject.parent;
+    const targetLocalPosition = parent ? parent.worldToLocal(targetWorldPosition.clone()) : targetWorldPosition;
+    this.draggingObject.position.copy(targetLocalPosition);
+  };
+
+  private handlePointerUp = (event: PointerEvent): void => {
+    const canvas = this.renderer?.domElement;
+    if (canvas?.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    this.draggingObject = null;
+    if (this.controls) this.controls.enabled = true;
+  };
+
+  private updatePointer(event: PointerEvent): void {
+    const canvas = this.renderer?.domElement;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  private findIntersectedObject(): THREE.Object3D | null {
+    if (!this.camera) return null;
+    const root = this.productModel ?? this.demoMesh;
+    if (!root) return null;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hit = this.raycaster.intersectObject(root, true)[0]?.object ?? null;
+    return hit ? this.draggableAncestor(hit) ?? hit : null;
+  }
+
+  private pointerHitsObject(object: THREE.Object3D): boolean {
+    if (!this.camera) return false;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.intersectObject(object, true).length > 0;
+  }
+
+  private intersectDragPlane(): THREE.Vector3 | null {
+    if (!this.camera) return null;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.ray.intersectPlane(this.dragPlane, new THREE.Vector3());
+  }
+
+  private selectObject(object: THREE.Object3D | null): void {
+    this.selectedObject = object;
+    this.clearObject(this.selectionBox);
+    this.selectionBox = null;
+    if (object && this.scene) {
+      this.selectionBox = new THREE.BoxHelper(object, 0xf3c969);
+      this.selectionBox.name = 'Selection bounding box';
+      this.scene.add(this.selectionBox);
+    }
+    this.selectionHandler?.(object);
+  }
+
+  private isDraggable(object: THREE.Object3D): boolean {
+    return object instanceof THREE.Mesh || object instanceof THREE.Group || object.type === 'Object3D';
+  }
+
+  private draggableAncestor(object: THREE.Object3D): THREE.Object3D | null {
+    let current: THREE.Object3D | null = object;
+    while (current && current !== this.productModel && current !== this.demoMesh) {
+      if (this.isDraggable(current)) return current;
+      current = current.parent;
+    }
+    return object instanceof THREE.Mesh ? object : null;
+  }
+
+  private moveCameraFromKeyboard(deltaSeconds: number): void {
+    if (!this.keyboardFocused || !this.camera || !this.controls || !this.pressedKeys.size) return;
+
+    const speed = 3.2 * deltaSeconds;
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+
+    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
+    const movement = new THREE.Vector3();
+    if (this.pressedKeys.has('w')) movement.add(forward);
+    if (this.pressedKeys.has('s')) movement.sub(forward);
+    if (this.pressedKeys.has('d')) movement.add(right);
+    if (this.pressedKeys.has('a')) movement.sub(right);
+    if (!movement.lengthSq()) return;
+
+    movement.normalize().multiplyScalar(speed);
+    this.camera.position.add(movement);
+    this.controls.target.add(movement);
   }
 }
