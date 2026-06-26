@@ -55,6 +55,11 @@ export class Product3dSceneRendererService {
   private pressedKeys = new Set<string>();
   private cameraMoveSnapshot: SceneCameraSnapshot | null = null;
   private cameraMoved = false;
+  private flyLookActive = false;
+  private flyLookMoved = false;
+  private flyLookSnapshot: SceneCameraSnapshot | null = null;
+  private flyYaw = 0;
+  private flyPitch = 0;
   private lastFrameTime = 0;
   private selectionHandler: ProductSceneSelectionHandler | null = null;
   private undoStack: SceneUndoEntry[] = [];
@@ -151,6 +156,8 @@ export class Product3dSceneRendererService {
     this.draggingObject = null;
     this.dragStartSnapshot = null;
     this.cameraMoveSnapshot = null;
+    this.flyLookActive = false;
+    this.flyLookSnapshot = null;
     this.undoStack = [];
     this.selectionHandler = null;
     this.clearObject(this.productModel);
@@ -324,6 +331,7 @@ export class Product3dSceneRendererService {
     canvas.addEventListener('pointerup', this.handlePointerUp);
     canvas.addEventListener('pointercancel', this.handlePointerUp);
     canvas.addEventListener('pointerleave', this.handlePointerUp);
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
 
   private addKeyboardEvents(): void {
@@ -337,7 +345,7 @@ export class Product3dSceneRendererService {
     });
     canvas.addEventListener('keydown', (event) => {
       const key = event.key.toLowerCase();
-      if (['w', 'a', 's', 'd'].includes(key)) {
+      if (['w', 'a', 's', 'd', 'q', 'e', 'shift'].includes(key)) {
         event.preventDefault();
         this.pressedKeys.add(key);
       }
@@ -355,6 +363,13 @@ export class Product3dSceneRendererService {
     if (!canvas || !this.camera) return;
     canvas.focus();
     this.keyboardFocused = true;
+
+    if (event.button === 2) {
+      event.preventDefault();
+      this.startFlyLook(event);
+      return;
+    }
+
     this.updatePointer(event);
 
     const clickedObject = this.findIntersectedObject();
@@ -384,6 +399,11 @@ export class Product3dSceneRendererService {
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (this.flyLookActive) {
+      this.updateFlyLook(event);
+      return;
+    }
+
     if (!this.draggingObject) return;
     this.updatePointer(event);
     const intersection = this.intersectDragPlane();
@@ -403,6 +423,12 @@ export class Product3dSceneRendererService {
     if (canvas?.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
+
+    if (this.flyLookActive) {
+      this.finishFlyLook();
+      return;
+    }
+
     if (this.draggingObject && this.dragStartSnapshot && this.dragMoved) {
       const snapshot = this.dragStartSnapshot;
       this.pushUndo('Move 3D node', () => this.restoreObjectTransform(snapshot));
@@ -470,15 +496,19 @@ export class Product3dSceneRendererService {
   private moveCameraFromKeyboard(deltaSeconds: number): void {
     if (!this.keyboardFocused || !this.camera || !this.controls || !this.pressedKeys.size) return;
 
-    const speed = 3.2 * deltaSeconds;
+    const speedMultiplier = this.pressedKeys.has('shift') ? 3.2 : 1;
+    const speed = 3.2 * speedMultiplier * deltaSeconds;
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
+    const worldUp = new THREE.Vector3(0, 1, 0);
 
     const movement = new THREE.Vector3();
     if (this.pressedKeys.has('w')) movement.add(forward);
     if (this.pressedKeys.has('s')) movement.sub(forward);
     if (this.pressedKeys.has('d')) movement.add(right);
     if (this.pressedKeys.has('a')) movement.sub(right);
+    if (this.pressedKeys.has('e')) movement.add(worldUp);
+    if (this.pressedKeys.has('q')) movement.sub(worldUp);
     if (!movement.lengthSq()) return;
 
     movement.normalize().multiplyScalar(speed);
@@ -535,5 +565,47 @@ export class Product3dSceneRendererService {
 
   private pushUndo(label: string, restore: () => void): void {
     this.undoStack = [...this.undoStack, { label, restore }].slice(-80);
+  }
+
+  private startFlyLook(event: PointerEvent): void {
+    const canvas = this.renderer?.domElement;
+    if (!canvas || !this.camera || !this.controls) return;
+
+    this.finishKeyboardMove();
+    this.flyLookActive = true;
+    this.flyLookMoved = false;
+    this.flyLookSnapshot = this.snapshotCamera();
+    this.controls.enabled = false;
+
+    const euler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+    this.flyYaw = euler.y;
+    this.flyPitch = euler.x;
+    canvas.setPointerCapture(event.pointerId);
+  }
+
+  private updateFlyLook(event: PointerEvent): void {
+    if (!this.camera || !this.controls) return;
+
+    const sensitivity = 0.0025;
+    this.flyYaw -= event.movementX * sensitivity;
+    this.flyPitch -= event.movementY * sensitivity;
+    this.flyPitch = THREE.MathUtils.clamp(this.flyPitch, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
+
+    this.camera.quaternion.setFromEuler(new THREE.Euler(this.flyPitch, this.flyYaw, 0, 'YXZ'));
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    const targetDistance = Math.max(1, this.camera.position.distanceTo(this.controls.target));
+    this.controls.target.copy(this.camera.position).add(forward.multiplyScalar(targetDistance));
+    this.flyLookMoved = true;
+  }
+
+  private finishFlyLook(): void {
+    if (this.controls) this.controls.enabled = true;
+    if (this.flyLookSnapshot && this.flyLookMoved) {
+      const snapshot = this.flyLookSnapshot;
+      this.pushUndo('Look around camera', () => this.restoreCamera(snapshot));
+    }
+    this.flyLookActive = false;
+    this.flyLookMoved = false;
+    this.flyLookSnapshot = null;
   }
 }
