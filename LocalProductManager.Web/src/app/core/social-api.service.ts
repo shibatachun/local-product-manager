@@ -174,4 +174,10 @@ export class SocialApiService {
       date: date || null,
     }));
   }
+
+  runRecentWeekAiAnalysis(date?: string): Promise<SocialAiAnalysisResult> {
+    return firstValueFrom(this.http.post<SocialAiAnalysisResult>(`${this.baseUrl}/social-ai-analysis/run/recent-week`, {
+      date: date || null,
+    }));
+  }
 }

@@ -87,10 +87,11 @@ input,select { width:100%; min-height:38px; padding:7px 9px; border:1px solid #c
 .chart-tooltip .tooltip-change { fill:#9eb0ba; font-size:10px; }
 .ai-analysis-panel { margin-top:14px; padding-top:14px; border-top:1px solid #e2e8ec; }
 .ai-analysis-panel .section-heading button { min-height:32px; padding:0 10px; border:1px solid #cbd4da; border-radius:6px; background:#fff; font-size:12px; font-weight:750; }
-.ai-runner { display:grid; grid-template-columns:130px 150px auto minmax(0,1fr); gap:10px; align-items:end; margin-bottom:12px; }
+.ai-runner { display:grid; grid-template-columns:130px 150px auto auto minmax(0,1fr); gap:10px; align-items:end; margin-bottom:12px; }
 .ai-runner label { display:grid; gap:5px; color:#55646f; font-size:12px; font-weight:700; }
 .ai-runner input,.ai-runner select { min-height:34px; padding:6px 8px; border:1px solid #cfd7dd; border-radius:6px; background:#fff; }
 .ai-runner button { min-height:34px; padding:0 11px; border:1px solid #176b87; border-radius:6px; color:#fff; background:#176b87; font-weight:800; }
+.ai-runner .secondary-ai-action { border-color:#cbd4da; color:#334e68; background:#fff; }
 .ai-runner button:disabled { cursor:default; opacity:.48; }
 .ai-runner code { overflow:hidden; align-self:center; color:#667681; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .ai-readonly-note { margin:0 0 10px; padding:10px 12px; border:1px solid #dfe7ec; border-radius:7px; background:#f7fafb; color:#5f6f7b; font-size:12px; }

@@ -10,6 +10,9 @@ public sealed record SocialAiAnalysisRunRequest(
     string Period,
     DateOnly? Date);
 
+public sealed record SocialAiAnalysisRecentWeekRunRequest(
+    DateOnly? Date);
+
 public sealed record SocialAiAnalysisResultDto(
     string Period,
     DateOnly From,

@@ -490,6 +490,15 @@ export class SocialAccountsPage {
     });
   }
 
+  async runRecentWeekAiAnalysis(): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('AI analysis is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.runRecentWeekAiAnalysis(this.aiForm.date);
+      await Promise.all([this.loadAiReports(false), this.loadFetchLogs(false)]);
+      this.showNotice(`Generated weekly AI analysis for ${result.from} to ${result.to}: ${result.path}`);
+    });
+  }
+
   async loadYouTubeStatus(): Promise<void> {
     try {
       this.youtubeStatus.set(await this.api.youtubeStatus());

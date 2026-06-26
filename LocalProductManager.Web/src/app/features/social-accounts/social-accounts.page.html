@@ -232,6 +232,7 @@
             <input type="date" [(ngModel)]="aiForm.date" />
           </label>
           <button class="primary" type="button" (click)="runAiAnalysis()" [disabled]="!aiStatus()?.isConfigured || loading()">Run Gemini analysis</button>
+          <button class="primary secondary-ai-action" type="button" (click)="runRecentWeekAiAnalysis()" [disabled]="!aiStatus()?.isConfigured || loading()">Analyze last 7 days</button>
           <code>{{ aiStatus()?.reportDirectory }}</code>
         </div>
         <ng-template #aiReadonlyNote>

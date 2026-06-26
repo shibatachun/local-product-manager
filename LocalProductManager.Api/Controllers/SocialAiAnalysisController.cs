@@ -69,6 +69,35 @@ public sealed class SocialAiAnalysisController(
         }
     }
 
+    [HttpPost("run/recent-week")]
+    public async Task<ActionResult<SocialAiAnalysisResultDto>> RunRecentWeek(
+        SocialAiAnalysisRecentWeekRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await auth.CanManageSocialAsync(HttpContext, cancellationToken)) return AdminOnly();
+        try
+        {
+            var result = await analysis.RunRecentWeekAsync(request.Date, cancellationToken);
+            await fetchLogs.RecordAsync(
+                "ai-analysis-weekly",
+                "success",
+                1,
+                $"Generated recent 7-day AI social analysis: {result.Path}",
+                cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await fetchLogs.RecordAsync("ai-analysis", "failed", 0, ex.Message, cancellationToken);
+            return BadRequest(ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            await fetchLogs.RecordAsync("ai-analysis", "failed", 0, ex.Message, cancellationToken);
+            return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+    }
+
     private ObjectResult AdminOnly() =>
         StatusCode(StatusCodes.Status403Forbidden, "Only admin can run social AI analysis.");
 }

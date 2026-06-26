@@ -51,6 +51,32 @@ public sealed class SocialAiAnalysisService(
             generatedAt);
     }
 
+    public async Task<SocialAiAnalysisResultDto> RunRecentWeekAsync(
+        DateOnly? date,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+        {
+            throw new InvalidOperationException("Gemini API key is not configured.");
+        }
+
+        var to = date ?? DateOnly.FromDateTime(DateTime.Now);
+        var from = to.AddDays(-6);
+        var prompt = await BuildPromptAsync("weekly", from, to, cancellationToken);
+        var summary = await GenerateGeminiSummaryAsync(prompt, cancellationToken);
+        var generatedAt = DateTimeOffset.Now;
+        var path = await SaveReportAsync("weekly", from, to, summary, prompt, generatedAt, cancellationToken);
+
+        return new SocialAiAnalysisResultDto(
+            "weekly",
+            from,
+            to,
+            Model,
+            path,
+            summary,
+            generatedAt);
+    }
+
     public async Task<IReadOnlyList<SocialAiAnalysisReportDto>> GetRecentReportsAsync(
         int limit,
         CancellationToken cancellationToken)
