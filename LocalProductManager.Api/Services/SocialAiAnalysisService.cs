@@ -187,6 +187,11 @@ public sealed class SocialAiAnalysisService(
         lines.AppendLine("When Stored daily deltas are present, use them as the source of daily and weekly change totals.");
         lines.AppendLine("Daily reports compare the target day with the previous available snapshot and include year-to-date context.");
         lines.AppendLine("Weekly reports compare the selected week with the previous week.");
+        lines.AppendLine("Platform data notes:");
+        lines.AppendLine("- TikTok is imported from manual Overview.xlsx account-level daily rows only; it has no content/video rows in this system yet.");
+        lines.AppendLine("- For TikTok, Video Views maps to views, Profile Views maps to clicks, Likes maps to likes, Comments maps to comments, and Shares maps to shares.");
+        lines.AppendLine("- Do not skip TikTok just because Top content rows are empty; analyze TikTok from Account coverage, platform totals, and stored daily deltas.");
+        lines.AppendLine("- YouTube may have video-level rows; Pinterest/Instagram/Facebook may have content rows when reports include them.");
         lines.AppendLine($"Period: {normalizedPeriod}");
         lines.AppendLine($"Current date range: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
         lines.AppendLine($"Comparison date range: {comparison.From:yyyy-MM-dd} to {comparison.To:yyyy-MM-dd}");
