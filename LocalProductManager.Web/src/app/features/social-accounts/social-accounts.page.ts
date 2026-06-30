@@ -752,6 +752,28 @@ export class SocialAccountsPage {
     });
   }
 
+  async onTikTokReportSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+    await this.importTikTokReport(file);
+  }
+
+  async importTikTokReport(file: File): Promise<void> {
+    if (!this.canManageSocial()) return this.showNotice('TikTok report import is only available on the host computer.');
+    await this.perform(async () => {
+      const result = await this.api.tiktokImportReport(file);
+      await this.load();
+      this.selectedAccountId.set(result.accountId);
+      this.selectedContentPlatform.set('tiktok');
+      await this.loadFetchLogs(false);
+      this.selectedChartPlatforms.update(current => new Set([...Array.from(current), 'tiktok']));
+      this.selectedMetric.set('views');
+      this.showNotice(`Imported ${result.rowsImported} TikTok daily rows from ${result.from} to ${result.to}: ${result.viewsImported.toLocaleString()} views.`);
+    });
+  }
+
   async loadStoredYouTubeVideos(): Promise<void> {
     try {
       const snapshot = await this.api.youtubeStoredVideos();

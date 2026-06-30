@@ -341,6 +341,10 @@
           Import report
           <input type="file" accept=".csv,text/csv" (change)="onFacebookReportSelected($event)" />
         </label>
+        <label class="file-button" *ngIf="canManageSocial() && selectedContentPlatform() === 'tiktok'">
+          Import overview
+          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="onTikTokReportSelected($event)" />
+        </label>
       </div>
 
       <div class="youtube-summary" *ngIf="selectedContentPlatform() === 'youtube'; else nonYoutubeSummary">

@@ -127,3 +127,15 @@ public sealed record FacebookContentItemDto(
     long Clicks,
     long Comments,
     IReadOnlyList<PinterestMetricPointDto> Metrics);
+
+public sealed record TikTokReportImportResult(
+    int AccountId,
+    int RowsImported,
+    int ViewsImported,
+    int ProfileViewsImported,
+    int LikesImported,
+    int CommentsImported,
+    int SharesImported,
+    string AccountName,
+    DateOnly From,
+    DateOnly To);

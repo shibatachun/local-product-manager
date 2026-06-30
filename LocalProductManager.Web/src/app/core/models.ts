@@ -503,6 +503,19 @@ export interface FacebookReportImportResult {
   snapshotDate: string;
 }
 
+export interface TikTokReportImportResult {
+  accountId: number;
+  rowsImported: number;
+  viewsImported: number;
+  profileViewsImported: number;
+  likesImported: number;
+  commentsImported: number;
+  sharesImported: number;
+  accountName: string;
+  from: string;
+  to: string;
+}
+
 export interface FacebookContentSnapshot {
   channel: {
     id: string;

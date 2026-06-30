@@ -30,6 +30,7 @@ builder.Services.AddScoped<AttributionFolderImportService>();
 builder.Services.AddScoped<PinterestReportImportService>();
 builder.Services.AddScoped<InstagramReportImportService>();
 builder.Services.AddScoped<FacebookReportImportService>();
+builder.Services.AddScoped<TikTokReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SocialDataMaintenanceService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();

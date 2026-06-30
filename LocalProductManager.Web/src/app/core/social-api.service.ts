@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
+import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, TikTokReportImportResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -142,6 +142,12 @@ export class SocialApiService {
   facebookPosts(accountId?: number | null): Promise<FacebookContentSnapshot> {
     const query = accountId ? `?accountId=${accountId}` : '';
     return firstValueFrom(this.http.get<FacebookContentSnapshot>(`${this.baseUrl}/facebook/posts${query}`));
+  }
+
+  tiktokImportReport(file: File): Promise<TikTokReportImportResult> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<TikTokReportImportResult>(`${this.baseUrl}/tiktok/report/import`, data));
   }
 
   fetchLogs(): Promise<SocialFetchLogEntry[]> {
