@@ -524,6 +524,14 @@ export class SocialAccountsPage {
   }
 
   async connectYouTube(): Promise<void> {
+    await this.startYouTubeAuthorization('connect');
+  }
+
+  async reauthorizeYouTube(): Promise<void> {
+    await this.startYouTubeAuthorization('reauthorize');
+  }
+
+  private async startYouTubeAuthorization(mode: 'connect' | 'reauthorize'): Promise<void> {
     const status = this.youtubeStatus();
     if (!this.canManageSocial()) {
       return this.showNotice('This page is read-only from other computers. Open localhost on the host computer to connect accounts.');
@@ -542,8 +550,10 @@ export class SocialAccountsPage {
         location.href = result.authorizationUrl;
         return;
       }
-      this.startYouTubeStatusPolling(popup);
-      this.showNotice('Complete YouTube authorization in the popup, then click Sync YouTube.');
+      this.startYouTubeStatusPolling(popup, mode === 'reauthorize');
+      this.showNotice(mode === 'reauthorize'
+        ? 'Complete YouTube re-authorization in the popup. Saved YouTube data will be kept.'
+        : 'Complete YouTube authorization in the popup, then click Sync YouTube.');
     });
   }
 
@@ -1046,6 +1056,8 @@ export class SocialAccountsPage {
     const status = this.youtubeStatus();
     if (!status) return 'Checking YouTube connection...';
     if (!this.canManageSocial()) return status.isConnected ? 'Read-only view from this computer' : 'Waiting for host computer setup';
+    if (status.isConnected && status.needsReauthorization) return status.message || 'Token expired. Re-authorize to keep saved data and reconnect YouTube.';
+    if (status.isConnected && status.isTokenExpired) return status.message || 'Access token expired; sync will try to refresh it automatically.';
     if (status.isConnected) return status.channelTitle || 'YouTube Channel';
     if (this.runningOnLanHost) return `Connect on the server computer: ${status.redirectUri}`;
     return status.message || 'Open Google authorization';
@@ -1071,11 +1083,11 @@ export class SocialAccountsPage {
     return status.message || 'Connect Facebook Pages and Instagram Professional accounts through Meta';
   }
 
-  private startYouTubeStatusPolling(popup: Window): void {
+  private startYouTubeStatusPolling(popup: Window, waitForPopupClose = false): void {
     if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
     this.youtubePollTimer = window.setInterval(async () => {
       await this.loadYouTubeStatus();
-      if (this.youtubeStatus()?.isConnected || popup.closed) {
+      if ((waitForPopupClose ? popup.closed : this.youtubeStatus()?.isConnected || popup.closed)) {
         if (this.youtubePollTimer) window.clearInterval(this.youtubePollTimer);
         this.youtubePollTimer = null;
         await this.load();

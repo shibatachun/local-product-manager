@@ -365,6 +365,9 @@ export interface YouTubeAuthStatus {
   message: string | null;
   redirectUri: string;
   isAdminHost: boolean;
+  isTokenExpired: boolean;
+  canRefresh: boolean;
+  needsReauthorization: boolean;
 }
 
 export interface PinterestAuthStatus {

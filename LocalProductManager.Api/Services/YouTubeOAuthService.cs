@@ -41,6 +41,9 @@ public sealed class YouTubeOAuthService
     {
         var configured = IsConfigured(out _, out _);
         var token = LoadToken();
+        var isExpired = token is not null && token.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(2);
+        var canRefresh = token is not null && !string.IsNullOrWhiteSpace(token.RefreshToken);
+        var needsReauthorization = token is not null && isExpired && !canRefresh;
         return new YouTubeAuthStatusDto(
             configured,
             token is not null,
@@ -48,10 +51,13 @@ public sealed class YouTubeOAuthService
             token?.ChannelTitle,
             token?.ChannelThumbnailUrl,
             configured
-                ? null
+                ? TokenStatusMessage(isExpired, canRefresh)
                 : "Put the Google OAuth client secret file at Data/youtube-client-secret.json or set YouTubeOAuth:ClientId and YouTubeOAuth:ClientSecret.",
             RedirectUri(),
-            isAdminHost);
+            isAdminHost,
+            isExpired,
+            canRefresh,
+            needsReauthorization);
     }
 
     public string RedirectUri() =>
@@ -682,6 +688,18 @@ public sealed class YouTubeOAuthService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(tokenPath)!);
         File.WriteAllText(tokenPath, JsonSerializer.Serialize(token, JsonOptions));
+    }
+
+    private static string? TokenStatusMessage(bool isExpired, bool canRefresh)
+    {
+        if (!isExpired)
+        {
+            return null;
+        }
+
+        return canRefresh
+            ? "YouTube access token expired; the server will refresh it automatically on the next sync."
+            : "YouTube token expired and no refresh token is stored. Re-authorize YouTube without disconnecting to keep saved data.";
     }
 
     private static long ParseLong(JsonElement element, string propertyName) =>

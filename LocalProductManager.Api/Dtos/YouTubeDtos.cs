@@ -8,7 +8,10 @@ public sealed record YouTubeAuthStatusDto(
     string? ChannelThumbnailUrl,
     string? Message,
     string RedirectUri,
-    bool IsAdminHost);
+    bool IsAdminHost,
+    bool IsTokenExpired,
+    bool CanRefresh,
+    bool NeedsReauthorization);
 
 public sealed record YouTubeAuthStartResult(string AuthorizationUrl, string RedirectUri);
 

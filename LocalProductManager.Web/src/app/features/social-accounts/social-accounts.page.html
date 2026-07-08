@@ -54,6 +54,9 @@
             <button type="button" *ngIf="!youtubeStatus()?.isConnected" (click)="connectYouTube()" [disabled]="loading()">
               Connect
             </button>
+            <button type="button" *ngIf="youtubeStatus()?.isConnected" (click)="reauthorizeYouTube()" [disabled]="loading()">
+              {{ youtubeStatus()?.needsReauthorization ? 'Re-authorize expired token' : 'Re-authorize' }}
+            </button>
             <button class="primary" type="button" (click)="syncYouTube()" [disabled]="!youtubeStatus()?.isConnected || loading()">
               Sync
             </button>
