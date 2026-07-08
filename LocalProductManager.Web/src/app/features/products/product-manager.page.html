@@ -219,14 +219,34 @@
                   <button type="button" (click)="adjustPricingQuantity(1)">+</button>
                 </div>
               </div>
-              <label>Unit product cost (RMB)
-                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" placeholder="0.00" />
+              <label>Unit product cost
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" (ngModelChange)="pricingResult.set(null)" placeholder="0.00" />
               </label>
-              <label>Product weight (lb)
-                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" placeholder="1.00" />
+              <label>Cost currency
+                <select [(ngModel)]="pricingForm.productCostCurrency" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
+                </select>
               </label>
-              <label>Packaging weight (lb)
-                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingWeight" placeholder="0.25" />
+              <label>Product weight
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" (ngModelChange)="pricingResult.set(null)" placeholder="1.00" />
+              </label>
+              <label>Product weight unit
+                <select [(ngModel)]="pricingForm.weightUnit" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of pricingWeightUnitOptions" [ngValue]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+              <label>First-mile rate (RMB/g)
+                <select [(ngModel)]="pricingForm.firstMileRate" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of firstMileRateOptions" [ngValue]="option">{{ unit(option) }}</option>
+                </select>
+              </label>
+              <label>Packaging weight
+                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.packagingWeight" (ngModelChange)="pricingResult.set(null)" placeholder="0.25" />
+              </label>
+              <label>Packaging weight unit
+                <select [(ngModel)]="pricingForm.packagingWeightUnit" (ngModelChange)="pricingResult.set(null)">
+                  <option *ngFor="let option of pricingWeightUnitOptions" [ngValue]="option.value">{{ option.label }}</option>
+                </select>
               </label>
               <label>Length (in)
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.length" />
@@ -251,7 +271,7 @@
               </label>
             </div>
             <div class="pricing-live-summary">
-              <span>Landed cost <strong>{{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</strong></span>
+              <span>Cost basis <strong>{{ currency(pricingDerived().totalCost) }}</strong></span>
               <span>RMB→USD <strong>{{ unit(pricingDerived().rmbToUsdRate) }}</strong></span>
               <span>Package weight <strong>{{ number(pricingDerived().totalPackageWeight) }} lb</strong></span>
               <span>Billable weight <strong>{{ pricingDerived().billableWeight }} lb</strong></span>
@@ -266,7 +286,7 @@
               <div><span>Estimated profit</span><strong>{{ currency(estimate.estimatedProfit) }}</strong></div>
               <div><span>Target profit</span><strong>{{ estimate.targetProfitEnabled ? currency(estimate.targetProfit) : 'Margin mode' }}</strong></div>
               <div><span>Shipping estimate</span><strong>{{ currency(estimate.shippingCost) }}</strong></div>
-              <div><span>Landed cost</span><strong>{{ rmb(estimate.totalLandedCostRmb) }}</strong></div>
+              <div><span>Cost basis</span><strong>{{ currency(estimate.totalCost) }}</strong></div>
             </div>
             <div class="estimate-meta">
               <span>{{ platformLabel(estimate.platform) }}</span>
@@ -295,7 +315,7 @@
                 <span>{{ platformLabel(pricingForm.platform) }}</span>
                 <span>{{ pricingDerived().category }}: {{ number(pricingDerived().categoryRate * 100) }}%</span>
                 <span>{{ pricingDerived().logistics }}</span>
-                <span>Landed cost: {{ rmb(pricingDerived().totalLandedCostRmb) }} / {{ currency(pricingDerived().totalCost) }}</span>
+                <span>Cost basis: {{ currency(pricingDerived().totalCost) }}</span>
                 <span>RMB→USD: {{ unit(pricingDerived().rmbToUsdRate) }}</span>
                 <span>Package weight: {{ number(pricingDerived().totalPackageWeight) }} lb</span>
                 <span>Billable weight: {{ pricingDerived().billableWeight }} lb</span>
@@ -500,7 +520,7 @@
       </div>
     </section>
     <section>
-      <div class="section-heading"><div><h3>Suggested pricing</h3><p>Uses saved RMB cost, first-mile freight, weight, dimensions, category, and logistics.</p></div></div>
+      <div class="section-heading"><div><h3>Suggested pricing</h3><p>Uses saved cost, first-mile freight, weight, dimensions, category, and logistics.</p></div></div>
       <div class="detail-pricing-grid">
         <label>Platform
           <select [ngModel]="detailPricingForm.platform" (ngModelChange)="onDetailPricingPlatformChanged($event)">
@@ -525,7 +545,22 @@
             <button type="button" (click)="adjustDetailPricingQuantity(1)">+</button>
           </div>
         </div>
-        <label>Packaging weight (lb)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingWeight" /></label>
+        <label>Cost currency
+          <select [(ngModel)]="detailPricingForm.productCostCurrency" (ngModelChange)="detailPricingResult.set(null)">
+            <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <label>First-mile rate (RMB/g)
+          <select [(ngModel)]="detailPricingForm.firstMileRate" (ngModelChange)="detailPricingResult.set(null)">
+            <option *ngFor="let option of firstMileRateOptions" [ngValue]="option">{{ unit(option) }}</option>
+          </select>
+        </label>
+        <label>Packaging weight<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingWeight" (ngModelChange)="detailPricingResult.set(null)" /></label>
+        <label>Packaging weight unit
+          <select [(ngModel)]="detailPricingForm.packagingWeightUnit" (ngModelChange)="detailPricingResult.set(null)">
+            <option *ngFor="let option of pricingWeightUnitOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
         <label>Packaging cost reserve ($)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.packagingCost" /></label>
         <label>Target profit ($)<input type="number" min="0" step="0.01" [(ngModel)]="detailPricingForm.targetProfit" /></label>
         <label>Target margin %<input type="number" min="0" max="80" step="1" [(ngModel)]="detailPricingForm.targetMarginPercent" /></label>
@@ -533,7 +568,7 @@
         <button class="primary" type="button" (click)="calculateDetailPricing()">Calculate suggested price</button>
       </div>
       <div class="detail-pricing-summary">
-        <span>Landed cost <strong>{{ rmb(detailPricingDerived(product).totalLandedCostRmb) }} / {{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
+        <span>Cost basis <strong>{{ currency(detailPricingDerived(product).totalCost) }}</strong></span>
         <span>RMB→USD <strong>{{ unit(detailPricingDerived(product).rmbToUsdRate) }}</strong></span>
         <span>Package weight <strong>{{ number(detailPricingDerived(product).totalPackageWeight) }} lb</strong></span>
         <span>Billable weight <strong>{{ detailPricingDerived(product).billableWeight }} lb</strong></span>

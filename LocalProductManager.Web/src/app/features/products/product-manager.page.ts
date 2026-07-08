@@ -27,6 +27,8 @@ import { Product3dSceneEditorPanelComponent } from './product-3d-scene-editor-pa
 type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type PricingPlatform = Exclude<Platform, 'shopify'>;
+type ProductCostCurrency = 'rmb' | 'usd';
+type PricingWeightUnit = 'lb' | 'oz' | 'g' | 'kg';
 type AsinRelationshipRow = {
   parentAsin: string;
   childAsin: string;
@@ -48,10 +50,19 @@ interface PricingEstimate {
   categoryRate: number;
   quantity: number;
   unitCost: number;
+  productCostCurrency: ProductCostCurrency;
   unitProductCostRmb: number;
+  unitProductCostUsd: number;
   unitFirstMileRmb: number;
+  unitFirstMileUsd: number;
   unitLandedCostRmb: number;
   totalLandedCostRmb: number;
+  firstMileRate: number;
+  unitWeightInput: number;
+  unitWeightUnit: PricingWeightUnit;
+  packagingWeightInput: number;
+  packagingWeightUnit: PricingWeightUnit;
+  unitWeightGrams: number;
   unitProductWeight: number;
   packagingWeight: number;
   totalProductWeight: number;
@@ -110,8 +121,12 @@ interface PricingInput {
   logistics: string;
   quantity: number;
   unitCost: number | null;
+  productCostCurrency: ProductCostCurrency;
   unitWeight: number | null;
+  unitWeightUnit: PricingWeightUnit;
   packagingWeight: number | null;
+  packagingWeightUnit: PricingWeightUnit;
+  firstMileRate: number | null;
   length: number | null;
   width: number | null;
   height: number | null;
@@ -246,8 +261,12 @@ export class ProductManagerPage {
     logistics: 'usps-ground',
     quantity: 1,
     productCost: 0,
+    productCostCurrency: 'rmb' as ProductCostCurrency,
     weight: 1,
+    weightUnit: 'lb' as PricingWeightUnit,
     packagingWeight: 0.25,
+    packagingWeightUnit: 'lb' as PricingWeightUnit,
+    firstMileRate: 0.05,
     length: 6,
     width: 4,
     height: 2,
@@ -261,7 +280,10 @@ export class ProductManagerPage {
     category: 'general',
     logistics: 'usps-ground',
     quantity: 1,
+    productCostCurrency: 'rmb' as ProductCostCurrency,
     packagingWeight: 0.25,
+    packagingWeightUnit: 'lb' as PricingWeightUnit,
+    firstMileRate: 0.05,
     packagingCost: 0.65,
     targetProfit: 0,
     targetMarginPercent: 20,
@@ -388,6 +410,17 @@ export class ProductManagerPage {
     { value: 'ebay', label: 'eBay' },
     { value: 'etsy', label: 'Etsy' },
   ];
+  readonly productCostCurrencyOptions: { value: ProductCostCurrency; label: string }[] = [
+    { value: 'rmb', label: 'RMB' },
+    { value: 'usd', label: 'USD' },
+  ];
+  readonly pricingWeightUnitOptions: { value: PricingWeightUnit; label: string }[] = [
+    { value: 'lb', label: 'lb' },
+    { value: 'oz', label: 'oz' },
+    { value: 'g', label: 'g' },
+    { value: 'kg', label: 'kg' },
+  ];
+  readonly firstMileRateOptions = [0, 0.03, 0.05, 0.08, 0.1];
   readonly pricingResult = signal<PricingEstimate | null>(null);
   readonly rmbToUsdRate = signal({ rate: 0.14, date: 'fallback', source: 'Fallback estimate' });
   readonly detailPricingResult = signal<PricingEstimate | null>(null);
@@ -596,14 +629,18 @@ export class ProductManagerPage {
   }
 
   async calculatePricing(): Promise<void> {
-    await this.loadRmbToUsdRate(false);
+    if (this.pricingNeedsExchangeRate(this.pricingForm.productCostCurrency, this.pricingForm.firstMileRate)) {
+      await this.loadRmbToUsdRate(false);
+    }
     this.pricingResult.set(this.calculatePricingEstimate());
   }
 
   async calculateDetailPricing(): Promise<void> {
     const product = this.selectedProduct();
     if (!product) return;
-    await this.loadRmbToUsdRate(false);
+    if (this.pricingNeedsExchangeRate(this.detailPricingForm.productCostCurrency, this.detailPricingForm.firstMileRate)) {
+      await this.loadRmbToUsdRate(false);
+    }
     this.detailPricingResult.set(this.calculatePricingEstimateForProduct(product));
   }
 
@@ -1113,8 +1150,12 @@ export class ProductManagerPage {
       logistics: this.pricingForm.logistics,
       quantity: this.pricingForm.quantity,
       unitCost: this.pricingForm.productCost,
+      productCostCurrency: this.pricingForm.productCostCurrency,
       unitWeight: this.pricingForm.weight,
+      unitWeightUnit: this.pricingForm.weightUnit,
       packagingWeight: this.pricingForm.packagingWeight,
+      packagingWeightUnit: this.pricingForm.packagingWeightUnit,
+      firstMileRate: this.pricingForm.firstMileRate,
       length: this.pricingForm.length,
       width: this.pricingForm.width,
       height: this.pricingForm.height,
@@ -1132,8 +1173,12 @@ export class ProductManagerPage {
       logistics: this.detailPricingForm.logistics,
       quantity: this.detailPricingForm.quantity,
       unitCost: product.cost,
+      productCostCurrency: this.detailPricingForm.productCostCurrency,
       unitWeight: product.weight,
+      unitWeightUnit: 'lb',
       packagingWeight: this.detailPricingForm.packagingWeight,
+      packagingWeightUnit: this.detailPricingForm.packagingWeightUnit,
+      firstMileRate: this.detailPricingForm.firstMileRate,
       length: product.length,
       width: product.width,
       height: product.height,
@@ -1149,17 +1194,26 @@ export class ProductManagerPage {
     const logistics = config.logistics.find((item) => item.value === input.logistics) ?? config.logistics[0];
     const category = config.categories.find((item) => item.value === input.category) ?? config.categories[0];
     const quantity = Math.max(1, Math.round(this.safeNumber(input.quantity)));
-    const unitProductCostRmb = this.safeNumber(input.unitCost);
-    const unitProductWeight = Math.max(0, this.safeNumber(input.unitWeight));
-    const packagingWeight = Math.max(0, this.safeNumber(input.packagingWeight));
-    const unitWeightGrams = unitProductWeight * 453.59237;
-    const unitFirstMileRmb = unitWeightGrams * 0.05;
-    const unitLandedCostRmb = unitProductCostRmb + unitFirstMileRmb;
-    const totalLandedCostRmb = unitLandedCostRmb * quantity;
+    const productCostCurrency = input.productCostCurrency;
+    const unitProductCostInput = this.safeNumber(input.unitCost);
+    const unitWeightInput = Math.max(0, this.safeNumber(input.unitWeight));
+    const packagingWeightInput = Math.max(0, this.safeNumber(input.packagingWeight));
+    const unitWeightUnit = input.unitWeightUnit;
+    const packagingWeightUnit = input.packagingWeightUnit;
+    const unitProductWeight = this.weightToLb(unitWeightInput, unitWeightUnit);
+    const packagingWeight = this.weightToLb(packagingWeightInput, packagingWeightUnit);
+    const unitWeightGrams = this.weightToGrams(unitWeightInput, unitWeightUnit);
+    const firstMileRate = Math.max(0, this.safeNumber(input.firstMileRate));
+    const unitFirstMileRmb = unitWeightGrams * firstMileRate;
     const exchangeRate = this.rmbToUsdRate();
     const rmbToUsdRate = this.safeNumber(exchangeRate.rate) || 0.14;
-    const unitCost = unitLandedCostRmb * rmbToUsdRate;
-    const totalCost = totalLandedCostRmb * rmbToUsdRate;
+    const unitProductCostRmb = productCostCurrency === 'rmb' ? unitProductCostInput : 0;
+    const unitProductCostUsd = productCostCurrency === 'usd' ? unitProductCostInput : unitProductCostInput * rmbToUsdRate;
+    const unitFirstMileUsd = unitFirstMileRmb * rmbToUsdRate;
+    const unitCost = unitProductCostUsd + unitFirstMileUsd;
+    const totalCost = unitCost * quantity;
+    const unitLandedCostRmb = productCostCurrency === 'rmb' ? unitProductCostRmb + unitFirstMileRmb : unitFirstMileRmb;
+    const totalLandedCostRmb = unitLandedCostRmb * quantity;
     const totalProductWeight = unitProductWeight * quantity;
     const totalPackageWeight = totalProductWeight + packagingWeight;
     const length = Math.max(0, this.safeNumber(input.length));
@@ -1194,10 +1248,19 @@ export class ProductManagerPage {
       categoryRate: category.feeRate,
       quantity,
       unitCost,
+      productCostCurrency,
       unitProductCostRmb,
+      unitProductCostUsd,
       unitFirstMileRmb,
+      unitFirstMileUsd,
       unitLandedCostRmb,
       totalLandedCostRmb,
+      firstMileRate,
+      unitWeightInput,
+      unitWeightUnit,
+      packagingWeightInput,
+      packagingWeightUnit,
+      unitWeightGrams,
       rmbToUsdRate,
       exchangeRateDate: exchangeRate.date,
       exchangeRateSource: exchangeRate.source,
@@ -1216,13 +1279,15 @@ export class ProductManagerPage {
       targetProfit,
       targetProfitEnabled,
       steps: [
-        { label: 'Product cost (RMB)', value: this.rmb(unitProductCostRmb), note: `Input product cost is RMB before currency conversion.` },
-        { label: 'First-mile freight (RMB)', value: this.rmb(unitFirstMileRmb), note: `0.05 RMB x ${this.number(unitWeightGrams)} g = ${this.rmb(unitFirstMileRmb)} per unit.` },
-        { label: 'Landed cost (RMB)', value: this.rmb(totalLandedCostRmb), note: `(${this.rmb(unitProductCostRmb)} product + ${this.rmb(unitFirstMileRmb)} first-mile) x ${quantity} unit(s).` },
-        { label: 'RMB to USD', value: `${this.unit(rmbToUsdRate)} USD/RMB`, note: `${exchangeRate.source}, rate date ${exchangeRate.date}. ${this.rmb(totalLandedCostRmb)} x ${this.unit(rmbToUsdRate)} = ${this.currency(totalCost)}.` },
-        { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} landed unit cost x ${quantity} = ${this.currency(totalCost)} product cost in USD.` },
-        { label: 'Product weight', value: `${this.number(totalProductWeight)} lb`, note: `${this.number(unitProductWeight)} lb per unit x ${quantity}. Product weight is also used for first-mile RMB freight.` },
-        { label: 'Package actual weight', value: `${this.number(totalPackageWeight)} lb`, note: `${this.number(totalProductWeight)} lb product weight + ${this.number(packagingWeight)} lb packaging weight.` },
+        productCostCurrency === 'rmb'
+          ? { label: 'Product cost (RMB)', value: this.rmb(unitProductCostRmb), note: `${this.rmb(unitProductCostRmb)} x ${this.unit(rmbToUsdRate)} = ${this.currency(unitProductCostUsd)} per unit.` }
+          : { label: 'Product cost (USD)', value: this.currency(unitProductCostUsd), note: 'USD product cost is used directly without RMB conversion.' },
+        { label: 'First-mile freight (RMB)', value: this.rmb(unitFirstMileRmb), note: `${this.unit(firstMileRate)} RMB/g x ${this.number(unitWeightGrams)} g = ${this.rmb(unitFirstMileRmb)} per unit.` },
+        { label: 'Landed unit cost (USD)', value: this.currency(unitCost), note: `${this.currency(unitProductCostUsd)} product + ${this.currency(unitFirstMileUsd)} first-mile = ${this.currency(unitCost)} per unit.` },
+        { label: 'RMB to USD', value: `${this.unit(rmbToUsdRate)} USD/RMB`, note: `${exchangeRate.source}, rate date ${exchangeRate.date}. RMB inputs are converted with this rate.` },
+        { label: 'Quantity', value: `${quantity}`, note: `${this.currency(unitCost)} landed unit cost x ${quantity} = ${this.currency(totalCost)} product cost basis.` },
+        { label: 'Product weight', value: `${this.number(totalProductWeight)} lb`, note: `${this.number(unitWeightInput)} ${unitWeightUnit} per unit = ${this.number(unitProductWeight)} lb / ${this.number(unitWeightGrams)} g. Grams are used for first-mile freight.` },
+        { label: 'Package actual weight', value: `${this.number(totalPackageWeight)} lb`, note: `${this.number(totalProductWeight)} lb product weight + ${this.number(packagingWeight)} lb packaging weight (${this.number(packagingWeightInput)} ${packagingWeightUnit}).` },
         { label: 'Package size', value: `${this.number(cubicInches)} in³`, note: `Dimensional weight uses ${this.number(cubicInches)} / ${logistics.dimDivisor} = ${this.number(dimensionalWeight)} lb.` },
         { label: 'Billable weight', value: `${billableWeight} lb`, note: `Uses the higher of package actual weight and dimensional weight${carrierPaddingWeight ? `, adds ${this.number(carrierPaddingWeight)} lb carrier/program padding` : ''}, then rounds up.` },
         { label: logistics.label, value: this.currency(shippingCost), note: logistics.note },
@@ -1274,6 +1339,25 @@ export class ProductManagerPage {
 
   private safePercent(value: number | null | undefined): number {
     return Math.max(0, Math.min(95, this.safeNumber(value))) / 100;
+  }
+
+  private pricingNeedsExchangeRate(currency: ProductCostCurrency, firstMileRate: number | null | undefined): boolean {
+    return currency === 'rmb' || this.safeNumber(firstMileRate) > 0;
+  }
+
+  private weightToGrams(value: number, unit: PricingWeightUnit): number {
+    const safeValue = Math.max(0, this.safeNumber(value));
+    switch (unit) {
+      case 'oz': return safeValue * 28.349523125;
+      case 'lb': return safeValue * 453.59237;
+      case 'kg': return safeValue * 1000;
+      case 'g':
+      default: return safeValue;
+    }
+  }
+
+  private weightToLb(value: number, unit: PricingWeightUnit): number {
+    return this.weightToGrams(value, unit) / 453.59237;
   }
 
   private exportTimestamp(): string {
@@ -1563,7 +1647,10 @@ export class ProductManagerPage {
     }
     this.detailPricingForm.logistics = config.defaultLogistics;
     this.detailPricingForm.quantity = 1;
+    this.detailPricingForm.productCostCurrency = 'rmb';
+    this.detailPricingForm.firstMileRate = 0.05;
     this.detailPricingForm.packagingWeight = 0.25;
+    this.detailPricingForm.packagingWeightUnit = 'lb';
     this.detailPricingForm.targetProfit = 0;
     this.detailPricingForm.targetMarginPercent = config.marginPercent;
     this.detailPricingForm.bufferPercent = config.bufferPercent;
