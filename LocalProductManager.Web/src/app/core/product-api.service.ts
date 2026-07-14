@@ -49,10 +49,13 @@ export class ProductApiService {
   }
 
   createProduct(body: {
+    localInventoryId?: string | null;
     sku: string;
     productName: string;
     category?: string | null;
     cost: number | null;
+    originalCost?: number | null;
+    salePrice?: number | null;
     weight?: number | null;
     length?: number | null;
     width?: number | null;
@@ -64,10 +67,13 @@ export class ProductApiService {
   }
 
   updateProduct(id: number, body: {
+    localInventoryId?: string | null;
     sku: string;
     productName: string;
     category?: string | null;
     cost: number | null;
+    originalCost?: number | null;
+    salePrice?: number | null;
     weight?: number | null;
     length?: number | null;
     width?: number | null;

@@ -13,6 +13,7 @@ public sealed class ProductExportService(AppDbContext db)
     private static readonly string[] Headers =
     [
         "Product ID",
+        "Local Inventory ID",
         "SKU",
         "Product Name",
         "Product Type",
@@ -21,6 +22,8 @@ public sealed class ProductExportService(AppDbContext db)
         "Amazon Parent ASIN",
         "Category",
         "Cost",
+        "Original Cost",
+        "Sale Price",
         "Weight",
         "Length",
         "Width",
@@ -103,7 +106,7 @@ public sealed class ProductExportService(AppDbContext db)
             xml.Append("""</row>""");
         }
 
-        xml.Append("""</sheetData><autoFilter ref="A1:AF1"/>""");
+        xml.Append(CultureInfo.InvariantCulture, $"""</sheetData><autoFilter ref="A1:{ColumnName(Headers.Length - 1)}1"/>""");
         xml.Append("""</worksheet>""");
         return xml.ToString();
     }
@@ -130,6 +133,7 @@ public sealed class ProductExportService(AppDbContext db)
         return
         [
             product.Id,
+            product.LocalInventoryId,
             product.Sku,
             product.ProductName,
             product.ProductType,
@@ -138,6 +142,8 @@ public sealed class ProductExportService(AppDbContext db)
             product.AmazonParentAsin,
             product.Category,
             product.Cost,
+            product.OriginalCost,
+            product.SalePrice,
             product.Weight,
             product.Length,
             product.Width,

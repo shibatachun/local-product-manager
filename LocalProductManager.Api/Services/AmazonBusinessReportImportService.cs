@@ -73,6 +73,8 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                 EnsureAmazonListing(parentProduct);
                 EnsureAsin(parentProduct, parentAsin, "parent", null);
                 await db.SaveChangesAsync(cancellationToken);
+                EnsureLocalInventoryId(parentProduct);
+                await db.SaveChangesAsync(cancellationToken);
             }
 
             foreach (var row in groupRows)
@@ -112,6 +114,8 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
 
                 EnsureAmazonListing(product);
                 EnsureAsin(product, childAsin, "child", isVariation ? parentAsin : null);
+                await db.SaveChangesAsync(cancellationToken);
+                EnsureLocalInventoryId(product);
                 await db.SaveChangesAsync(cancellationToken);
             }
         }
@@ -163,6 +167,14 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
             {
                 Platform = "amazon"
             });
+        }
+    }
+
+    private static void EnsureLocalInventoryId(Product product)
+    {
+        if (string.IsNullOrWhiteSpace(product.LocalInventoryId))
+        {
+            product.LocalInventoryId = ProductService.BuildLocalInventoryId(product.Id);
         }
     }
 

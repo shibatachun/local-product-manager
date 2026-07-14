@@ -189,6 +189,7 @@ export class ProductManagerPage {
   readonly newImageRoot = signal('');
   readonly imageHostPath = signal('');
   readonly imageVersion = signal<Record<number, number>>({});
+  readonly pricingProductId = signal<number | null>(null);
 
   readonly platformOptions: { value: Platform | ''; label: string }[] = [
     { value: '', label: 'All platforms' },
@@ -212,10 +213,13 @@ export class ProductManagerPage {
     { value: 'family-one', label: 'One / family' },
   ];
   readonly createForm = {
+    localInventoryId: '',
     sku: '',
     productName: '',
     category: '',
     cost: null as number | null,
+    originalCost: null as number | null,
+    salePrice: null as number | null,
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -238,10 +242,13 @@ export class ProductManagerPage {
     amazonAttributeDone: false,
   };
   readonly editForm = {
+    localInventoryId: '',
     sku: '',
     productName: '',
     category: '',
     cost: null as number | null,
+    originalCost: null as number | null,
+    salePrice: null as number | null,
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -435,6 +442,16 @@ export class ProductManagerPage {
       channels: new Set(allProducts.flatMap((item) => item.platforms)).size,
     };
   });
+  readonly inventoryProducts = computed(() =>
+    this.flattenProducts(this.products()).sort((left, right) =>
+      (left.localInventoryId ?? '').localeCompare(right.localInventoryId ?? '') ||
+      left.sku.localeCompare(right.sku),
+    ),
+  );
+  readonly pricingProduct = computed(() => {
+    const productId = this.pricingProductId();
+    return productId === null ? null : this.inventoryProducts().find((product) => product.id === productId) ?? null;
+  });
   readonly amazonProducts = computed(() => {
     const keyword = this.marketingSearch().trim().toLowerCase();
     const products = this.marketingBaseProducts();
@@ -559,6 +576,9 @@ export class ProductManagerPage {
   async loadProducts(): Promise<void> {
     await this.perform(async () => {
       this.products.set(await this.api.search(this.search(), this.platformFilter()));
+      if (this.pricingProductId() !== null && !this.pricingProduct()) {
+        this.pricingProductId.set(null);
+      }
     }, false);
   }
 
@@ -633,6 +653,50 @@ export class ProductManagerPage {
       await this.loadRmbToUsdRate(false);
     }
     this.pricingResult.set(this.calculatePricingEstimate());
+  }
+
+  onPricingProductChanged(productId: number | null): void {
+    this.pricingProductId.set(productId);
+    const product = this.pricingProduct();
+    if (!product) return;
+
+    this.pricingForm.productCost = product.originalCost ?? product.cost ?? 0;
+    this.pricingForm.productCostCurrency = 'rmb';
+    this.pricingForm.weight = product.weight ?? 1;
+    this.pricingForm.weightUnit = 'lb';
+    this.pricingForm.length = product.length ?? this.pricingForm.length;
+    this.pricingForm.width = product.width ?? this.pricingForm.width;
+    this.pricingForm.height = product.height ?? this.pricingForm.height;
+    if (product.category && this.pricingCategoryOptions().some(category => category.value === product.category)) {
+      this.pricingForm.category = product.category;
+    }
+    this.pricingResult.set(null);
+  }
+
+  async savePricingToInventory(): Promise<void> {
+    const product = this.pricingProduct();
+    const estimate = this.pricingResult();
+    if (!product || !estimate) return this.showNotice('Choose an inventory product and calculate a price first.');
+
+    await this.perform(async () => {
+      await this.api.updateProduct(product.id, {
+        localInventoryId: product.localInventoryId,
+        sku: product.sku,
+        productName: product.productName,
+        category: estimate.category,
+        cost: estimate.unitProductCostRmb,
+        originalCost: estimate.unitProductCostRmb,
+        salePrice: estimate.suggestedPrice,
+        weight: estimate.unitProductWeight,
+        length: product.length ?? this.pricingForm.length,
+        width: product.width ?? this.pricingForm.width,
+        height: product.height ?? this.pricingForm.height,
+        imagePath: product.imagePath,
+        imageSource: product.imageSource,
+      });
+      await this.loadProducts();
+      this.showNotice(`Pricing saved to ${product.localInventoryId ?? product.sku}.`);
+    });
   }
 
   async calculateDetailPricing(): Promise<void> {
@@ -894,10 +958,13 @@ export class ProductManagerPage {
     await this.perform(async () => {
       if (!await this.checkCreateSkuDuplicate(false)) return;
       const product = await this.api.createProduct({
+        localInventoryId: this.createForm.localInventoryId || null,
         sku: this.createForm.sku,
         productName: this.createForm.productName,
         category: this.createForm.category || null,
         cost: this.createForm.cost,
+        originalCost: this.createForm.originalCost,
+        salePrice: this.createForm.salePrice,
         weight: this.createForm.weight,
         length: this.createForm.length,
         width: this.createForm.width,
@@ -930,10 +997,13 @@ export class ProductManagerPage {
     await this.perform(async () => {
       const product = await this.api.getProduct(productId);
       this.selectedProduct.set(product);
+      this.editForm.localInventoryId = product.localInventoryId ?? '';
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
       this.editForm.category = product.category ?? '';
       this.editForm.cost = product.cost;
+      this.editForm.originalCost = product.originalCost;
+      this.editForm.salePrice = product.salePrice;
       this.editForm.weight = product.weight;
       this.editForm.length = product.length;
       this.editForm.width = product.width;
@@ -962,10 +1032,13 @@ export class ProductManagerPage {
       }
 
       await this.api.updateProduct(product.id, {
+        localInventoryId: this.editForm.localInventoryId || product.localInventoryId,
         sku: this.editForm.sku,
         productName: this.editForm.productName,
         category: this.editForm.category || null,
         cost: this.editForm.cost,
+        originalCost: this.editForm.originalCost,
+        salePrice: this.editForm.salePrice,
         weight: this.editForm.weight,
         length: this.editForm.length,
         width: this.editForm.width,
@@ -1480,6 +1553,10 @@ export class ProductManagerPage {
   }
 
   private flattenMarketingProducts(products: ProductListItem[]): ProductListItem[] {
+    return this.flattenProducts(products);
+  }
+
+  private flattenProducts(products: ProductListItem[]): ProductListItem[] {
     const result = new Map<number, ProductListItem>();
     for (const product of products) {
       result.set(product.id, product);
@@ -1583,6 +1660,11 @@ export class ProductManagerPage {
   private async refreshSelected(id: number): Promise<void> {
     const product = await this.api.getProduct(id);
     this.selectedProduct.set(product);
+    this.editForm.localInventoryId = product.localInventoryId ?? '';
+    this.editForm.cost = product.cost;
+    this.editForm.originalCost = product.originalCost;
+    this.editForm.salePrice = product.salePrice;
+    this.editForm.weight = product.weight;
     this.editForm.imagePath = product.imagePath ?? '';
     this.syncListingDrafts(product);
     this.syncDetailImageForm(product, false);
@@ -1663,10 +1745,13 @@ export class ProductManagerPage {
 
   private resetWizard(): void {
     Object.assign(this.createForm, {
+      localInventoryId: '',
       sku: '',
       productName: '',
       category: '',
       cost: null,
+      originalCost: null,
+      salePrice: null,
       weight: null,
       length: null,
       width: null,

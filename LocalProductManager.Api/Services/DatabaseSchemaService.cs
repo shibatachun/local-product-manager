@@ -32,6 +32,19 @@ public sealed class DatabaseSchemaService
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Category TEXT NULL");
         }
+        if (!columns.Contains("LocalInventoryId"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN LocalInventoryId TEXT NULL");
+            db.Database.ExecuteSqlRaw("UPDATE products SET LocalInventoryId = 'INV-' || Id WHERE LocalInventoryId IS NULL OR trim(LocalInventoryId) = ''");
+        }
+        if (!columns.Contains("OriginalCost"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN OriginalCost TEXT NULL");
+        }
+        if (!columns.Contains("SalePrice"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN SalePrice TEXT NULL");
+        }
         if (!columns.Contains("Weight"))
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Weight TEXT NULL");
@@ -50,6 +63,8 @@ public sealed class DatabaseSchemaService
         }
         db.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS IX_products_ParentProductId ON products (ParentProductId)");
+        db.Database.ExecuteSqlRaw(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_products_LocalInventoryId ON products (LocalInventoryId)");
         db.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS social_accounts (

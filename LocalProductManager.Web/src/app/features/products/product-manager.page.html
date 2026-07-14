@@ -69,7 +69,7 @@
 
       <section class="table-wrap">
         <table>
-          <thead><tr><th>Product</th><th>SKU</th><th>Cost (RMB)</th><th>Weight</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>Inventory ID</th><th>SKU</th><th>Cost (RMB)</th><th>Sale price</th><th>Weight</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
           <tbody>
             <ng-container *ngFor="let product of products()">
             <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
@@ -82,8 +82,10 @@
                   <span><strong>{{ product.productName }}</strong><small *ngIf="product.children.length">{{ product.children.length }} child variations</small><small *ngIf="!product.children.length">{{ product.imagePath || 'No image path' }}</small></span>
                 </button>
               </td>
+              <td><code>{{ product.localInventoryId || ('INV-' + product.id) }}</code></td>
               <td><code>{{ product.sku }}</code><small class="sku-caption" *ngIf="product.productType === 'parent'">Parent</small></td>
               <td>{{ product.cost === null ? '—' : ('¥' + (product.cost | number:'1.2-2')) }}</td>
+              <td>{{ product.salePrice === null ? '—' : ('$' + (product.salePrice | number:'1.2-2')) }}</td>
               <td>{{ product.weight === null ? '—' : (product.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of product.platforms">{{ platformLabel(platform) }}</span><span class="muted" *ngIf="!product.platforms.length">Not listed</span></td>
               <td>{{ product.updatedAt | date:'MMM d, y' }}</td>
@@ -97,8 +99,10 @@
                   <span><strong>{{ child.productName }}</strong><small>Child variation</small></span>
                 </button>
               </td>
+              <td><code>{{ child.localInventoryId || ('INV-' + child.id) }}</code></td>
               <td><code>{{ child.sku }}</code><small class="sku-caption" *ngIf="child.skuBase">Base {{ child.skuBase }}</small></td>
               <td>{{ child.cost === null ? '—' : ('¥' + (child.cost | number:'1.2-2')) }}</td>
+              <td>{{ child.salePrice === null ? '—' : ('$' + (child.salePrice | number:'1.2-2')) }}</td>
               <td>{{ child.weight === null ? '—' : (child.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of child.platforms">{{ platformLabel(platform) }}</span></td>
               <td>{{ child.updatedAt | date:'MMM d, y' }}</td>
@@ -191,6 +195,20 @@
               </div>
               <button class="unit-converter-trigger" [class.active]="unitConverterOpen()" type="button" (click)="unitConverterOpen.set(!unitConverterOpen())">Unit converter</button>
             </div>
+            <div class="pricing-binding">
+              <label>Bind inventory product
+                <select [ngModel]="pricingProductId()" (ngModelChange)="onPricingProductChanged($event)">
+                  <option [ngValue]="null">No inventory product selected</option>
+                  <option *ngFor="let product of inventoryProducts()" [ngValue]="product.id">
+                    {{ product.localInventoryId || ('INV-' + product.id) }} - {{ product.sku }} - {{ product.productName }}
+                  </option>
+                </select>
+              </label>
+              <div *ngIf="pricingProduct() as product">
+                <strong>{{ product.localInventoryId || ('INV-' + product.id) }}</strong>
+                <span>{{ product.sku }} · Original {{ product.originalCost === null ? '—' : ('¥' + (product.originalCost | number:'1.2-2')) }} · Sale {{ product.salePrice === null ? '—' : ('$' + (product.salePrice | number:'1.2-2')) }}</span>
+              </div>
+            </div>
             <div class="pricing-form">
               <label>Platform
                 <select [ngModel]="pricingForm.platform" (ngModelChange)="onPricingPlatformChanged($event)">
@@ -276,7 +294,10 @@
               <span>Package weight <strong>{{ number(pricingDerived().totalPackageWeight) }} lb</strong></span>
               <span>Billable weight <strong>{{ pricingDerived().billableWeight }} lb</strong></span>
             </div>
-            <button class="primary calculate-button" type="button" (click)="calculatePricing()">Calculate price</button>
+            <div class="pricing-actions">
+              <button class="primary calculate-button" type="button" (click)="calculatePricing()">Calculate price</button>
+              <button type="button" (click)="savePricingToInventory()" [disabled]="!pricingProduct() || !pricingResult() || loading()">Save to inventory</button>
+            </div>
           </div>
 
           <div class="estimate-panel" *ngIf="pricingResult() as estimate; else pricingEmpty">
@@ -405,6 +426,7 @@
 
   <div class="modal-body" *ngIf="wizardStep() === 1">
     <div class="form-grid">
+      <label>Inventory ID<input [(ngModel)]="createForm.localInventoryId" placeholder="Auto: INV-{id}" /></label>
       <label>SKU number<input [(ngModel)]="createForm.sku" placeholder="e.g. 123456-BLACK" /></label>
       <label>Product name<input [(ngModel)]="createForm.productName" placeholder="Product display name" /></label>
       <label>Category
@@ -414,6 +436,8 @@
         </select>
       </label>
       <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
+      <label>Original cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
+      <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="createForm.salePrice" placeholder="0.00" /></label>
       <label>Weight<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
@@ -494,6 +518,7 @@
         </div>
       </div>
       <div class="form-grid">
+        <label>Inventory ID<input [(ngModel)]="editForm.localInventoryId" placeholder="Auto: INV-{id}" /></label>
         <label>SKU<input [(ngModel)]="editForm.sku" /></label>
         <label>Name<input [(ngModel)]="editForm.productName" /></label>
         <label>Category
@@ -503,6 +528,8 @@
           </select>
         </label>
         <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.cost" /></label>
+        <label>Original cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
+        <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="editForm.salePrice" /></label>
         <label>Weight<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>

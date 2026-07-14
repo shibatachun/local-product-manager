@@ -1,10 +1,13 @@
 namespace LocalProductManager.Api.Dtos;
 
 public sealed record CreateProductRequest(
+    string? LocalInventoryId,
     string Sku,
     string ProductName,
     string? Category,
     decimal? Cost,
+    decimal? OriginalCost,
+    decimal? SalePrice,
     decimal? Weight,
     decimal? Length,
     decimal? Width,
@@ -27,10 +30,13 @@ public sealed record ProductDuplicateCandidateDto(
     string? SkuBase);
 
 public sealed record UpdateProductRequest(
+    string? LocalInventoryId,
     string Sku,
     string ProductName,
     string? Category,
     decimal? Cost,
+    decimal? OriginalCost,
+    decimal? SalePrice,
     decimal? Weight,
     decimal? Length,
     decimal? Width,
@@ -40,10 +46,13 @@ public sealed record UpdateProductRequest(
 
 public sealed record ProductListItemDto(
     int Id,
+    string? LocalInventoryId,
     string Sku,
     string ProductName,
     string? Category,
     decimal? Cost,
+    decimal? OriginalCost,
+    decimal? SalePrice,
     decimal? Weight,
     decimal? Length,
     decimal? Width,
@@ -63,10 +72,13 @@ public sealed record ProductListItemDto(
 
 public sealed record ProductDetailDto(
     int Id,
+    string? LocalInventoryId,
     string Sku,
     string ProductName,
     string? Category,
     decimal? Cost,
+    decimal? OriginalCost,
+    decimal? SalePrice,
     decimal? Weight,
     decimal? Length,
     decimal? Width,

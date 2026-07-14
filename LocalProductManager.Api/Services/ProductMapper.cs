@@ -7,10 +7,13 @@ public static class ProductMapper
 {
     public static ProductListItemDto ToListItemDto(Product product) => new(
         product.Id,
+        product.LocalInventoryId,
         product.Sku,
         product.ProductName,
         product.Category,
         product.Cost,
+        product.OriginalCost,
+        product.SalePrice,
         product.Weight,
         product.Length,
         product.Width,
@@ -30,10 +33,13 @@ public static class ProductMapper
 
     public static ProductDetailDto ToDetailDto(Product product) => new(
         product.Id,
+        product.LocalInventoryId,
         product.Sku,
         product.ProductName,
         product.Category,
         product.Cost,
+        product.OriginalCost,
+        product.SalePrice,
         product.Weight,
         product.Length,
         product.Width,

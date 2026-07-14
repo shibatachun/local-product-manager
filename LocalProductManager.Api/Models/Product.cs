@@ -3,10 +3,13 @@ namespace LocalProductManager.Api.Models;
 public sealed class Product
 {
     public int Id { get; set; }
+    public string? LocalInventoryId { get; set; }
     public required string Sku { get; set; }
     public required string ProductName { get; set; }
     public string? Category { get; set; }
     public decimal? Cost { get; set; }
+    public decimal? OriginalCost { get; set; }
+    public decimal? SalePrice { get; set; }
     public decimal? Weight { get; set; }
     public decimal? Length { get; set; }
     public decimal? Width { get; set; }

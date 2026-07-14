@@ -52,10 +52,13 @@ export interface UserSessionAdmin {
 
 export interface ProductListItem {
   id: number;
+  localInventoryId: string | null;
   sku: string;
   productName: string;
   category: string | null;
   cost: number | null;
+  originalCost: number | null;
+  salePrice: number | null;
   weight: number | null;
   length: number | null;
   width: number | null;

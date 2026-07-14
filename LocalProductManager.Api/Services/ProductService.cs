@@ -123,12 +123,16 @@ public sealed class ProductService(AppDbContext db)
             throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
         }
 
+        var localInventoryId = NormalizeOptional(request.LocalInventoryId);
         var product = new Product
         {
+            LocalInventoryId = localInventoryId,
             Sku = NormalizeSku(request.Sku),
             ProductName = request.ProductName.Trim(),
             Category = NormalizeOptional(request.Category),
             Cost = request.Cost,
+            OriginalCost = request.OriginalCost,
+            SalePrice = request.SalePrice,
             Weight = request.Weight,
             Length = request.Length,
             Width = request.Width,
@@ -140,6 +144,12 @@ public sealed class ProductService(AppDbContext db)
 
         db.Products.Add(product);
         await db.SaveChangesAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(product.LocalInventoryId))
+        {
+            product.LocalInventoryId = BuildLocalInventoryId(product.Id);
+            product.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var created = await GetProductGraph(product.Id).FirstAsync(cancellationToken);
         return ProductMapper.ToDetailDto(created);
@@ -159,10 +169,13 @@ public sealed class ProductService(AppDbContext db)
             throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
         }
 
+        product.LocalInventoryId = NormalizeOptional(request.LocalInventoryId) ?? product.LocalInventoryId ?? BuildLocalInventoryId(product.Id);
         product.Sku = NormalizeSku(request.Sku);
         product.ProductName = request.ProductName.Trim();
         product.Category = NormalizeOptional(request.Category);
         product.Cost = request.Cost;
+        product.OriginalCost = request.OriginalCost;
+        product.SalePrice = request.SalePrice;
         product.Weight = request.Weight;
         product.Length = request.Length;
         product.Width = request.Width;
@@ -300,6 +313,8 @@ public sealed class ProductService(AppDbContext db)
         var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
+
+    public static string BuildLocalInventoryId(int productId) => $"INV-{productId}";
 
     private static string NormalizeImageSource(string? source, string? imagePath)
     {
