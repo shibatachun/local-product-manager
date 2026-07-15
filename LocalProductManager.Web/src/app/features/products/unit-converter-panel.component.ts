@@ -25,6 +25,12 @@ export class UnitConverterPanelComponent {
     from: 'oz',
     to: 'lb',
   };
+  readonly currencyConverter = {
+    amount: 100,
+    from: 'rmb',
+    to: 'usd',
+    rmbToUsdRate: 0.14,
+  };
   readonly lengthUnits: UnitOption[] = [
     { value: 'in', label: 'Inch (in)', factorToBase: 0.0254 },
     { value: 'ft', label: 'Foot (ft)', factorToBase: 0.3048 },
@@ -48,6 +54,13 @@ export class UnitConverterPanelComponent {
     return this.convertUnit(this.weightConverter.amount, this.weightConverter.from, this.weightConverter.to, this.weightUnits);
   }
 
+  currencyConversion(): number {
+    const amount = this.safeNumber(this.currencyConverter.amount);
+    const rate = this.safeNumber(this.currencyConverter.rmbToUsdRate) || 0.14;
+    if (this.currencyConverter.from === this.currencyConverter.to) return amount;
+    return this.currencyConverter.from === 'rmb' ? amount * rate : amount / rate;
+  }
+
   swapLengthUnits(): void {
     const from = this.lengthConverter.from;
     this.lengthConverter.from = this.lengthConverter.to;
@@ -58,6 +71,12 @@ export class UnitConverterPanelComponent {
     const from = this.weightConverter.from;
     this.weightConverter.from = this.weightConverter.to;
     this.weightConverter.to = from;
+  }
+
+  swapCurrencyUnits(): void {
+    const from = this.currencyConverter.from;
+    this.currencyConverter.from = this.currencyConverter.to;
+    this.currencyConverter.to = from;
   }
 
   number(value: number): string {

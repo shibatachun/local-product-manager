@@ -218,6 +218,7 @@ export class ProductManagerPage {
     productName: '',
     category: '',
     cost: null as number | null,
+    costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
     salePrice: null as number | null,
     weight: null as number | null,
@@ -247,6 +248,7 @@ export class ProductManagerPage {
     productName: '',
     category: '',
     cost: null as number | null,
+    costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
     salePrice: null as number | null,
     weight: null as number | null,
@@ -612,7 +614,7 @@ export class ProductManagerPage {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
       pricing: 'Pricing estimator',
-      unitConverter: 'Unit converter',
+      unitConverter: 'Converter',
       marketing: 'Marketing links',
       storage: 'File storage',
       videoTrend: 'Video trend',
@@ -660,7 +662,7 @@ export class ProductManagerPage {
     const product = this.pricingProduct();
     if (!product) return;
 
-    this.pricingForm.productCost = product.originalCost ?? product.cost ?? 0;
+    this.pricingForm.productCost = product.cost ?? 0;
     this.pricingForm.productCostCurrency = 'rmb';
     this.pricingForm.weight = product.weight ?? 1;
     this.pricingForm.weightUnit = 'lb';
@@ -671,6 +673,26 @@ export class ProductManagerPage {
       this.pricingForm.category = product.category;
     }
     this.pricingResult.set(null);
+  }
+
+  onPricingCostCurrencyChanged(currency: ProductCostCurrency): void {
+    this.pricingForm.productCost = this.convertCostAmount(
+      this.pricingForm.productCost,
+      this.pricingForm.productCostCurrency,
+      currency,
+    ) ?? 0;
+    this.pricingForm.productCostCurrency = currency;
+    this.pricingResult.set(null);
+  }
+
+  onCreateCostCurrencyChanged(currency: ProductCostCurrency): void {
+    this.createForm.cost = this.convertCostAmount(this.createForm.cost, this.createForm.costCurrency, currency);
+    this.createForm.costCurrency = currency;
+  }
+
+  onEditCostCurrencyChanged(currency: ProductCostCurrency): void {
+    this.editForm.cost = this.convertCostAmount(this.editForm.cost, this.editForm.costCurrency, currency);
+    this.editForm.costCurrency = currency;
   }
 
   async savePricingToInventory(): Promise<void> {
@@ -685,7 +707,7 @@ export class ProductManagerPage {
         productName: product.productName,
         category: estimate.category,
         cost: estimate.unitProductCostRmb,
-        originalCost: estimate.unitProductCostRmb,
+        originalCost: estimate.unitFirstMileRmb,
         salePrice: estimate.suggestedPrice,
         weight: estimate.unitProductWeight,
         length: product.length ?? this.pricingForm.length,
@@ -962,7 +984,7 @@ export class ProductManagerPage {
         sku: this.createForm.sku,
         productName: this.createForm.productName,
         category: this.createForm.category || null,
-        cost: this.createForm.cost,
+        cost: this.costInputToRmb(this.createForm.cost, this.createForm.costCurrency),
         originalCost: this.createForm.originalCost,
         salePrice: this.createForm.salePrice,
         weight: this.createForm.weight,
@@ -1002,6 +1024,7 @@ export class ProductManagerPage {
       this.editForm.productName = product.productName;
       this.editForm.category = product.category ?? '';
       this.editForm.cost = product.cost;
+      this.editForm.costCurrency = 'rmb';
       this.editForm.originalCost = product.originalCost;
       this.editForm.salePrice = product.salePrice;
       this.editForm.weight = product.weight;
@@ -1036,7 +1059,7 @@ export class ProductManagerPage {
         sku: this.editForm.sku,
         productName: this.editForm.productName,
         category: this.editForm.category || null,
-        cost: this.editForm.cost,
+        cost: this.costInputToRmb(this.editForm.cost, this.editForm.costCurrency),
         originalCost: this.editForm.originalCost,
         salePrice: this.editForm.salePrice,
         weight: this.editForm.weight,
@@ -1280,12 +1303,12 @@ export class ProductManagerPage {
     const unitFirstMileRmb = unitWeightGrams * firstMileRate;
     const exchangeRate = this.rmbToUsdRate();
     const rmbToUsdRate = this.safeNumber(exchangeRate.rate) || 0.14;
-    const unitProductCostRmb = productCostCurrency === 'rmb' ? unitProductCostInput : 0;
+    const unitProductCostRmb = productCostCurrency === 'rmb' ? unitProductCostInput : unitProductCostInput / rmbToUsdRate;
     const unitProductCostUsd = productCostCurrency === 'usd' ? unitProductCostInput : unitProductCostInput * rmbToUsdRate;
     const unitFirstMileUsd = unitFirstMileRmb * rmbToUsdRate;
     const unitCost = unitProductCostUsd + unitFirstMileUsd;
     const totalCost = unitCost * quantity;
-    const unitLandedCostRmb = productCostCurrency === 'rmb' ? unitProductCostRmb + unitFirstMileRmb : unitFirstMileRmb;
+    const unitLandedCostRmb = unitProductCostRmb + unitFirstMileRmb;
     const totalLandedCostRmb = unitLandedCostRmb * quantity;
     const totalProductWeight = unitProductWeight * quantity;
     const totalPackageWeight = totalProductWeight + packagingWeight;
@@ -1412,6 +1435,19 @@ export class ProductManagerPage {
 
   private safePercent(value: number | null | undefined): number {
     return Math.max(0, Math.min(95, this.safeNumber(value))) / 100;
+  }
+
+  private costInputToRmb(value: number | null | undefined, currency: ProductCostCurrency): number | null {
+    if (value === null || value === undefined) return null;
+    const amount = this.safeNumber(value);
+    return currency === 'usd' ? amount / (this.safeNumber(this.rmbToUsdRate().rate) || 0.14) : amount;
+  }
+
+  private convertCostAmount(value: number | null | undefined, from: ProductCostCurrency, to: ProductCostCurrency): number | null {
+    if (value === null || value === undefined || from === to) return value ?? null;
+    const rate = this.safeNumber(this.rmbToUsdRate().rate) || 0.14;
+    const amount = this.safeNumber(value);
+    return to === 'usd' ? amount * rate : amount / rate;
   }
 
   private pricingNeedsExchangeRate(currency: ProductCostCurrency, firstMileRate: number | null | undefined): boolean {
@@ -1750,6 +1786,7 @@ export class ProductManagerPage {
       productName: '',
       category: '',
       cost: null,
+      costCurrency: 'rmb',
       originalCost: null,
       salePrice: null,
       weight: null,

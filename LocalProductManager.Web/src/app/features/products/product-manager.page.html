@@ -8,7 +8,7 @@
     <nav aria-label="Main navigation">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
-      <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>U</span> Unit converter</button>
+      <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>C</span> Converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
       <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
@@ -69,7 +69,7 @@
 
       <section class="table-wrap">
         <table>
-          <thead><tr><th>Product</th><th>Inventory ID</th><th>SKU</th><th>Cost (RMB)</th><th>Sale price</th><th>Weight</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>Inventory ID</th><th>SKU</th><th>Cost (RMB)</th><th>Sale price</th><th>Weight (lb)</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
           <tbody>
             <ng-container *ngFor="let product of products()">
             <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
@@ -193,7 +193,7 @@
                 <h2>Marketplace price planner</h2>
                 <p>Estimate listing prices from quantity, package size, platform fees, and typical shipping tiers.</p>
               </div>
-              <button class="unit-converter-trigger" [class.active]="unitConverterOpen()" type="button" (click)="unitConverterOpen.set(!unitConverterOpen())">Unit converter</button>
+              <button class="unit-converter-trigger" [class.active]="unitConverterOpen()" type="button" (click)="unitConverterOpen.set(!unitConverterOpen())">Converter</button>
             </div>
             <div class="pricing-binding">
               <label>Bind inventory product
@@ -206,7 +206,7 @@
               </label>
               <div *ngIf="pricingProduct() as product">
                 <strong>{{ product.localInventoryId || ('INV-' + product.id) }}</strong>
-                <span>{{ product.sku }} · Original {{ product.originalCost === null ? '—' : ('¥' + (product.originalCost | number:'1.2-2')) }} · Sale {{ product.salePrice === null ? '—' : ('$' + (product.salePrice | number:'1.2-2')) }}</span>
+                <span>{{ product.sku }} · First-mile {{ product.originalCost === null ? '—' : ('¥' + (product.originalCost | number:'1.2-2')) }} · Sale {{ product.salePrice === null ? '—' : ('$' + (product.salePrice | number:'1.2-2')) }}</span>
               </div>
             </div>
             <div class="pricing-form">
@@ -237,13 +237,13 @@
                   <button type="button" (click)="adjustPricingQuantity(1)">+</button>
                 </div>
               </div>
-              <label>Unit product cost
-                <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" (ngModelChange)="pricingResult.set(null)" placeholder="0.00" />
-              </label>
-              <label>Cost currency
-                <select [(ngModel)]="pricingForm.productCostCurrency" (ngModelChange)="pricingResult.set(null)">
-                  <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
-                </select>
+              <label class="cost-input">Unit product cost
+                <span>
+                  <select [ngModel]="pricingForm.productCostCurrency" (ngModelChange)="onPricingCostCurrencyChanged($event)">
+                    <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
+                  </select>
+                  <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.productCost" (ngModelChange)="pricingResult.set(null)" placeholder="0.00" />
+                </span>
               </label>
               <label>Product weight
                 <input type="number" min="0" step="0.01" [(ngModel)]="pricingForm.weight" (ngModelChange)="pricingResult.set(null)" placeholder="1.00" />
@@ -376,7 +376,7 @@
 
 <section class="unit-converter-popover" *ngIf="unitConverterOpen()" role="dialog" aria-modal="false">
   <header>
-    <div><p class="eyebrow">Measurement tools</p><h2>Unit converter</h2></div>
+    <div><p class="eyebrow">Measurement tools</p><h2>Converter</h2></div>
     <button class="icon-button" title="Close" (click)="unitConverterOpen.set(false)">×</button>
   </header>
   <div class="unit-converter-popover-body">
@@ -435,10 +435,17 @@
           <option *ngFor="let option of pricingConfigs.walmart.categories" [value]="option.value">{{ option.label }}</option>
         </select>
       </label>
-      <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" /></label>
-      <label>Original cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
+      <label class="cost-input">Cost
+        <span>
+          <select [ngModel]="createForm.costCurrency" (ngModelChange)="onCreateCostCurrencyChanged($event)">
+            <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
+          </select>
+          <input type="number" step="0.01" [(ngModel)]="createForm.cost" placeholder="0.00" />
+        </span>
+      </label>
+      <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
       <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="createForm.salePrice" placeholder="0.00" /></label>
-      <label>Weight<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
+      <label>Weight (lb)<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
       <label>Height<input type="number" step="0.01" [(ngModel)]="createForm.height" placeholder="0.00" /></label>
@@ -527,10 +534,17 @@
             <option *ngFor="let option of detailPricingCategoryOptions()" [value]="option.value">{{ option.label }}</option>
           </select>
         </label>
-        <label>Cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.cost" /></label>
-        <label>Original cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
+        <label class="cost-input">Cost
+          <span>
+            <select [ngModel]="editForm.costCurrency" (ngModelChange)="onEditCostCurrencyChanged($event)">
+              <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+            <input type="number" step="0.01" [(ngModel)]="editForm.cost" />
+          </span>
+        </label>
+        <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
         <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="editForm.salePrice" /></label>
-        <label>Weight<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
+        <label>Weight (lb)<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>
         <label>Height<input type="number" step="0.01" [(ngModel)]="editForm.height" /></label>

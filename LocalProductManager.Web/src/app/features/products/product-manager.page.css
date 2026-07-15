@@ -58,7 +58,7 @@ input:focus, select:focus { border-color: #2783a0; outline: 2px solid #d8edf2; }
 .icon-button { display: inline-grid; place-items: center; width: 36px; min-width: 36px; height: 36px; padding: 0; border: 1px solid #cfd7dd; border-radius: 6px; color: #53616d; background: #fff; font-size: 20px; }
 .icon-button:hover { border-color: #8c9aa5; background: #f2f5f7; }
 
-.table-wrap { overflow: hidden; border: 1px solid #dce2e7; border-radius: 8px; background: #fff; }
+.table-wrap { overflow-x: auto; border: 1px solid #dce2e7; border-radius: 8px; background: #fff; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th { padding: 11px 14px; border-bottom: 1px solid #dce2e7; color: #71808c; background: #f8fafb; text-align: left; font-size: 11px; text-transform: uppercase; }
 td { height: 68px; padding: 10px 14px; border-bottom: 1px solid #edf0f2; color: #40505d; font-size: 13px; vertical-align: middle; }
@@ -68,7 +68,7 @@ tbody tr:last-child td { border-bottom: 0; } tbody tr:hover { background: #fafcf
 .child-row { background: #f8fafb; }
 .child-row td { height: 60px; }
 .child-row:hover { background: #f1f6f7; }
-th:nth-child(1){width:30%} th:nth-child(2){width:14%} th:nth-child(3){width:9%} th:nth-child(4){width:9%} th:nth-child(5){width:22%} th:nth-child(6){width:12%} th:nth-child(7){width:44px}
+th:nth-child(1){width:24%} th:nth-child(2){width:12%} th:nth-child(3){width:10%} th:nth-child(4){width:10%} th:nth-child(5){width:10%} th:nth-child(6){width:9%} th:nth-child(7){width:13%} th:nth-child(8){width:8%} th:nth-child(9){width:52px}
 .product-cell { display: flex; align-items: center; gap: 11px; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
 .tree-toggle { display: grid; place-items: center; flex: 0 0 auto; width: 24px; height: 24px; border: 1px solid #b9cbd1; border-radius: 5px; color: #176b87; background: #fff; font-size: 16px; font-weight: 800; }
 .tree-branch { flex: 0 0 auto; width: 25px; height: 25px; margin-left: 4px; border-bottom: 1px solid #b9cbd1; border-left: 1px solid #b9cbd1; }
@@ -81,6 +81,8 @@ th:nth-child(1){width:30%} th:nth-child(2){width:14%} th:nth-child(3){width:9%} 
 .image-thumb { position: relative; overflow: hidden; }
 .image-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #fff; }
 code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+.cost-input > span { display:grid; grid-template-columns:92px minmax(0,1fr); gap:8px; }
+.cost-input select, .cost-input input { min-width:0; }
 .platform-pill { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 6px; border-radius: 4px; color: #425466; background: #edf1f4; font-size: 10px; font-weight: 750; }
 .muted { color: #9aa5ad; }
 .status { display: inline-block; padding: 4px 7px; border-radius: 4px; color: #7b5d16; background: #fff3cd; font-size: 10px; font-weight: 750; }
@@ -141,7 +143,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .stats-band { grid-template-columns:repeat(2,1fr); }.stats-band div:nth-child(2){border-right:0}.stats-band div:nth-child(-n+2){border-bottom:1px solid #e6eaed}
   .store-band { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .marketing-layout { grid-template-columns:260px minmax(0,1fr); }.channel-grid { grid-template-columns:1fr; }
-  th:nth-child(6),td:nth-child(6){display:none}
+  th:nth-child(8),td:nth-child(8){display:none}
 }
 
 @media (max-width: 720px) {
@@ -150,7 +152,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
   .content { padding:18px 12px 28px; }.page-header { align-items:center; }.page-header h1 { font-size:22px; }
   .stats-band { grid-template-columns:repeat(2,1fr); }.toolbar { grid-template-columns:1fr 1fr 40px; }.search-box { grid-column:1/-1; }
   .store-band { grid-template-columns:1fr; }
-  .table-wrap { overflow-x:auto; } table { min-width:850px; }
+  table { min-width:1080px; }
   .marketing-layout { grid-template-columns:1fr; height:auto; max-height:none; overflow:visible; }.marketing-list { max-height: 360px; border-right:0;border-bottom:1px solid #e2e7ea; }.marketing-workspace { overflow: visible; padding:16px; }
   .folder-import { grid-template-columns: 1fr; margin: -16px -16px 18px; padding: 14px 16px; }
 }

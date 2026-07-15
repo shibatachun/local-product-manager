@@ -22,7 +22,7 @@ public sealed class ProductExportService(AppDbContext db)
         "Amazon Parent ASIN",
         "Category",
         "Cost",
-        "Original Cost",
+        "First-mile Cost",
         "Sale Price",
         "Weight",
         "Length",
