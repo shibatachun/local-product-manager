@@ -20,7 +20,7 @@ export class TestPage {
   readonly matchedImages = signal<string[]>([]);
   readonly apiBase = this.api.baseUrl;
 
-  readonly productForm = { sku: `SKU-${Date.now()}`, productName: 'API Test Product', cost: 12.5, imagePath: 'D:\\Products\\123456-main.jpg' };
+  readonly productForm = { sku: `SKU-${Date.now()}`, productName: 'API Test Product', cost: 12.5, qty: 0, imagePath: 'D:\\Products\\123456-main.jpg' };
   readonly listingForm = { platform: 'amazon' as Platform, listingUrl: 'https://www.amazon.com/dp/B0TEST1234' };
   readonly asinForm = { asin: 'B0TEST1234', asinType: 'child' as 'parent' | 'child', parentAsin: 'B0PARENT123', amazonAttributeDone: false };
   readonly attributionForm = { platform: 'pinterest' as AttributionPlatform, attributionUrl: 'https://www.amazon.com/attribution/test' };

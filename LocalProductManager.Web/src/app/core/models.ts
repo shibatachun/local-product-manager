@@ -59,6 +59,7 @@ export interface ProductListItem {
   cost: number | null;
   originalCost: number | null;
   salePrice: number | null;
+  qty: number;
   weight: number | null;
   length: number | null;
   width: number | null;

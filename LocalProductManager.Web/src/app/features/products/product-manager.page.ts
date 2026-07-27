@@ -221,6 +221,7 @@ export class ProductManagerPage {
     costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
     salePrice: null as number | null,
+    qty: 0,
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -251,6 +252,7 @@ export class ProductManagerPage {
     costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
     salePrice: null as number | null,
+    qty: 0,
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -709,6 +711,7 @@ export class ProductManagerPage {
         cost: estimate.unitProductCostRmb,
         originalCost: estimate.unitFirstMileRmb,
         salePrice: estimate.suggestedPrice,
+        qty: product.qty,
         weight: estimate.unitProductWeight,
         length: product.length ?? this.pricingForm.length,
         width: product.width ?? this.pricingForm.width,
@@ -987,6 +990,7 @@ export class ProductManagerPage {
         cost: this.costInputToRmb(this.createForm.cost, this.createForm.costCurrency),
         originalCost: this.createForm.originalCost,
         salePrice: this.createForm.salePrice,
+        qty: this.createForm.qty,
         weight: this.createForm.weight,
         length: this.createForm.length,
         width: this.createForm.width,
@@ -1027,6 +1031,7 @@ export class ProductManagerPage {
       this.editForm.costCurrency = 'rmb';
       this.editForm.originalCost = product.originalCost;
       this.editForm.salePrice = product.salePrice;
+      this.editForm.qty = product.qty;
       this.editForm.weight = product.weight;
       this.editForm.length = product.length;
       this.editForm.width = product.width;
@@ -1062,6 +1067,7 @@ export class ProductManagerPage {
         cost: this.costInputToRmb(this.editForm.cost, this.editForm.costCurrency),
         originalCost: this.editForm.originalCost,
         salePrice: this.editForm.salePrice,
+        qty: this.editForm.qty,
         weight: this.editForm.weight,
         length: this.editForm.length,
         width: this.editForm.width,
@@ -1789,6 +1795,7 @@ export class ProductManagerPage {
       costCurrency: 'rmb',
       originalCost: null,
       salePrice: null,
+      qty: 0,
       weight: null,
       length: null,
       width: null,

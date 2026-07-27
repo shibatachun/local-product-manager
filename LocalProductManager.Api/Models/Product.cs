@@ -10,6 +10,7 @@ public sealed class Product
     public decimal? Cost { get; set; }
     public decimal? OriginalCost { get; set; }
     public decimal? SalePrice { get; set; }
+    public int Qty { get; set; }
     public decimal? Weight { get; set; }
     public decimal? Length { get; set; }
     public decimal? Width { get; set; }

@@ -133,6 +133,7 @@ public sealed class ProductService(AppDbContext db)
             Cost = request.Cost,
             OriginalCost = request.OriginalCost,
             SalePrice = request.SalePrice,
+            Qty = Math.Max(0, request.Qty),
             Weight = request.Weight,
             Length = request.Length,
             Width = request.Width,
@@ -176,6 +177,7 @@ public sealed class ProductService(AppDbContext db)
         product.Cost = request.Cost;
         product.OriginalCost = request.OriginalCost;
         product.SalePrice = request.SalePrice;
+        product.Qty = Math.Max(0, request.Qty);
         product.Weight = request.Weight;
         product.Length = request.Length;
         product.Width = request.Width;

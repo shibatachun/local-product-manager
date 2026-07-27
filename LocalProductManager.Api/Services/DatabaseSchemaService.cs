@@ -45,6 +45,10 @@ public sealed class DatabaseSchemaService
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN SalePrice TEXT NULL");
         }
+        if (!columns.Contains("Qty"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Qty INTEGER NOT NULL DEFAULT 0");
+        }
         if (!columns.Contains("Weight"))
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN Weight TEXT NULL");
