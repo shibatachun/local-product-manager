@@ -1,0 +1,97 @@
+<section class="inventory-shell">
+  <div class="inventory-toolbar">
+    <div>
+      <strong>{{ warehouse()?.name || 'No warehouse created' }}</strong>
+      <small *ngIf="warehouse() as item">{{ item.code }} · {{ item.shelves.length }} shelves · {{ totalQty() }} units stored</small>
+      <small *ngIf="!warehouse()">Create the warehouse floor before adding shelves.</small>
+    </div>
+    <button class="add-button" *ngIf="warehouse()" type="button" (click)="openAddShelf()">+ Add shelf</button>
+  </div>
+
+  <div class="warehouse-empty" *ngIf="!warehouse()">
+    <span class="warehouse-icon">WH</span>
+    <h2>Create your first warehouse</h2>
+    <p>The warehouse floor will hold visual shelf blocks with automatically generated location codes.</p>
+    <label>Warehouse name<input [ngModel]="warehouseName()" (ngModelChange)="warehouseName.set($event)" /></label>
+    <button class="add-button" type="button" (click)="createWarehouse()" [disabled]="loading()">Create warehouse</button>
+  </div>
+
+  <div class="warehouse-stage" *ngIf="warehouse() as item">
+    <div class="warehouse-label"><span>{{ item.code }}</span><strong>{{ item.name }}</strong></div>
+    <button
+      class="shelf-block"
+      type="button"
+      *ngFor="let shelf of item.shelves"
+      [style.left.%]="shelf.x"
+      [style.top.%]="shelf.y"
+      [style.width.%]="shelf.width"
+      [style.height.%]="shelf.height"
+      (click)="openShelf(shelf)">
+      <strong>{{ shelf.code }}</strong>
+      <span>{{ shelf.levelCount }} levels</span>
+      <small>{{ shelf.totalQty }} units</small>
+    </button>
+    <button class="stage-add" *ngIf="!item.shelves.length" type="button" (click)="openAddShelf()">
+      <span>+</span><strong>Add the first shelf</strong><small>Shelf code is generated automatically</small>
+    </button>
+  </div>
+</section>
+
+<div class="inventory-backdrop" *ngIf="addShelfOpen()" (click)="addShelfOpen.set(false)"></div>
+<section class="inventory-modal compact" *ngIf="addShelfOpen()" role="dialog" aria-modal="true">
+  <header><div><small>Warehouse layout</small><h2>Add shelf</h2></div><button type="button" (click)="addShelfOpen.set(false)">×</button></header>
+  <div class="modal-content">
+    <p>The next rack number is assigned automatically using the warehouse, zone, and aisle.</p>
+    <div class="form-row">
+      <label>Zone code<input maxlength="1" [(ngModel)]="shelfForm.zoneCode" /></label>
+      <label>Aisle number<input type="number" min="1" max="99" [(ngModel)]="shelfForm.aisleNumber" /></label>
+      <label>Number of levels<input type="number" min="1" max="20" [(ngModel)]="shelfForm.levelCount" /></label>
+    </div>
+    <div class="code-preview">{{ warehouse()?.code }}-{{ shelfForm.zoneCode || 'A' }}-{{ shelfForm.aisleNumber | number:'2.0-0' }}-R###</div>
+  </div>
+  <footer><button type="button" (click)="addShelfOpen.set(false)">Cancel</button><button class="add-button" type="button" (click)="createShelf()" [disabled]="loading()">Create shelf</button></footer>
+</section>
+
+<div class="inventory-backdrop" *ngIf="shelfOpen()" (click)="shelfOpen.set(false)"></div>
+<section class="inventory-modal shelf-modal" *ngIf="shelfOpen() && selectedShelf() as shelf" role="dialog" aria-modal="true">
+  <header><div><small>Shelf details</small><h2>{{ shelf.code }}</h2></div><button type="button" (click)="shelfOpen.set(false)">×</button></header>
+  <div class="shelf-workspace">
+    <aside>
+      <p>Select a level to inspect its products and inventory.</p>
+      <button type="button" *ngFor="let level of shelf.levels" [class.active]="selectedLevel()?.id === level.id" (click)="selectLevel(level)">
+        <span>L{{ level.levelNumber | number:'2.0-0' }}</span>
+        <strong>{{ level.totalQty }} units</strong>
+      </button>
+      <div class="shelf-base">{{ shelf.code }}</div>
+    </aside>
+    <main>
+      <div class="level-empty" *ngIf="!selectedLevel()">
+        <strong>Select a shelf level</strong>
+        <span>Levels are shown from top to bottom.</span>
+      </div>
+      <ng-container *ngIf="selectedLevel() as level">
+        <div class="level-heading"><div><small>Selected location</small><h3>{{ level.code }}</h3></div><strong>{{ level.totalQty }} total units</strong></div>
+        <div class="inventory-list" *ngIf="level.items.length">
+          <div *ngFor="let item of level.items">
+            <span><strong>{{ item.productName }}</strong><code>{{ item.sku }}</code></span>
+            <b>{{ item.qty }}</b>
+          </div>
+        </div>
+        <div class="level-empty small" *ngIf="!level.items.length">No products stored on this level.</div>
+        <div class="stock-editor">
+          <h4>Add or update inventory</h4>
+          <label>Product
+            <select [(ngModel)]="inventoryForm.productId" (ngModelChange)="onProductChanged($event)">
+              <option [ngValue]="null">Choose product</option>
+              <option *ngFor="let product of products()" [ngValue]="product.id">{{ product.sku }} · {{ product.productName }}</option>
+            </select>
+          </label>
+          <label>Quantity<input type="number" min="0" step="1" [(ngModel)]="inventoryForm.qty" /></label>
+          <button class="add-button" type="button" (click)="saveInventory()" [disabled]="!inventoryForm.productId || loading()">Save inventory</button>
+        </div>
+      </ng-container>
+    </main>
+  </div>
+</section>
+
+<div class="inventory-toast" *ngIf="notice()">{{ notice() }}</div>

@@ -84,6 +84,49 @@ export interface ProductDetail extends ProductListItem {
   amazonAttributionLinks: AmazonAttributionLink[];
 }
 
+export interface Warehouse {
+  id: number;
+  code: string;
+  name: string;
+  shelves: WarehouseShelf[];
+}
+
+export interface WarehouseShelf {
+  id: number;
+  code: string;
+  zoneCode: string;
+  aisleNumber: number;
+  rackNumber: number;
+  levelCount: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  totalQty: number;
+}
+
+export interface ShelfDetail {
+  id: number;
+  code: string;
+  levelCount: number;
+  levels: ShelfLevel[];
+}
+
+export interface ShelfLevel {
+  id: number;
+  code: string;
+  levelNumber: number;
+  totalQty: number;
+  items: ShelfInventoryItem[];
+}
+
+export interface ShelfInventoryItem {
+  productId: number;
+  sku: string;
+  productName: string;
+  qty: number;
+}
+
 export interface ProductDuplicateCheck {
   sku: string;
   skuBase: string | null;

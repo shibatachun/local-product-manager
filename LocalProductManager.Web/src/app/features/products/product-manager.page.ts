@@ -23,8 +23,9 @@ import { VideoTrendPanelComponent } from './video-trend-panel.component';
 import { UnitConverterPanelComponent } from './unit-converter-panel.component';
 import { ApiDocsPanelComponent } from './api-docs-panel.component';
 import { Product3dSceneEditorPanelComponent } from './product-3d-scene-editor-panel.component';
+import { InventoryManagerPanelComponent } from './inventory-manager-panel.component';
 
-type ViewMode = 'products' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
+type ViewMode = 'products' | 'inventory' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type PricingPlatform = Exclude<Platform, 'shopify'>;
 type ProductCostCurrency = 'rmb' | 'usd';
@@ -145,7 +146,7 @@ interface PlatformChoice {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -601,6 +602,7 @@ export class ProductManagerPage {
   pageEyebrow(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
+      inventory: 'Warehouse operations',
       pricing: 'Cost planning',
       unitConverter: 'Measurement tools',
       marketing: 'Amazon Attribution',
@@ -615,6 +617,7 @@ export class ProductManagerPage {
   pageTitle(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
+      inventory: 'Inventory Manager',
       pricing: 'Pricing estimator',
       unitConverter: 'Converter',
       marketing: 'Marketing links',

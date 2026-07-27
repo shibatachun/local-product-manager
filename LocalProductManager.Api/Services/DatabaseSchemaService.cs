@@ -71,6 +71,52 @@ public sealed class DatabaseSchemaService
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_products_LocalInventoryId ON products (LocalInventoryId)");
         db.Database.ExecuteSqlRaw(
             """
+            CREATE TABLE IF NOT EXISTS warehouses (
+                Id INTEGER NOT NULL CONSTRAINT PK_warehouses PRIMARY KEY AUTOINCREMENT,
+                Code TEXT NOT NULL,
+                Name TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_warehouses_Code ON warehouses (Code);
+            CREATE TABLE IF NOT EXISTS warehouse_shelves (
+                Id INTEGER NOT NULL CONSTRAINT PK_warehouse_shelves PRIMARY KEY AUTOINCREMENT,
+                WarehouseId INTEGER NOT NULL,
+                Code TEXT NOT NULL,
+                ZoneCode TEXT NOT NULL,
+                AisleNumber INTEGER NOT NULL,
+                RackNumber INTEGER NOT NULL,
+                LevelCount INTEGER NOT NULL,
+                X TEXT NOT NULL,
+                Y TEXT NOT NULL,
+                Width TEXT NOT NULL,
+                Height TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                CONSTRAINT FK_warehouse_shelves_warehouses_WarehouseId FOREIGN KEY (WarehouseId) REFERENCES warehouses (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_warehouse_shelves_Code ON warehouse_shelves (Code);
+            CREATE INDEX IF NOT EXISTS IX_warehouse_shelves_WarehouseId ON warehouse_shelves (WarehouseId);
+            CREATE TABLE IF NOT EXISTS shelf_levels (
+                Id INTEGER NOT NULL CONSTRAINT PK_shelf_levels PRIMARY KEY AUTOINCREMENT,
+                WarehouseShelfId INTEGER NOT NULL,
+                LevelNumber INTEGER NOT NULL,
+                Code TEXT NOT NULL,
+                CONSTRAINT FK_shelf_levels_warehouse_shelves_WarehouseShelfId FOREIGN KEY (WarehouseShelfId) REFERENCES warehouse_shelves (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_levels_WarehouseShelfId_LevelNumber ON shelf_levels (WarehouseShelfId, LevelNumber);
+            CREATE TABLE IF NOT EXISTS shelf_level_inventory (
+                Id INTEGER NOT NULL CONSTRAINT PK_shelf_level_inventory PRIMARY KEY AUTOINCREMENT,
+                ShelfLevelId INTEGER NOT NULL,
+                ProductId INTEGER NOT NULL,
+                Qty INTEGER NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CONSTRAINT FK_shelf_level_inventory_shelf_levels_ShelfLevelId FOREIGN KEY (ShelfLevelId) REFERENCES shelf_levels (Id) ON DELETE CASCADE,
+                CONSTRAINT FK_shelf_level_inventory_products_ProductId FOREIGN KEY (ProductId) REFERENCES products (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_level_inventory_ShelfLevelId_ProductId ON shelf_level_inventory (ShelfLevelId, ProductId);
+            CREATE INDEX IF NOT EXISTS IX_shelf_level_inventory_ProductId ON shelf_level_inventory (ProductId);
+            """);
+        db.Database.ExecuteSqlRaw(
+            """
             CREATE TABLE IF NOT EXISTS social_accounts (
                 Id INTEGER NOT NULL CONSTRAINT PK_social_accounts PRIMARY KEY AUTOINCREMENT,
                 Platform TEXT NOT NULL,

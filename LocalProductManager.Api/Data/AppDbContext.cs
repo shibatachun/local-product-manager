@@ -16,6 +16,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
     public DbSet<VideoTrendItem> VideoTrendItems => Set<VideoTrendItem>();
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<WarehouseShelf> WarehouseShelves => Set<WarehouseShelf>();
+    public DbSet<ShelfLevel> ShelfLevels => Set<ShelfLevel>();
+    public DbSet<ShelfLevelInventory> ShelfLevelInventories => Set<ShelfLevelInventory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +48,43 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(product => product.ChildProducts)
                 .HasForeignKey(product => product.ParentProductId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Warehouse>(entity =>
+        {
+            entity.ToTable("warehouses");
+            entity.HasIndex(item => item.Code).IsUnique();
+            entity.Property(item => item.Code).HasMaxLength(16).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(160).IsRequired();
+        });
+
+        modelBuilder.Entity<WarehouseShelf>(entity =>
+        {
+            entity.ToTable("warehouse_shelves");
+            entity.HasIndex(item => item.Code).IsUnique();
+            entity.Property(item => item.Code).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.ZoneCode).HasMaxLength(8).IsRequired();
+            entity.HasOne(item => item.Warehouse).WithMany(item => item.Shelves)
+                .HasForeignKey(item => item.WarehouseId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ShelfLevel>(entity =>
+        {
+            entity.ToTable("shelf_levels");
+            entity.HasIndex(item => new { item.WarehouseShelfId, item.LevelNumber }).IsUnique();
+            entity.Property(item => item.Code).HasMaxLength(80).IsRequired();
+            entity.HasOne(item => item.WarehouseShelf).WithMany(item => item.Levels)
+                .HasForeignKey(item => item.WarehouseShelfId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ShelfLevelInventory>(entity =>
+        {
+            entity.ToTable("shelf_level_inventory");
+            entity.HasIndex(item => new { item.ShelfLevelId, item.ProductId }).IsUnique();
+            entity.HasOne(item => item.ShelfLevel).WithMany(item => item.Inventory)
+                .HasForeignKey(item => item.ShelfLevelId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Product).WithMany()
+                .HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ProductListing>(entity =>

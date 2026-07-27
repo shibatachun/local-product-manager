@@ -7,6 +7,7 @@
 
     <nav aria-label="Main navigation">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>C</span> Converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
@@ -371,6 +372,11 @@
       </ng-container>
     </ng-template>
     <ng-template #apiDocsView>
+      <ng-container *ngIf="view() === 'inventory'; else actualApiDocsView">
+        <app-inventory-manager-panel></app-inventory-manager-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #actualApiDocsView>
       <app-api-docs-panel [apiBaseUrl]="api.baseUrl"></app-api-docs-panel>
     </ng-template>
   </main>
