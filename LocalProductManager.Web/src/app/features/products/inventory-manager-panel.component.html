@@ -16,21 +16,25 @@
     <button class="add-button" type="button" (click)="createWarehouse()" [disabled]="loading()">Create warehouse</button>
   </div>
 
-  <div class="warehouse-stage" *ngIf="warehouse() as item">
+  <div class="warehouse-stage" #warehouseStage *ngIf="warehouse() as item">
     <div class="warehouse-label"><span>{{ item.code }}</span><strong>{{ item.name }}</strong></div>
-    <button
+    <div
       class="shelf-block"
-      type="button"
       *ngFor="let shelf of item.shelves"
       [style.left.%]="shelf.x"
       [style.top.%]="shelf.y"
-      [style.width.%]="shelf.width"
-      [style.height.%]="shelf.height"
+      [style.width.%]="effectiveWidth(shelf)"
+      [style.height.%]="effectiveHeight(shelf)"
+      [class.dragging]="shelf.id === drag?.shelfId"
+      role="button"
+      tabindex="0"
+      (pointerdown)="startDrag($event, shelf)"
       (click)="openShelf(shelf)">
+      <button class="rotate-shelf" type="button" title="Rotate shelf 90 degrees" (pointerdown)="$event.stopPropagation()" (click)="rotateShelf($event, shelf)">↻</button>
       <strong>{{ shelf.code }}</strong>
       <span>{{ shelf.levelCount }} levels</span>
-      <small>{{ shelf.totalQty }} units</small>
-    </button>
+      <small>{{ shelf.totalQty }} units · {{ shelf.rotation }}°</small>
+    </div>
     <button class="stage-add" *ngIf="!item.shelves.length" type="button" (click)="openAddShelf()">
       <span>+</span><strong>Add the first shelf</strong><small>Shelf code is generated automatically</small>
     </button>

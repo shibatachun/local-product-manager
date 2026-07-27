@@ -6,7 +6,7 @@ public sealed class DatabaseSchemaService
 {
     public static void Upgrade(DbContext db)
     {
-        var columns = GetProductColumns(db);
+        var columns = GetColumns(db, "products");
         if (!columns.Contains("ParentProductId"))
         {
             db.Database.ExecuteSqlRaw("ALTER TABLE products ADD COLUMN ParentProductId INTEGER NULL");
@@ -90,6 +90,7 @@ public sealed class DatabaseSchemaService
                 Y TEXT NOT NULL,
                 Width TEXT NOT NULL,
                 Height TEXT NOT NULL,
+                Rotation INTEGER NOT NULL DEFAULT 0,
                 CreatedAt TEXT NOT NULL,
                 CONSTRAINT FK_warehouse_shelves_warehouses_WarehouseId FOREIGN KEY (WarehouseId) REFERENCES warehouses (Id) ON DELETE CASCADE
             );
@@ -115,6 +116,11 @@ public sealed class DatabaseSchemaService
             CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_level_inventory_ShelfLevelId_ProductId ON shelf_level_inventory (ShelfLevelId, ProductId);
             CREATE INDEX IF NOT EXISTS IX_shelf_level_inventory_ProductId ON shelf_level_inventory (ProductId);
             """);
+        var shelfColumns = GetColumns(db, "warehouse_shelves");
+        if (shelfColumns.Count > 0 && !shelfColumns.Contains("Rotation"))
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE warehouse_shelves ADD COLUMN Rotation INTEGER NOT NULL DEFAULT 0");
+        }
         db.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS social_accounts (
@@ -287,10 +293,10 @@ public sealed class DatabaseSchemaService
             """);
     }
 
-    private static HashSet<string> GetProductColumns(DbContext db)
+    private static HashSet<string> GetColumns(DbContext db, string tableName)
     {
         using var command = db.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "PRAGMA table_info('products')";
+        command.CommandText = $"PRAGMA table_info('{tableName.Replace("'", "''")}')";
         db.Database.OpenConnection();
         using var reader = command.ExecuteReader();
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

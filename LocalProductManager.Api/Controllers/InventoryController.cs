@@ -83,6 +83,24 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
         return shelf is null ? NotFound() : Ok(ToDetailDto(shelf));
     }
 
+    [HttpPut("shelves/{shelfId:int}/layout")]
+    public async Task<ActionResult<WarehouseShelfDto>> UpdateShelfLayout(
+        int shelfId, UpdateShelfLayoutRequest request, CancellationToken cancellationToken)
+    {
+        var shelf = await db.WarehouseShelves
+            .Include(item => item.Levels).ThenInclude(level => level.Inventory)
+            .FirstOrDefaultAsync(item => item.Id == shelfId, cancellationToken);
+        if (shelf is null) return NotFound();
+
+        shelf.Rotation = request.Rotation % 180 == 90 ? 90 : 0;
+        var effectiveWidth = shelf.Rotation == 90 ? shelf.Height : shelf.Width;
+        var effectiveHeight = shelf.Rotation == 90 ? shelf.Width : shelf.Height;
+        shelf.X = Math.Clamp(request.X, 0, 100 - effectiveWidth);
+        shelf.Y = Math.Clamp(request.Y, 0, 100 - effectiveHeight);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToDto(shelf));
+    }
+
     [HttpPut("levels/{levelId:int}/inventory")]
     public async Task<ActionResult<ShelfLevelDto>> SetLevelInventory(
         int levelId, SetLevelInventoryRequest request, CancellationToken cancellationToken)
@@ -132,7 +150,7 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
 
     private static WarehouseShelfDto ToDto(WarehouseShelf shelf) => new(
         shelf.Id, shelf.Code, shelf.ZoneCode, shelf.AisleNumber, shelf.RackNumber, shelf.LevelCount,
-        shelf.X, shelf.Y, shelf.Width, shelf.Height,
+        shelf.X, shelf.Y, shelf.Width, shelf.Height, shelf.Rotation,
         shelf.Levels.SelectMany(level => level.Inventory).Sum(item => item.Qty));
 
     private static ShelfDetailDto ToDetailDto(WarehouseShelf shelf) => new(

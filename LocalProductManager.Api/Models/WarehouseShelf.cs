@@ -13,6 +13,7 @@ public sealed class WarehouseShelf
     public decimal Y { get; set; }
     public decimal Width { get; set; } = 18;
     public decimal Height { get; set; } = 12;
+    public int Rotation { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public Warehouse? Warehouse { get; set; }
     public List<ShelfLevel> Levels { get; set; } = [];

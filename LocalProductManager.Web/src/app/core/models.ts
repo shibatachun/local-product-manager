@@ -102,6 +102,7 @@ export interface WarehouseShelf {
   y: number;
   width: number;
   height: number;
+  rotation: number;
   totalQty: number;
 }
 
