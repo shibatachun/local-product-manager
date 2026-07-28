@@ -1,6 +1,7 @@
 using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Models;
+using LocalProductManager.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,7 @@ namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/inventory")]
-public sealed class InventoryController(AppDbContext db) : ControllerBase
+public sealed class InventoryController(AppDbContext db, AuthService auth) : ControllerBase
 {
     [HttpGet("warehouse")]
     public async Task<ActionResult<WarehouseDto?>> GetWarehouse(CancellationToken cancellationToken)
@@ -41,6 +42,9 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<WarehouseShelfDto>> CreateShelf(
         int warehouseId, CreateShelfRequest request, CancellationToken cancellationToken)
     {
+        if (!await auth.IsAdminAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Only administrators can add shelves.");
+
         var warehouse = await db.Warehouses.FindAsync([warehouseId], cancellationToken);
         if (warehouse is null) return NotFound();
 
@@ -135,6 +139,9 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
     [HttpDelete("shelves/{shelfId:int}")]
     public async Task<IActionResult> DeleteShelf(int shelfId, CancellationToken cancellationToken)
     {
+        if (!await auth.IsAdminAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Only administrators can delete shelves.");
+
         var shelf = await db.WarehouseShelves
             .Include(item => item.Levels)
                 .ThenInclude(level => level.Inventory)

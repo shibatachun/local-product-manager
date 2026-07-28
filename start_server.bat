@@ -5,9 +5,9 @@ title LocalProductManager Server Manager
 set "ROOT=%~dp0"
 set "API_DIR=%ROOT%LocalProductManager.Api"
 set "WEB_DIR=%ROOT%LocalProductManager.Web"
-set "HTTPS_CERT=%ROOT%certificates\local-product-manager.pfx"
+set "HTTPS_CERT=%ROOT%certificates\inventory-jjgqaz-com.pfx"
 set "HTTPS_PORT=7265"
-set "LAN_IP=192.168.0.160"
+set "APP_HOST=inventory.jjgqaz.com"
 
 set "RUN_DIR=%TEMP%\LocalProductManagerLauncher"
 set "API_RUNNER=%RUN_DIR%\run-api.cmd"
@@ -90,7 +90,7 @@ for /f %%P in ('
 
 echo API PID: %API_PID%
 echo Web PID: %WEB_PID%
-echo HTTPS URL: https://%LAN_IP%:%HTTPS_PORT%
+echo HTTPS URL: https://%APP_HOST%:%HTTPS_PORT%
 echo.
 echo Waiting for startup...
 

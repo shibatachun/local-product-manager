@@ -67,11 +67,6 @@ public sealed class AuthService(AppDbContext db)
 
     public async Task<CurrentUserDto?> LoginAsync(HttpContext context, string userName, string password, CancellationToken cancellationToken)
     {
-        if (!IsHost(context))
-        {
-            return null;
-        }
-
         var normalizedUserName = userName.Trim();
         var passwordHash = HashPassword(password);
         var user = await db.AppUsers.FirstOrDefaultAsync(

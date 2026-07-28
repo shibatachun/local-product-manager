@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, inject, input, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InventoryApiService } from '../../core/inventory-api.service';
-import { ProductListItem, ShelfDetail, ShelfLevel, Warehouse, WarehouseShelf } from '../../core/models';
+import { ProductListItem, ShelfDetail, ShelfInventoryItem, ShelfLevel, Warehouse, WarehouseShelf } from '../../core/models';
 
 @Component({
   selector: 'app-inventory-manager-panel',
@@ -11,6 +11,7 @@ import { ProductListItem, ShelfDetail, ShelfLevel, Warehouse, WarehouseShelf } f
   styleUrl: './inventory-manager-panel.component.css',
 })
 export class InventoryManagerPanelComponent {
+  readonly isAdmin = input(false);
   @ViewChild('warehouseStage') warehouseStage?: ElementRef<HTMLElement>;
   private readonly api = inject(InventoryApiService);
   readonly warehouse = signal<Warehouse | null>(null);
@@ -47,10 +48,18 @@ export class InventoryManagerPanelComponent {
   }
 
   openAddShelf(): void {
+    if (!this.isAdmin()) {
+      this.showNotice('Only administrators can add shelves.');
+      return;
+    }
     this.addShelfOpen.set(true);
   }
 
   async createShelf(): Promise<void> {
+    if (!this.isAdmin()) {
+      this.showNotice('Only administrators can add shelves.');
+      return;
+    }
     const warehouse = this.warehouse();
     if (!warehouse) return;
     const index = warehouse.shelves.length;
@@ -176,6 +185,17 @@ export class InventoryManagerPanelComponent {
     this.showNotice('Level inventory updated.');
   }
 
+  async removeInventoryItem(item: ShelfInventoryItem): Promise<void> {
+    const level = this.selectedLevel();
+    if (!level) return;
+    if (!window.confirm(`Remove ${item.productName} from ${level.code}? The product record will not be deleted.`)) return;
+    const updated = await this.run(() => this.api.setInventory(level.id, item.productId, 0));
+    if (!updated) return;
+    this.applyUpdatedLevel(updated);
+    await this.load();
+    this.showNotice(`${item.productName} removed from ${level.code}.`);
+  }
+
   async addLevel(): Promise<void> {
     const shelf = this.selectedShelf();
     if (!shelf) return;
@@ -203,6 +223,10 @@ export class InventoryManagerPanelComponent {
   }
 
   async deleteShelf(): Promise<void> {
+    if (!this.isAdmin()) {
+      this.showNotice('Only administrators can delete shelves.');
+      return;
+    }
     const shelf = this.selectedShelf();
     if (!shelf) return;
     const total = shelf.levels.reduce((sum, level) => sum + level.totalQty, 0);
@@ -225,6 +249,16 @@ export class InventoryManagerPanelComponent {
 
   private async refreshWarehouse(): Promise<void> {
     this.warehouse.set(await this.api.getWarehouse());
+  }
+
+  private applyUpdatedLevel(updated: ShelfLevel): void {
+    this.selectedLevel.set(updated);
+    const shelf = this.selectedShelf();
+    if (!shelf) return;
+    this.selectedShelf.set({
+      ...shelf,
+      levels: shelf.levels.map(level => level.id === updated.id ? updated : level),
+    });
   }
 
   private async run<T>(action: () => Promise<T>): Promise<T | undefined> {

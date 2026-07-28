@@ -381,7 +381,7 @@
     </ng-template>
     <ng-template #apiDocsView>
       <ng-container *ngIf="view() === 'inventory'; else actualApiDocsView">
-        <app-inventory-manager-panel></app-inventory-manager-panel>
+        <app-inventory-manager-panel [isAdmin]="currentUser()?.isAdmin ?? false"></app-inventory-manager-panel>
       </ng-container>
     </ng-template>
     <ng-template #actualApiDocsView>

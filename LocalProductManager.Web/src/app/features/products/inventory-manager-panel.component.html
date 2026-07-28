@@ -5,7 +5,7 @@
       <small *ngIf="warehouse() as item">{{ item.code }} · {{ item.shelves.length }} shelves · {{ totalQty() }} units stored</small>
       <small *ngIf="!warehouse()">Create the warehouse floor before adding shelves.</small>
     </div>
-    <button class="add-button" *ngIf="warehouse()" type="button" (click)="openAddShelf()">+ Add shelf</button>
+    <button class="add-button" *ngIf="warehouse() && isAdmin()" type="button" (click)="openAddShelf()">+ Add shelf</button>
   </div>
 
   <div class="warehouse-empty" *ngIf="!warehouse()">
@@ -35,14 +35,14 @@
       <span>{{ shelf.levelCount }} levels</span>
       <small>{{ shelf.totalQty }} units · {{ shelf.rotation }}°</small>
     </div>
-    <button class="stage-add" *ngIf="!item.shelves.length" type="button" (click)="openAddShelf()">
+    <button class="stage-add" *ngIf="!item.shelves.length && isAdmin()" type="button" (click)="openAddShelf()">
       <span>+</span><strong>Add the first shelf</strong><small>Shelf code is generated automatically</small>
     </button>
   </div>
 </section>
 
-<div class="inventory-backdrop" *ngIf="addShelfOpen()" (click)="addShelfOpen.set(false)"></div>
-<section class="inventory-modal compact" *ngIf="addShelfOpen()" role="dialog" aria-modal="true">
+<div class="inventory-backdrop" *ngIf="addShelfOpen() && isAdmin()" (click)="addShelfOpen.set(false)"></div>
+<section class="inventory-modal compact" *ngIf="addShelfOpen() && isAdmin()" role="dialog" aria-modal="true">
   <header><div><small>Warehouse layout</small><h2>Add shelf</h2></div><button type="button" (click)="addShelfOpen.set(false)">×</button></header>
   <div class="modal-content">
     <p>The next rack number is assigned automatically using the warehouse, zone, and aisle.</p>
@@ -59,7 +59,7 @@
 <div class="inventory-backdrop" *ngIf="shelfOpen()" (click)="shelfOpen.set(false)"></div>
 <section class="inventory-modal shelf-modal" *ngIf="shelfOpen() && selectedShelf() as shelf" role="dialog" aria-modal="true">
   <header><div><small>Shelf details</small><h2>{{ shelf.code }}</h2></div><button type="button" (click)="shelfOpen.set(false)">×</button></header>
-  <div class="shelf-modal-actions">
+  <div class="shelf-modal-actions" *ngIf="isAdmin()">
     <button class="danger-button" type="button" (click)="deleteShelf()" [disabled]="loading()">Delete shelf</button>
     <span>Only an empty shelf can be deleted.</span>
   </div>
@@ -83,7 +83,7 @@
         <div class="inventory-list" *ngIf="level.items.length">
           <div *ngFor="let item of level.items">
             <span><strong>{{ item.productName }}</strong><code>{{ item.sku }}</code></span>
-            <b>{{ item.qty }}</b>
+            <div class="inventory-item-actions"><b>{{ item.qty }}</b><button type="button" (click)="removeInventoryItem(item)" [disabled]="loading()">Remove</button></div>
           </div>
         </div>
         <div class="level-empty small" *ngIf="!level.items.length">No products stored on this level.</div>

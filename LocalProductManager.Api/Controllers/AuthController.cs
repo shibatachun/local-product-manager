@@ -23,7 +23,7 @@ public sealed class AuthController(
     {
         var currentUser = await auth.LoginAsync(HttpContext, request.UserName, request.Password, cancellationToken);
         return currentUser is null
-            ? StatusCode(StatusCodes.Status403Forbidden, "Admin login is only available on the host computer with valid credentials.")
+            ? StatusCode(StatusCodes.Status403Forbidden, "Invalid username or password, or the account is disabled.")
             : Ok(currentUser);
     }
 

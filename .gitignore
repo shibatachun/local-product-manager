@@ -1,5 +1,6 @@
 **/bin/
 **/obj/
+**/target/
 **/Data/*.db
 **/Data/*.db-shm
 **/Data/*.db-wal
@@ -12,3 +13,5 @@
 *.user
 *.suo
 certificates/
+_backups/
+_tools/
