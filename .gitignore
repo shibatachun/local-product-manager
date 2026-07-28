@@ -11,3 +11,4 @@
 *.log
 *.user
 *.suo
+certificates/

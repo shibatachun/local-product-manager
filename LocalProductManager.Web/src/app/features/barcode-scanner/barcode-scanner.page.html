@@ -1,0 +1,93 @@
+<div class="scanner-page">
+  <header class="topbar">
+    <a routerLink="/" class="back" aria-label="Back to products">←</a>
+    <div><span>Inventory tools</span><h1>Barcode Scanner</h1></div>
+    <a routerLink="/" class="products-link">Products</a>
+  </header>
+  <div class="mobile-menu-bar">
+    <strong>Navigation</strong>
+    <button type="button" class="hamburger" [class.open]="mobileMenuOpen()" (click)="mobileMenuOpen.set(!mobileMenuOpen())" [attr.aria-expanded]="mobileMenuOpen()" aria-label="Toggle navigation"><i></i><i></i><i></i></button>
+  </div>
+  <nav class="quick-nav" [class.mobile-open]="mobileMenuOpen()" aria-label="Main navigation">
+    <a routerLink="/">Products</a>
+    <a routerLink="/" [queryParams]="{view:'inventory'}">Inventory</a>
+    <a class="active" routerLink="/barcode-scanner">Scanner</a>
+    <a routerLink="/label-maker">Label Maker</a>
+    <a routerLink="/" [queryParams]="{view:'pricing'}">Pricing</a>
+    <a routerLink="/" [queryParams]="{view:'unitConverter'}">Converter</a>
+    <a routerLink="/" [queryParams]="{view:'marketing'}">Marketing</a>
+    <a routerLink="/" [queryParams]="{view:'storage'}">Storage</a>
+    <a routerLink="/" [queryParams]="{view:'videoTrend'}">Video trend</a>
+    <a routerLink="/" [queryParams]="{view:'sceneEditor'}">3D Editor</a>
+    <a routerLink="/" [queryParams]="{view:'apiDocs'}">API Docs</a>
+    <a routerLink="/admin">Admin</a>
+  </nav>
+  <main>
+    <section class="scanner-card">
+      <div class="camera">
+        <video #video muted playsinline></video>
+        <div class="scan-frame" aria-hidden="true"><i></i></div>
+        <div class="camera-placeholder" *ngIf="!scanning()">
+          <span>▣</span><strong>Ready to scan</strong><small>Scan an LPM QR label created by Label Maker.</small>
+        </div>
+      </div>
+      <div class="camera-actions">
+        <button class="primary" type="button" *ngIf="!scanning()" (click)="startCamera()">Start camera</button>
+        <button type="button" *ngIf="scanning() && torchAvailable()" (click)="toggleTorch()">{{ torchOn() ? 'Flash off' : 'Flash on' }}</button>
+        <button type="button" *ngIf="scanning()" (click)="stopCamera()">Stop camera</button>
+      </div>
+      <p class="scan-tip" *ngIf="scanning()">LPM labels only · Keep the QR code flat, steady, and inside the frame.</p>
+      <div class="divider"><span>or enter barcode</span></div>
+      <form class="manual" (ngSubmit)="submitManual()">
+        <input name="barcode" [(ngModel)]="manualCode" autocomplete="off" placeholder="Inventory number or SKU" />
+        <button type="submit" [disabled]="!manualCode.trim() || loading()">Look up</button>
+      </form>
+      <p class="message error" *ngIf="error()">{{ error() }}</p>
+      <p class="message success" *ngIf="success()">{{ success() }}</p>
+    </section>
+
+    <section class="result-card" *ngIf="loading()"><div class="loading-ring"></div><p>Searching inventory…</p></section>
+    <section class="result-card product-result" *ngIf="!loading() && product() as item">
+      <div class="result-heading"><span class="found-icon">✓</span><div><small>Inventory match</small><h2>{{ item.productName }}</h2></div></div>
+      <dl>
+        <div><dt>INV number</dt><dd>{{ item.localInventoryId || ('INV-' + item.id) }}</dd></div>
+        <div><dt>SKU</dt><dd>{{ item.sku }}</dd></div>
+        <div><dt>Product name</dt><dd>{{ item.productName }}</dd></div>
+        <div><dt>Quantity</dt><dd class="quantity">{{ item.qty }}</dd></div>
+        <div><dt>Location</dt><dd><span class="location" *ngFor="let location of locations()">{{ location.code }} · {{ location.qty }}</span><span class="muted" *ngIf="!locations().length">No warehouse location assigned</span></dd></div>
+      </dl>
+      <div class="operations" *ngIf="!operation()">
+        <button class="stock-in" type="button" (click)="startOperation('in')">＋ Stock in</button>
+        <button class="stock-out" type="button" (click)="startOperation('out')" [disabled]="!locations().length">− Stock out</button>
+      </div>
+      <form class="operation-form" *ngIf="operation() as type" (ngSubmit)="applyOperation()">
+        <div class="operation-title"><strong>{{ type === 'in' ? 'Stock in' : 'Stock out' }}</strong><button type="button" (click)="cancelOperation()">×</button></div>
+        <label>Location
+          <select name="operationLocation" [(ngModel)]="operationLevelId" required>
+            <option [ngValue]="null">Choose warehouse location</option>
+            <option *ngFor="let location of operationLocations()" [ngValue]="location.levelId">{{ location.code }} · Current {{ location.qty }}</option>
+          </select>
+        </label>
+        <label>Quantity
+          <input name="operationQty" type="number" min="1" inputmode="numeric" [(ngModel)]="operationQty" required />
+        </label>
+        <button class="primary" type="submit" [disabled]="loading() || !operationLevelId">{{ type === 'in' ? 'Confirm stock in' : 'Confirm stock out' }}</button>
+      </form>
+      <button class="scan-again" type="button" (click)="reset()">Scan another item</button>
+    </section>
+
+    <section class="result-card not-found" *ngIf="!loading() && notFound()">
+      <span class="warning-icon">!</span><h2>Inventory not found</h2><p>No product matches <code>{{ scannedCode() }}</code>.</p>
+      <div class="choice" *ngIf="!showAdd()">
+        <button class="primary" type="button" (click)="showAdd.set(true)">Add this product</button><button type="button" (click)="reset()">Cancel</button>
+      </div>
+      <form class="add-form" *ngIf="showAdd()" (ngSubmit)="addProduct()">
+        <label>INV number <input name="inventoryId" [(ngModel)]="addForm.localInventoryId" placeholder="Optional; generated if blank" /></label>
+        <label>SKU <input name="sku" [(ngModel)]="addForm.sku" required /></label>
+        <label>Product name <input name="productName" [(ngModel)]="addForm.productName" required /></label>
+        <label>Quantity <input name="qty" [(ngModel)]="addForm.qty" type="number" min="0" inputmode="numeric" /></label>
+        <div><button class="primary" type="submit" [disabled]="loading()">Add to inventory</button><button type="button" (click)="showAdd.set(false)">Back</button></div>
+      </form>
+    </section>
+  </main>
+</div>

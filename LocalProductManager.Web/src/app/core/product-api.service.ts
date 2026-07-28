@@ -19,11 +19,12 @@ import {
   RmbToUsdRate,
   StoreLink,
 } from './models';
+import { apiBaseUrl } from './api-base';
 
 @Injectable({ providedIn: 'root' })
 export class ProductApiService {
   private readonly http = inject(HttpClient);
-  readonly baseUrl = `http://${globalThis.location?.hostname || 'localhost'}:5077/api`;
+  readonly baseUrl = apiBaseUrl();
 
   search(keyword = '', platform = '', hasAmazon?: boolean): Promise<ProductListItem[]> {
     const query = new URLSearchParams();

@@ -83,6 +83,71 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
         return shelf is null ? NotFound() : Ok(ToDetailDto(shelf));
     }
 
+    [HttpPost("shelves/{shelfId:int}/levels")]
+    public async Task<ActionResult<ShelfDetailDto>> AddShelfLevel(int shelfId, CancellationToken cancellationToken)
+    {
+        var shelf = await db.WarehouseShelves
+            .Include(item => item.Levels)
+                .ThenInclude(level => level.Inventory)
+                    .ThenInclude(inventory => inventory.Product)
+            .FirstOrDefaultAsync(item => item.Id == shelfId, cancellationToken);
+        if (shelf is null) return NotFound();
+        if (shelf.Levels.Count >= 20) return Conflict("A shelf cannot have more than 20 levels.");
+
+        var nextNumber = (shelf.Levels.Max(level => (int?)level.LevelNumber) ?? 0) + 1;
+        shelf.Levels.Add(new ShelfLevel
+        {
+            LevelNumber = nextNumber,
+            Code = $"{shelf.Code}-L{nextNumber:00}"
+        });
+        shelf.LevelCount = shelf.Levels.Count;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToDetailDto(shelf));
+    }
+
+    [HttpDelete("levels/{levelId:int}")]
+    public async Task<ActionResult<ShelfDetailDto>> DeleteShelfLevel(int levelId, CancellationToken cancellationToken)
+    {
+        var level = await db.ShelfLevels
+            .Include(item => item.Inventory)
+            .Include(item => item.WarehouseShelf!)
+                .ThenInclude(shelf => shelf.Levels)
+                    .ThenInclude(item => item.Inventory)
+                        .ThenInclude(inventory => inventory.Product)
+            .FirstOrDefaultAsync(item => item.Id == levelId, cancellationToken);
+        if (level is null || level.WarehouseShelf is null) return NotFound();
+        if (level.Inventory.Any(item => item.Qty > 0))
+            return Conflict("This level still contains inventory. Clear it or move it to another location before deleting the level.");
+
+        var shelf = level.WarehouseShelf;
+        db.ShelfLevels.Remove(level);
+        shelf.LevelCount = Math.Max(0, shelf.Levels.Count - 1);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var updated = await db.WarehouseShelves.AsNoTracking()
+            .Include(item => item.Levels)
+                .ThenInclude(item => item.Inventory)
+                    .ThenInclude(inventory => inventory.Product)
+            .FirstAsync(item => item.Id == shelf.Id, cancellationToken);
+        return Ok(ToDetailDto(updated));
+    }
+
+    [HttpDelete("shelves/{shelfId:int}")]
+    public async Task<IActionResult> DeleteShelf(int shelfId, CancellationToken cancellationToken)
+    {
+        var shelf = await db.WarehouseShelves
+            .Include(item => item.Levels)
+                .ThenInclude(level => level.Inventory)
+            .FirstOrDefaultAsync(item => item.Id == shelfId, cancellationToken);
+        if (shelf is null) return NotFound();
+        if (shelf.Levels.SelectMany(level => level.Inventory).Any(item => item.Qty > 0))
+            return Conflict("This shelf still contains inventory. Clear it or move it to another shelf before deleting the shelf.");
+
+        db.WarehouseShelves.Remove(shelf);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("shelves/{shelfId:int}/layout")]
     public async Task<ActionResult<WarehouseShelfDto>> UpdateShelfLayout(
         int shelfId, UpdateShelfLayoutRequest request, CancellationToken cancellationToken)

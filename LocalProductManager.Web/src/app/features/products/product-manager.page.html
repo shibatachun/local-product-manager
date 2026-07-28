@@ -1,13 +1,21 @@
 <div class="app-shell">
   <aside class="sidebar">
+    <div class="mobile-nav-header">
+      <span><strong>Local Product</strong> Manager</span>
+      <button type="button" class="hamburger" [class.open]="mobileMenuOpen()" (click)="mobileMenuOpen.set(!mobileMenuOpen())" [attr.aria-expanded]="mobileMenuOpen()" aria-label="Toggle navigation">
+        <i></i><i></i><i></i>
+      </button>
+    </div>
     <div class="brand">
       <span class="brand-mark">LP</span>
       <span><strong>Local Product</strong><small>Manager</small></span>
     </div>
 
-    <nav aria-label="Main navigation">
+    <nav aria-label="Main navigation" [class.mobile-open]="mobileMenuOpen()">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
+      <a routerLink="/barcode-scanner"><span>▣</span> Barcode Scanner</a>
+      <a routerLink="/label-maker"><span>LB</span> Label Maker</a>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>C</span> Converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>

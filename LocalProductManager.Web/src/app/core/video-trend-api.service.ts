@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { apiBaseUrl } from './api-base';
 import { CreateVideoTrendItemRequest, VideoTrendItem } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class VideoTrendApiService {
   private readonly http = inject(HttpClient);
-  readonly baseUrl = `http://${globalThis.location?.hostname || 'localhost'}:5077/api`;
+  readonly baseUrl = apiBaseUrl();
 
   items(platform?: string): Promise<VideoTrendItem[]> {
     const suffix = platform && platform !== 'all' ? `?platform=${encodeURIComponent(platform)}` : '';

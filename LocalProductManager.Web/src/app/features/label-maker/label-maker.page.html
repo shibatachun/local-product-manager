@@ -1,0 +1,90 @@
+<div class="label-maker" [style.--label-width-mm]="widthMm" [style.--label-height-mm]="heightMm" [style.--label-gap-mm]="labelGapMm" [style.--column-gap-mm]="columnGapMm" [style.--row-gap-mm]="rowGapMm" [style.--side-margin-mm]="sideMarginMm" [style.--roll-width-mm]="rollWidthMm" [style.--roll-row-height-mm]="rollRowHeightMm" [style.--label-font-size]="fontSize">
+  <header class="topbar">
+    <a routerLink="/" class="back" aria-label="Back to products">←</a>
+    <div><span>Inventory tools</span><h1>Label Maker</h1></div>
+    <button class="print-top" type="button" [disabled]="!selectedProducts.length" (click)="printLabels()">Print labels</button>
+  </header>
+
+  <div class="mobile-menu-bar">
+    <strong>Navigation</strong>
+    <button type="button" class="hamburger" [class.open]="mobileMenuOpen()" (click)="mobileMenuOpen.set(!mobileMenuOpen())" aria-label="Toggle navigation"><i></i><i></i><i></i></button>
+  </div>
+  <nav class="quick-nav" [class.mobile-open]="mobileMenuOpen()">
+    <a routerLink="/">Products</a><a routerLink="/" [queryParams]="{view:'inventory'}">Inventory</a>
+    <a routerLink="/barcode-scanner">Scanner</a><a class="active" routerLink="/label-maker">Label Maker</a>
+    <a routerLink="/" [queryParams]="{view:'pricing'}">Pricing</a><a routerLink="/" [queryParams]="{view:'marketing'}">Marketing</a>
+    <a routerLink="/admin">Admin</a>
+  </nav>
+
+  <main>
+    <aside class="designer-panel">
+      <section>
+        <h2>Label size</h2>
+        <div class="presets"><button type="button" *ngFor="let item of presets" [class.active]="preset === item" (click)="selectPreset(item)">{{ item.name }}</button></div>
+        <button class="roll-preset" type="button" (click)="useTwoColumnRoll()">Double roll · 50 × 30 mm</button>
+        <div class="field-grid">
+          <label>Width (mm)<input type="number" min="20" max="200" [(ngModel)]="widthMm" /></label>
+          <label>Height (mm)<input type="number" min="15" max="150" [(ngModel)]="heightMm" /></label>
+        </div>
+      </section>
+      <section>
+        <h2>Roll layout</h2>
+        <div class="column-choice">
+          <button type="button" [class.active]="columns === 1" (click)="columns = 1">Single column</button>
+          <button type="button" [class.active]="columns === 2" (click)="columns = 2">Double column</button>
+        </div>
+        <div class="field-grid">
+          <label>Column gap (mm)<input type="number" min="0" max="20" step=".5" [(ngModel)]="columnGapMm" /></label>
+          <label>Row gap (mm)<input type="number" min="0" max="20" step=".5" [(ngModel)]="rowGapMm" /></label>
+          <label>Side margin (mm)<input type="number" min="0" max="20" step=".5" [(ngModel)]="sideMarginMm" /></label>
+          <label>Roll width<input [value]="rollWidthMm + ' mm'" readonly /></label>
+        </div>
+      </section>
+      <section>
+        <h2>Label content</h2>
+        <label class="check"><input type="checkbox" [(ngModel)]="showInv" /> INV number</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="showSku" /> SKU</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="showName" /> Product name</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="showQuantity" /> Quantity</label>
+        <label>Text size <input type="range" min="8" max="18" [(ngModel)]="fontSize" /></label>
+        <label>QR code size <input type="range" min="36" max="85" [(ngModel)]="barcodeHeight" (ngModelChange)="rerenderBarcodes()" /></label>
+      </section>
+      <section class="printer">
+        <h2>Printer</h2>
+        <p>Uses the printer connected to this device. Choose your label printer in the system print dialog and set scale to 100%.</p>
+        <button class="primary" type="button" [disabled]="!selectedProducts.length" (click)="printLabels()">Connect & print</button>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div class="product-picker">
+        <div><h2>Inventory labels</h2><p>One label per selected INV number.</p></div>
+        <input [(ngModel)]="search" placeholder="Search INV, SKU or product" />
+        <div class="selection-actions"><button type="button" (click)="selectVisible()">Select visible</button><button type="button" (click)="clearSelection()">Clear</button></div>
+        <div class="product-list">
+          <label *ngFor="let product of filteredProducts">
+            <input type="checkbox" [checked]="selectedIds().has(product.id)" (change)="toggleProduct(product.id)" />
+            <span><strong>{{ inventoryNumber(product) }}</strong><small>{{ product.sku }} · {{ product.productName }}</small></span>
+          </label>
+          <p *ngIf="loading()">Loading products…</p><p class="error" *ngIf="error()">{{ error() }}</p>
+        </div>
+      </div>
+
+      <div class="preview-area">
+        <div class="preview-heading"><div><h2>Preview</h2><p>{{ selectedProducts.length }} label{{ selectedProducts.length === 1 ? '' : 's' }} selected</p></div><span>LPM QR</span></div>
+        <div class="label-sheet">
+          <div class="label-row" *ngFor="let row of labelRows">
+            <article class="product-label" *ngFor="let product of row">
+              <strong class="product-name" *ngIf="showName">{{ product.productName }}</strong>
+              <div #barcode class="barcode" [attr.data-value]="barcodeValue(product)"></div>
+              <strong class="inv" *ngIf="showInv">{{ inventoryNumber(product) }}</strong>
+              <div class="meta"><span *ngIf="showSku">SKU: {{ product.sku }}</span><span *ngIf="showQuantity">QTY: {{ product.qty }}</span></div>
+            </article>
+            <article class="product-label blank-label" *ngIf="columns === 2 && row.length === 1" aria-hidden="true"></article>
+          </div>
+          <div class="empty" *ngIf="!selectedProducts.length">Select a product to preview its label.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>

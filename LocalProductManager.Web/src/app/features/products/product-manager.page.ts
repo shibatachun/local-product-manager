@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   AmazonAsin,
   AttributionPlatform,
@@ -156,6 +156,7 @@ interface PlatformChoice {
   ],
 })
 export class ProductManagerPage {
+  private readonly route = inject(ActivatedRoute);
   readonly api = inject(ProductApiService);
   readonly authApi = inject(AuthApiService);
 
@@ -168,6 +169,7 @@ export class ProductManagerPage {
   readonly marketingProductFilter = signal<MarketingProductFilter>('family-one');
   readonly platformFilter = signal('');
   readonly view = signal<ViewMode>('products');
+  readonly mobileMenuOpen = signal(false);
   readonly loading = signal(false);
   readonly wizardOpen = signal(false);
   readonly importOpen = signal(false);
@@ -469,6 +471,9 @@ export class ProductManagerPage {
   );
 
   async ngOnInit(): Promise<void> {
+    const requestedView = this.route.snapshot.queryParamMap.get('view') as ViewMode | null;
+    const validViews: ViewMode[] = ['products', 'inventory', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
+    if (requestedView && validViews.includes(requestedView)) this.changeView(requestedView);
     await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks(), this.loadRmbToUsdRate(false)]);
   }
 
@@ -595,6 +600,7 @@ export class ProductManagerPage {
 
   changeView(view: ViewMode): void {
     this.view.set(view);
+    this.mobileMenuOpen.set(false);
     this.detailOpen.set(false);
     if (view === 'marketing') void this.loadMarketingProducts();
   }

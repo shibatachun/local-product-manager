@@ -2,11 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ProductListItem, ShelfDetail, ShelfLevel, Warehouse, WarehouseShelf } from './models';
+import { apiBaseUrl } from './api-base';
 
 @Injectable({ providedIn: 'root' })
 export class InventoryApiService {
   private readonly http = inject(HttpClient);
-  readonly baseUrl = `${window.location.protocol}//${window.location.hostname}:5077/api`;
+  readonly baseUrl = apiBaseUrl();
 
   async getWarehouse(): Promise<Warehouse | null> {
     try {
@@ -30,6 +31,18 @@ export class InventoryApiService {
 
   getShelf(shelfId: number): Promise<ShelfDetail> {
     return firstValueFrom(this.http.get<ShelfDetail>(`${this.baseUrl}/inventory/shelves/${shelfId}`));
+  }
+
+  addShelfLevel(shelfId: number): Promise<ShelfDetail> {
+    return firstValueFrom(this.http.post<ShelfDetail>(`${this.baseUrl}/inventory/shelves/${shelfId}/levels`, {}));
+  }
+
+  deleteShelfLevel(levelId: number): Promise<ShelfDetail> {
+    return firstValueFrom(this.http.delete<ShelfDetail>(`${this.baseUrl}/inventory/levels/${levelId}`));
+  }
+
+  deleteShelf(shelfId: number): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/inventory/shelves/${shelfId}`));
   }
 
   updateShelfLayout(shelfId: number, x: number, y: number, rotation: number): Promise<WarehouseShelf> {

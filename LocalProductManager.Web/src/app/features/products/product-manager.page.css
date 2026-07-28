@@ -134,6 +134,7 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .channel .copy { color: #fff; border-color: #176b87; background: #176b87; }
 
 .toast { position:fixed;z-index:50;right:24px;bottom:24px;max-width:360px;padding:12px 15px;border-radius:7px;color:#fff;background:#243b46;box-shadow:0 8px 24px rgba(20,30,38,.22);font-size:13px;font-weight:650; }
+.mobile-nav-header { display:none; }
 
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 76px minmax(0,1fr); }
@@ -148,8 +149,11 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 
 @media (max-width: 720px) {
   .app-shell { display:block; }.sidebar { position:static;width:100%;height:auto;padding:10px 14px;border-right:0;border-bottom:1px solid #dce2e7; }
-  .brand { display:none; } nav { display:flex; } nav button,nav a { flex:1;font-size:12px; }.connection { display:none; }
-  .content { padding:18px 12px 28px; }.page-header { align-items:center; }.page-header h1 { font-size:22px; }
+  .brand { display:none; }.mobile-nav-header { display:flex;align-items:center;justify-content:space-between;min-height:44px;color:#344f5a;font-size:13px; }.mobile-nav-header strong { color:#176b87; }
+  .hamburger { display:grid;place-content:center;gap:4px;width:42px;min-height:40px;padding:0;border:1px solid #cfd8dd;border-radius:7px;background:#fff; }.hamburger i { display:block;width:19px;height:2px;border-radius:2px;background:#344f5a;transition:.2s; }.hamburger.open i:first-child { transform:translateY(6px) rotate(45deg); }.hamburger.open i:nth-child(2) { opacity:0; }.hamburger.open i:last-child { transform:translateY(-6px) rotate(-45deg); }
+  nav { display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:8px 0 4px; }.sidebar nav.mobile-open { display:grid; }
+  nav button,nav a { width:100%;min-width:0;justify-content:flex-start;padding:0 12px;font-size:12px;white-space:normal; }.connection { display:none; }
+  .content { padding:18px 12px 28px; }.page-header { align-items:center; }.page-header h1 { font-size:22px; }.header-actions { flex-wrap:wrap;justify-content:flex-end; }
   .stats-band { grid-template-columns:repeat(2,1fr); }.toolbar { grid-template-columns:1fr 1fr 40px; }.search-box { grid-column:1/-1; }
   .store-band { grid-template-columns:1fr; }
   table { min-width:1080px; }

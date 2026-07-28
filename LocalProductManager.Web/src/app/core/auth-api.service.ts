@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { apiBaseUrl } from './api-base';
 import { AppUserAdmin, AuthAdminSnapshot, CurrentUser, SocialDataMaintenanceResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthApiService {
   private readonly http = inject(HttpClient);
-  readonly baseUrl = `http://${globalThis.location?.hostname || 'localhost'}:5077/api`;
+  readonly baseUrl = apiBaseUrl();
 
   me(): Promise<CurrentUser> {
     return firstValueFrom(this.http.get<CurrentUser>(`${this.baseUrl}/auth/me`));

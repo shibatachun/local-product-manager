@@ -222,6 +222,7 @@ public sealed class ProductService(AppDbContext db)
     {
         var values = new List<string?>
         {
+            product.LocalInventoryId,
             product.Sku,
             product.ProductName,
             product.SkuBase,
@@ -230,6 +231,7 @@ public sealed class ProductService(AppDbContext db)
         values.AddRange(product.AmazonAsins.Select(asin => asin.Asin));
         foreach (var child in product.ChildProducts)
         {
+            values.Add(child.LocalInventoryId);
             values.Add(child.Sku);
             values.Add(child.ProductName);
             values.Add(child.SkuBase);

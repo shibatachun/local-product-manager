@@ -176,6 +176,57 @@ export class InventoryManagerPanelComponent {
     this.showNotice('Level inventory updated.');
   }
 
+  async addLevel(): Promise<void> {
+    const shelf = this.selectedShelf();
+    if (!shelf) return;
+    const updated = await this.run(() => this.api.addShelfLevel(shelf.id));
+    if (!updated) return;
+    this.selectedShelf.set(updated);
+    await this.refreshWarehouse();
+    this.showNotice(`${updated.code} now has ${updated.levelCount} levels.`);
+  }
+
+  async deleteSelectedLevel(): Promise<void> {
+    const level = this.selectedLevel();
+    if (!level) return;
+    if (level.totalQty > 0 || level.items.some(item => item.qty > 0)) {
+      this.showNotice('Clear or move this level inventory before deleting it.');
+      return;
+    }
+    if (!window.confirm(`Delete empty level ${level.code}? This cannot be undone.`)) return;
+    const updated = await this.run(() => this.api.deleteShelfLevel(level.id));
+    if (!updated) return;
+    this.selectedShelf.set(updated);
+    this.selectedLevel.set(null);
+    await this.refreshWarehouse();
+    this.showNotice(`${level.code} deleted.`);
+  }
+
+  async deleteShelf(): Promise<void> {
+    const shelf = this.selectedShelf();
+    if (!shelf) return;
+    const total = shelf.levels.reduce((sum, level) => sum + level.totalQty, 0);
+    if (total > 0) {
+      this.showNotice('Clear or move all inventory before deleting this shelf.');
+      return;
+    }
+    if (!window.confirm(`Delete empty shelf ${shelf.code} and all of its empty levels? This cannot be undone.`)) return;
+    const deleted = await this.run(async () => {
+      await this.api.deleteShelf(shelf.id);
+      return true;
+    });
+    if (!deleted) return;
+    this.shelfOpen.set(false);
+    this.selectedShelf.set(null);
+    this.selectedLevel.set(null);
+    await this.refreshWarehouse();
+    this.showNotice(`${shelf.code} deleted.`);
+  }
+
+  private async refreshWarehouse(): Promise<void> {
+    this.warehouse.set(await this.api.getWarehouse());
+  }
+
   private async run<T>(action: () => Promise<T>): Promise<T | undefined> {
     this.loading.set(true);
     try {

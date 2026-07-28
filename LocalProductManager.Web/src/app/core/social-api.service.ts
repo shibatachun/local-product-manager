@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { apiBaseUrl } from './api-base';
 import { ArchiveLogResult, FacebookContentSnapshot, FacebookReportImportResult, InstagramContentSnapshot, InstagramReportImportResult, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, PinterestReportImportResult, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisReportContent, SocialAiAnalysisResult, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricSnapshot, SocialPlatform, SocialSyncResult, TikTokReportImportResult, YouTubeAuthStatus, YouTubeDebugSnapshot } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
   private readonly http = inject(HttpClient);
-  readonly baseUrl = `http://${globalThis.location?.hostname || 'localhost'}:5077/api`;
+  readonly baseUrl = apiBaseUrl();
 
   accounts(from?: string, to?: string): Promise<SocialAccount[]> {
     const query = new URLSearchParams();
