@@ -126,6 +126,7 @@ export interface ShelfInventoryItem {
   sku: string;
   productName: string;
   qty: number;
+  binNumber: number;
 }
 
 export interface ProductDuplicateCheck {

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Input, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { BarcodeFormat, BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
@@ -10,6 +10,8 @@ import { ProductListItem } from '../../core/models';
 
 type ScannerLocation = {
   levelId: number;
+  binNumber: number;
+  key: string;
   code: string;
   qty: number;
 };
@@ -22,6 +24,7 @@ type ScannerLocation = {
   styleUrl: './barcode-scanner.page.css',
 })
 export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
+  @Input() embedded = false;
   @ViewChild('video') video?: ElementRef<HTMLVideoElement>;
   readonly api = inject(ProductApiService);
   private readonly inventoryApi = inject(InventoryApiService);
@@ -48,7 +51,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   readonly torchOn = signal(false);
   readonly operation = signal<'in' | 'out' | null>(null);
   operationQty = 1;
-  operationLevelId: number | null = null;
+  operationLocationKey: string | null = null;
   manualCode = '';
   addForm = { localInventoryId: '', sku: '', productName: '', qty: 0 };
 
@@ -186,7 +189,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.locations.set([]);
     this.warehouseLevels.set([]);
     this.operation.set(null);
-    this.operationLevelId = null;
+    this.operationLocationKey = null;
     this.operationQty = 1;
     this.showAdd.set(false);
     this.success.set('');
@@ -201,14 +204,14 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.operation.set(type);
     this.operationQty = 1;
     const options = type === 'in' ? this.warehouseLevels() : this.locations();
-    this.operationLevelId = options[0]?.levelId ?? null;
+    this.operationLocationKey = options[0]?.key ?? null;
     this.error.set('');
     this.success.set('');
   }
 
   cancelOperation(): void {
     this.operation.set(null);
-    this.operationLevelId = null;
+    this.operationLocationKey = null;
     this.operationQty = 1;
   }
 
@@ -218,15 +221,13 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
 
   async applyOperation(): Promise<void> {
     const product = this.product();
-    const levelId = Number(this.operationLevelId);
+    const location = this.warehouseLevels().find(item => item.key === this.operationLocationKey);
     const amount = Math.floor(Number(this.operationQty));
     const type = this.operation();
-    if (!product || !type || !levelId || amount < 1 || this.loading()) {
+    if (!product || !type || !location || amount < 1 || this.loading()) {
       this.error.set('Choose a location and enter a quantity of at least 1.');
       return;
     }
-    const location = this.warehouseLevels().find(item => item.levelId === levelId);
-    if (!location) return;
     if (type === 'out' && amount > location.qty) {
       this.error.set(`Only ${location.qty} item(s) are available at ${location.code}.`);
       return;
@@ -236,7 +237,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.error.set('');
     try {
       const newQty = type === 'in' ? location.qty + amount : location.qty - amount;
-      await this.inventoryApi.setInventory(levelId, product.id, newQty);
+      await this.inventoryApi.setInventory(location.levelId, product.id, newQty, location.binNumber);
       this.product.set(await this.api.getProduct(product.id));
       await this.loadLocations(product.id);
       this.success.set(`${type === 'in' ? 'Stock in' : 'Stock out'} completed: ${amount} item(s) at ${location.code}.`);
@@ -256,10 +257,17 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
       return;
     }
     const shelves = await Promise.all(warehouse.shelves.map(shelf => this.inventoryApi.getShelf(shelf.id)));
-    const levels = shelves.flatMap(shelf => shelf.levels.map(level => {
-      const item = level.items.find(row => row.productId === productId);
-      return { levelId: level.id, code: level.code, qty: item?.qty ?? 0 };
-    }));
+    const levels = shelves.flatMap(shelf => shelf.levels.flatMap(level =>
+      [1, 2].map(binNumber => {
+        const item = level.items.find(row => row.productId === productId && row.binNumber === binNumber);
+        return {
+          levelId: level.id,
+          binNumber,
+          key: `${level.id}:${binNumber}`,
+          code: `${level.code}-B${binNumber.toString().padStart(2, '0')}`,
+          qty: item?.qty ?? 0,
+        };
+      })));
     this.warehouseLevels.set(levels);
     this.locations.set(levels.filter(level => level.qty > 0));
   }

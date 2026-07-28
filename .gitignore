@@ -15,3 +15,5 @@
 certificates/
 _backups/
 _tools/
+updates/*
+!updates/.gitkeep

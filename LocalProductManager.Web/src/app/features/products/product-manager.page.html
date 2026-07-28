@@ -14,8 +14,8 @@
     <nav aria-label="Main navigation" [class.mobile-open]="mobileMenuOpen()">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
-      <a routerLink="/barcode-scanner"><span>▣</span> Barcode Scanner</a>
-      <a routerLink="/label-maker"><span>LB</span> Label Maker</a>
+      <button [class.active]="view() === 'barcodeScanner'" (click)="changeView('barcodeScanner')"><span>▣</span> Barcode Scanner</button>
+      <button [class.active]="view() === 'labelMaker'" (click)="changeView('labelMaker')"><span>LB</span> Label Maker</button>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>C</span> Converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
@@ -27,6 +27,9 @@
       <a routerLink="/test"><span>⌘</span> API Test</a>
     </nav>
 
+    <button class="check-update" type="button" *ngIf="desktopApp" (click)="checkForUpdates()" [disabled]="checkingForUpdates()">
+      <span>↻</span> {{ checkingForUpdates() ? 'Checking…' : 'Check for updates' }}
+    </button>
     <div class="connection">
       <span class="online-dot"></span>
       <div><strong>Local API</strong><small>{{ api.baseUrl }}</small></div>
@@ -385,6 +388,16 @@
       </ng-container>
     </ng-template>
     <ng-template #actualApiDocsView>
+      <ng-container *ngIf="view() === 'barcodeScanner'; else labelMakerView">
+        <app-barcode-scanner [embedded]="true"></app-barcode-scanner>
+      </ng-container>
+    </ng-template>
+    <ng-template #labelMakerView>
+      <ng-container *ngIf="view() === 'labelMaker'; else actualApiDocsPanel">
+        <app-label-maker [embedded]="true"></app-label-maker>
+      </ng-container>
+    </ng-template>
+    <ng-template #actualApiDocsPanel>
       <app-api-docs-panel [apiBaseUrl]="api.baseUrl"></app-api-docs-panel>
     </ng-template>
   </main>

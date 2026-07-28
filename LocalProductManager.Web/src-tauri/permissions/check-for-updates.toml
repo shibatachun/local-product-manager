@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-check-for-updates"
+description = "Allows the LocalProductManager desktop UI to manually check for and install signed updates."
+commands.allow = ["check_for_updates"]

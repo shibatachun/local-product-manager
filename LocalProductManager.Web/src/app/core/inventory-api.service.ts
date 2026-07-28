@@ -50,9 +50,9 @@ export class InventoryApiService {
       `${this.baseUrl}/inventory/shelves/${shelfId}/layout`, { x, y, rotation }));
   }
 
-  setInventory(levelId: number, productId: number, qty: number): Promise<ShelfLevel> {
+  setInventory(levelId: number, productId: number, qty: number, binNumber = 1): Promise<ShelfLevel> {
     return firstValueFrom(this.http.put<ShelfLevel>(
-      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, qty }));
+      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, qty, binNumber }));
   }
 
   products(): Promise<ProductListItem[]> {

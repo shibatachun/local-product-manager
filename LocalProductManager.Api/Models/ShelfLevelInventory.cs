@@ -4,6 +4,7 @@ public sealed class ShelfLevelInventory
 {
     public int Id { get; set; }
     public int ShelfLevelId { get; set; }
+    public int BinNumber { get; set; } = 1;
     public int ProductId { get; set; }
     public int Qty { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

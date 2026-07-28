@@ -18,6 +18,7 @@ export class InventoryManagerPanelComponent {
   readonly products = signal<ProductListItem[]>([]);
   readonly selectedShelf = signal<ShelfDetail | null>(null);
   readonly selectedLevel = signal<ShelfLevel | null>(null);
+  readonly selectedBin = signal(1);
   readonly addShelfOpen = signal(false);
   readonly shelfOpen = signal(false);
   readonly loading = signal(false);
@@ -26,6 +27,10 @@ export class InventoryManagerPanelComponent {
   readonly shelfForm = { zoneCode: 'A', aisleNumber: 1, levelCount: 5 };
   readonly inventoryForm = { productId: null as number | null, qty: 0 };
   readonly totalQty = computed(() => this.warehouse()?.shelves.reduce((sum, shelf) => sum + shelf.totalQty, 0) ?? 0);
+  readonly selectedBinItems = computed(() =>
+    this.selectedLevel()?.items.filter(item => item.binNumber === this.selectedBin()) ?? []);
+  readonly selectedBinQty = computed(() =>
+    this.selectedBinItems().reduce((sum, item) => sum + item.qty, 0));
   drag: { shelfId: number; pointerX: number; pointerY: number; startX: number; startY: number; moved: boolean } | null = null;
   private suppressShelfClick = false;
 
@@ -85,6 +90,7 @@ export class InventoryManagerPanelComponent {
     if (!detail) return;
     this.selectedShelf.set(detail);
     this.selectedLevel.set(null);
+    this.selectedBin.set(1);
     this.shelfOpen.set(true);
   }
 
@@ -158,12 +164,25 @@ export class InventoryManagerPanelComponent {
 
   selectLevel(level: ShelfLevel): void {
     this.selectedLevel.set(level);
-    this.inventoryForm.productId = level.items[0]?.productId ?? this.products()[0]?.id ?? null;
-    this.inventoryForm.qty = level.items[0]?.qty ?? 0;
+    this.selectBin(1);
+  }
+
+  selectBin(binNumber: number): void {
+    this.selectedBin.set(binNumber);
+    const item = this.selectedLevel()?.items.find(row => row.binNumber === binNumber);
+    this.inventoryForm.productId = item?.productId ?? this.products()[0]?.id ?? null;
+    this.inventoryForm.qty = item?.qty ?? 0;
+  }
+
+  binQty(binNumber: number): number {
+    return this.selectedLevel()?.items
+      .filter(item => item.binNumber === binNumber)
+      .reduce((sum, item) => sum + item.qty, 0) ?? 0;
   }
 
   onProductChanged(productId: number | null): void {
-    const row = this.selectedLevel()?.items.find(item => item.productId === Number(productId));
+    const row = this.selectedLevel()?.items.find(item =>
+      item.binNumber === this.selectedBin() && item.productId === Number(productId));
     this.inventoryForm.qty = row?.qty ?? 0;
   }
 
@@ -171,7 +190,8 @@ export class InventoryManagerPanelComponent {
     const level = this.selectedLevel();
     const productId = Number(this.inventoryForm.productId);
     if (!level || !productId) return;
-    const updated = await this.run(async () => this.api.setInventory(level.id, productId, this.inventoryForm.qty));
+    const updated = await this.run(async () =>
+      this.api.setInventory(level.id, productId, this.inventoryForm.qty, this.selectedBin()));
     if (!updated) return;
     this.selectedLevel.set(updated);
     const shelf = this.selectedShelf();
@@ -182,18 +202,19 @@ export class InventoryManagerPanelComponent {
       });
     }
     await this.load();
-    this.showNotice('Level inventory updated.');
+    this.showNotice(`${level.code}-B${this.selectedBin().toString().padStart(2, '0')} inventory updated.`);
   }
 
   async removeInventoryItem(item: ShelfInventoryItem): Promise<void> {
     const level = this.selectedLevel();
     if (!level) return;
-    if (!window.confirm(`Remove ${item.productName} from ${level.code}? The product record will not be deleted.`)) return;
-    const updated = await this.run(() => this.api.setInventory(level.id, item.productId, 0));
+    const locationCode = `${level.code}-B${item.binNumber.toString().padStart(2, '0')}`;
+    if (!window.confirm(`Remove ${item.productName} from ${locationCode}? The product record will not be deleted.`)) return;
+    const updated = await this.run(() => this.api.setInventory(level.id, item.productId, 0, item.binNumber));
     if (!updated) return;
     this.applyUpdatedLevel(updated);
     await this.load();
-    this.showNotice(`${item.productName} removed from ${level.code}.`);
+    this.showNotice(`${item.productName} removed from ${locationCode}.`);
   }
 
   async addLevel(): Promise<void> {

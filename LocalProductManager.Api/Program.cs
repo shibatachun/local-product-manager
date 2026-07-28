@@ -71,6 +71,11 @@ var angularRoot = Path.GetFullPath(Path.Combine(
     "dist",
     "LocalProductManager.Web",
     "browser"));
+var updatesRoot = Path.GetFullPath(Path.Combine(
+    app.Environment.ContentRootPath,
+    "..",
+    "updates"));
+Directory.CreateDirectory(updatesRoot);
 
 using (var scope = app.Services.CreateScope())
 {
@@ -117,6 +122,17 @@ app.MapGet("/api/app/version", () =>
             : null,
         mainFiles
     });
+});
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(updatesRoot),
+    RequestPath = "/updates",
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        context.Context.Response.Headers.Pragma = "no-cache";
+        context.Context.Response.Headers.Expires = "0";
+    }
 });
 if (Directory.Exists(angularRoot))
 {

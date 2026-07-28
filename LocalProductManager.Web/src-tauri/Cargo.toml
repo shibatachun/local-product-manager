@@ -1,6 +1,6 @@
 [package]
 name = "local-product-manager-desktop"
-version = "0.1.0"
+version = "0.1.4"
 description = "Windows desktop shell for LocalProductManager"
 authors = ["LocalProductManager"]
 edition = "2021"
@@ -13,5 +13,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+serde_json = "1"
 tauri = { version = "2", features = [] }
-
+tauri-plugin-updater = "2"

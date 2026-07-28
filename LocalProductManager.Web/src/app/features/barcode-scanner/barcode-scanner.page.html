@@ -1,4 +1,4 @@
-<div class="scanner-page">
+<div class="scanner-page" [class.embedded]="embedded">
   <header class="topbar">
     <a routerLink="/" class="back" aria-label="Back to products">←</a>
     <div><span>Inventory tools</span><h1>Barcode Scanner</h1></div>
@@ -9,18 +9,19 @@
     <button type="button" class="hamburger" [class.open]="mobileMenuOpen()" (click)="mobileMenuOpen.set(!mobileMenuOpen())" [attr.aria-expanded]="mobileMenuOpen()" aria-label="Toggle navigation"><i></i><i></i><i></i></button>
   </div>
   <nav class="quick-nav" [class.mobile-open]="mobileMenuOpen()" aria-label="Main navigation">
-    <a routerLink="/">Products</a>
-    <a routerLink="/" [queryParams]="{view:'inventory'}">Inventory</a>
-    <a class="active" routerLink="/barcode-scanner">Scanner</a>
-    <a routerLink="/label-maker">Label Maker</a>
-    <a routerLink="/" [queryParams]="{view:'pricing'}">Pricing</a>
-    <a routerLink="/" [queryParams]="{view:'unitConverter'}">Converter</a>
-    <a routerLink="/" [queryParams]="{view:'marketing'}">Marketing</a>
-    <a routerLink="/" [queryParams]="{view:'storage'}">Storage</a>
-    <a routerLink="/" [queryParams]="{view:'videoTrend'}">Video trend</a>
-    <a routerLink="/" [queryParams]="{view:'sceneEditor'}">3D Editor</a>
-    <a routerLink="/" [queryParams]="{view:'apiDocs'}">API Docs</a>
-    <a routerLink="/admin">Admin</a>
+    <a routerLink="/"><span>▦</span> Products</a>
+    <a routerLink="/" [queryParams]="{view:'inventory'}"><span>▤</span> Inventory Manager</a>
+    <a class="active" routerLink="/barcode-scanner"><span>▣</span> Barcode Scanner</a>
+    <a routerLink="/label-maker"><span>LB</span> Label Maker</a>
+    <a routerLink="/" [queryParams]="{view:'pricing'}"><span>$</span> Pricing</a>
+    <a routerLink="/" [queryParams]="{view:'unitConverter'}"><span>C</span> Converter</a>
+    <a routerLink="/" [queryParams]="{view:'marketing'}"><span>↗</span> Marketing</a>
+    <a routerLink="/" [queryParams]="{view:'storage'}"><span>▧</span> File storage</a>
+    <a routerLink="/" [queryParams]="{view:'videoTrend'}"><span>VT</span> Video trend</a>
+    <a routerLink="/" [queryParams]="{view:'sceneEditor'}"><span>3D</span> Product 3D Scene Editor</a>
+    <a routerLink="/" [queryParams]="{view:'apiDocs'}"><span>API</span> API documentation</a>
+    <a routerLink="/admin"><span>AD</span> Admin</a>
+    <a routerLink="/test"><span>⌘</span> API Test</a>
   </nav>
   <main>
     <section class="scanner-card">
@@ -63,15 +64,15 @@
       <form class="operation-form" *ngIf="operation() as type" (ngSubmit)="applyOperation()">
         <div class="operation-title"><strong>{{ type === 'in' ? 'Stock in' : 'Stock out' }}</strong><button type="button" (click)="cancelOperation()">×</button></div>
         <label>Location
-          <select name="operationLocation" [(ngModel)]="operationLevelId" required>
+          <select name="operationLocation" [(ngModel)]="operationLocationKey" required>
             <option [ngValue]="null">Choose warehouse location</option>
-            <option *ngFor="let location of operationLocations()" [ngValue]="location.levelId">{{ location.code }} · Current {{ location.qty }}</option>
+            <option *ngFor="let location of operationLocations()" [ngValue]="location.key">{{ location.code }} · Current {{ location.qty }}</option>
           </select>
         </label>
         <label>Quantity
           <input name="operationQty" type="number" min="1" inputmode="numeric" [(ngModel)]="operationQty" required />
         </label>
-        <button class="primary" type="submit" [disabled]="loading() || !operationLevelId">{{ type === 'in' ? 'Confirm stock in' : 'Confirm stock out' }}</button>
+        <button class="primary" type="submit" [disabled]="loading() || !operationLocationKey">{{ type === 'in' ? 'Confirm stock in' : 'Confirm stock out' }}</button>
       </form>
       <button class="scan-again" type="button" (click)="reset()">Scan another item</button>
     </section>

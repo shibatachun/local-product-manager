@@ -79,14 +79,18 @@
         <span>Levels are shown from top to bottom.</span>
       </div>
       <ng-container *ngIf="selectedLevel() as level">
-        <div class="level-heading"><div><small>Selected location</small><h3>{{ level.code }}</h3></div><div class="level-heading-actions"><strong>{{ level.totalQty }} total units</strong><button class="danger-button" type="button" (click)="deleteSelectedLevel()" [disabled]="loading()">Delete level</button></div></div>
-        <div class="inventory-list" *ngIf="level.items.length">
-          <div *ngFor="let item of level.items">
+        <div class="level-heading"><div><small>Selected location</small><h3>{{ level.code }}-B{{ selectedBin() | number:'2.0-0' }}</h3></div><div class="level-heading-actions"><strong>{{ selectedBinQty() }} units in bin</strong><button class="danger-button" type="button" (click)="deleteSelectedLevel()" [disabled]="loading()">Delete level</button></div></div>
+        <div class="bin-selector" aria-label="Select bin">
+          <button type="button" [class.active]="selectedBin() === 1" (click)="selectBin(1)">B01 <strong>{{ binQty(1) }} units</strong></button>
+          <button type="button" [class.active]="selectedBin() === 2" (click)="selectBin(2)">B02 <strong>{{ binQty(2) }} units</strong></button>
+        </div>
+        <div class="inventory-list" *ngIf="selectedBinItems().length">
+          <div *ngFor="let item of selectedBinItems()">
             <span><strong>{{ item.productName }}</strong><code>{{ item.sku }}</code></span>
             <div class="inventory-item-actions"><b>{{ item.qty }}</b><button type="button" (click)="removeInventoryItem(item)" [disabled]="loading()">Remove</button></div>
           </div>
         </div>
-        <div class="level-empty small" *ngIf="!level.items.length">No products stored on this level.</div>
+        <div class="level-empty small" *ngIf="!selectedBinItems().length">No products stored in this bin.</div>
         <p class="delete-guidance" *ngIf="level.items.length">Set every product quantity to 0 or move the stock to another level before deleting this level.</p>
         <div class="stock-editor">
           <h4>Add or update inventory</h4>

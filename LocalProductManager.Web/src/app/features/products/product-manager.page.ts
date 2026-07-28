@@ -24,12 +24,17 @@ import { UnitConverterPanelComponent } from './unit-converter-panel.component';
 import { ApiDocsPanelComponent } from './api-docs-panel.component';
 import { Product3dSceneEditorPanelComponent } from './product-3d-scene-editor-panel.component';
 import { InventoryManagerPanelComponent } from './inventory-manager-panel.component';
+import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
+import { LabelMakerPage } from '../label-maker/label-maker.page';
 
-type ViewMode = 'products' | 'inventory' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
+type ViewMode = 'products' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 type PricingPlatform = Exclude<Platform, 'shopify'>;
 type ProductCostCurrency = 'rmb' | 'usd';
 type PricingWeightUnit = 'lb' | 'oz' | 'g' | 'kg';
+type TauriInternals = {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+};
 type AsinRelationshipRow = {
   parentAsin: string;
   childAsin: string;
@@ -146,7 +151,7 @@ interface PlatformChoice {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -177,6 +182,10 @@ export class ProductManagerPage {
   readonly detailOpen = signal(false);
   readonly wizardStep = signal(1);
   readonly notice = signal('');
+  readonly checkingForUpdates = signal(false);
+  readonly desktopApp = Boolean(
+    (globalThis as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__,
+  );
   readonly matchedImages = signal<string[]>([]);
   readonly detailMatchedImages = signal<string[]>([]);
   readonly importFile = signal<File | null>(null);
@@ -472,7 +481,7 @@ export class ProductManagerPage {
 
   async ngOnInit(): Promise<void> {
     const requestedView = this.route.snapshot.queryParamMap.get('view') as ViewMode | null;
-    const validViews: ViewMode[] = ['products', 'inventory', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
+    const validViews: ViewMode[] = ['products', 'inventory', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
     if (requestedView && validViews.includes(requestedView)) this.changeView(requestedView);
     await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks(), this.loadRmbToUsdRate(false)]);
   }
@@ -609,6 +618,8 @@ export class ProductManagerPage {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
       inventory: 'Warehouse operations',
+      barcodeScanner: 'Inventory tools',
+      labelMaker: 'Inventory tools',
       pricing: 'Cost planning',
       unitConverter: 'Measurement tools',
       marketing: 'Amazon Attribution',
@@ -624,6 +635,8 @@ export class ProductManagerPage {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
       inventory: 'Inventory Manager',
+      barcodeScanner: 'Barcode Scanner',
+      labelMaker: 'Label Maker',
       pricing: 'Pricing estimator',
       unitConverter: 'Converter',
       marketing: 'Marketing links',
@@ -1820,6 +1833,21 @@ export class ProductManagerPage {
     Object.assign(this.createAsin, { asin: '', asinType: 'child', parentAsin: '', amazonAttributeDone: false });
     this.matchedImages.set([]);
     this.wizardStep.set(1);
+  }
+
+  async checkForUpdates(): Promise<void> {
+    const tauri = (globalThis as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
+    if (!tauri || this.checkingForUpdates()) return;
+
+    this.checkingForUpdates.set(true);
+    try {
+      const result = await tauri.invoke<string>('check_for_updates');
+      this.showNotice(result);
+    } catch (error) {
+      this.showNotice(`Unable to check for updates: ${this.formatError(error)}`);
+    } finally {
+      this.checkingForUpdates.set(false);
+    }
   }
 
   private folderFromPath(path: string): string {

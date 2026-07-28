@@ -80,7 +80,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<ShelfLevelInventory>(entity =>
         {
             entity.ToTable("shelf_level_inventory");
-            entity.HasIndex(item => new { item.ShelfLevelId, item.ProductId }).IsUnique();
+            entity.HasIndex(item => new { item.ShelfLevelId, item.BinNumber, item.ProductId }).IsUnique();
             entity.HasOne(item => item.ShelfLevel).WithMany(item => item.Inventory)
                 .HasForeignKey(item => item.ShelfLevelId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(item => item.Product).WithMany()

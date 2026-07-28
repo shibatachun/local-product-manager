@@ -1,4 +1,4 @@
-<div class="label-maker" [style.--label-width-mm]="widthMm" [style.--label-height-mm]="heightMm" [style.--label-gap-mm]="labelGapMm" [style.--column-gap-mm]="columnGapMm" [style.--row-gap-mm]="rowGapMm" [style.--side-margin-mm]="sideMarginMm" [style.--roll-width-mm]="rollWidthMm" [style.--roll-row-height-mm]="rollRowHeightMm" [style.--label-font-size]="fontSize">
+<div class="label-maker" [class.embedded]="embedded" [style.--label-width-mm]="widthMm" [style.--label-height-mm]="heightMm" [style.--label-gap-mm]="labelGapMm" [style.--column-gap-mm]="columnGapMm" [style.--row-gap-mm]="rowGapMm" [style.--side-margin-mm]="sideMarginMm" [style.--roll-width-mm]="rollWidthMm" [style.--roll-row-height-mm]="rollRowHeightMm" [style.--label-font-size]="fontSize">
   <header class="topbar">
     <a routerLink="/" class="back" aria-label="Back to products">←</a>
     <div><span>Inventory tools</span><h1>Label Maker</h1></div>
@@ -9,11 +9,20 @@
     <strong>Navigation</strong>
     <button type="button" class="hamburger" [class.open]="mobileMenuOpen()" (click)="mobileMenuOpen.set(!mobileMenuOpen())" aria-label="Toggle navigation"><i></i><i></i><i></i></button>
   </div>
-  <nav class="quick-nav" [class.mobile-open]="mobileMenuOpen()">
-    <a routerLink="/">Products</a><a routerLink="/" [queryParams]="{view:'inventory'}">Inventory</a>
-    <a routerLink="/barcode-scanner">Scanner</a><a class="active" routerLink="/label-maker">Label Maker</a>
-    <a routerLink="/" [queryParams]="{view:'pricing'}">Pricing</a><a routerLink="/" [queryParams]="{view:'marketing'}">Marketing</a>
-    <a routerLink="/admin">Admin</a>
+  <nav class="quick-nav" [class.mobile-open]="mobileMenuOpen()" aria-label="Main navigation">
+    <a routerLink="/"><span>▦</span> Products</a>
+    <a routerLink="/" [queryParams]="{view:'inventory'}"><span>▤</span> Inventory Manager</a>
+    <a routerLink="/barcode-scanner"><span>▣</span> Barcode Scanner</a>
+    <a class="active" routerLink="/label-maker"><span>LB</span> Label Maker</a>
+    <a routerLink="/" [queryParams]="{view:'pricing'}"><span>$</span> Pricing</a>
+    <a routerLink="/" [queryParams]="{view:'unitConverter'}"><span>C</span> Converter</a>
+    <a routerLink="/" [queryParams]="{view:'marketing'}"><span>↗</span> Marketing</a>
+    <a routerLink="/" [queryParams]="{view:'storage'}"><span>▧</span> File storage</a>
+    <a routerLink="/" [queryParams]="{view:'videoTrend'}"><span>VT</span> Video trend</a>
+    <a routerLink="/" [queryParams]="{view:'sceneEditor'}"><span>3D</span> Product 3D Scene Editor</a>
+    <a routerLink="/" [queryParams]="{view:'apiDocs'}"><span>API</span> API documentation</a>
+    <a routerLink="/admin"><span>AD</span> Admin</a>
+    <a routerLink="/test"><span>⌘</span> API Test</a>
   </nav>
 
   <main>

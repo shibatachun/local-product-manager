@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewChecked, Component, ElementRef, QueryList, ViewChildren, inject, signal } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, Input, QueryList, ViewChildren, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { BrowserQRCodeSvgWriter } from '@zxing/browser';
@@ -17,6 +17,7 @@ type LabelPreset = { name: string; width: number; height: number };
   styleUrl: './label-maker.page.css',
 })
 export class LabelMakerPage implements AfterViewChecked {
+  @Input() embedded = false;
   @ViewChildren('barcode') barcodeElements?: QueryList<ElementRef<HTMLElement>>;
   private readonly api = inject(ProductApiService);
 

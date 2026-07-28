@@ -107,15 +107,25 @@ public sealed class DatabaseSchemaService
             CREATE TABLE IF NOT EXISTS shelf_level_inventory (
                 Id INTEGER NOT NULL CONSTRAINT PK_shelf_level_inventory PRIMARY KEY AUTOINCREMENT,
                 ShelfLevelId INTEGER NOT NULL,
+                BinNumber INTEGER NOT NULL DEFAULT 1,
                 ProductId INTEGER NOT NULL,
                 Qty INTEGER NOT NULL,
                 UpdatedAt TEXT NOT NULL,
                 CONSTRAINT FK_shelf_level_inventory_shelf_levels_ShelfLevelId FOREIGN KEY (ShelfLevelId) REFERENCES shelf_levels (Id) ON DELETE CASCADE,
                 CONSTRAINT FK_shelf_level_inventory_products_ProductId FOREIGN KEY (ProductId) REFERENCES products (Id) ON DELETE CASCADE
             );
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_level_inventory_ShelfLevelId_ProductId ON shelf_level_inventory (ShelfLevelId, ProductId);
             CREATE INDEX IF NOT EXISTS IX_shelf_level_inventory_ProductId ON shelf_level_inventory (ProductId);
             """);
+        var inventoryColumns = GetColumns(db, "shelf_level_inventory");
+        if (inventoryColumns.Count > 0 && !inventoryColumns.Contains("BinNumber"))
+        {
+            db.Database.ExecuteSqlRaw(
+                "ALTER TABLE shelf_level_inventory ADD COLUMN BinNumber INTEGER NOT NULL DEFAULT 1");
+        }
+        db.Database.ExecuteSqlRaw(
+            "DROP INDEX IF EXISTS IX_shelf_level_inventory_ShelfLevelId_ProductId");
+        db.Database.ExecuteSqlRaw(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_level_inventory_ShelfLevelId_BinNumber_ProductId ON shelf_level_inventory (ShelfLevelId, BinNumber, ProductId)");
         var shelfColumns = GetColumns(db, "warehouse_shelves");
         if (shelfColumns.Count > 0 && !shelfColumns.Contains("Rotation"))
         {

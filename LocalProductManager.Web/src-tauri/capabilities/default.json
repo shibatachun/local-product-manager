@@ -3,6 +3,8 @@
   "identifier": "default",
   "description": "Default permissions for the LocalProductManager desktop window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "remote": {
+    "urls": ["https://inventory.jjgqaz.com:7265/*"]
+  },
+  "permissions": ["core:default", "allow-check-for-updates"]
 }
-

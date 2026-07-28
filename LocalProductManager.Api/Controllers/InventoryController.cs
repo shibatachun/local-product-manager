@@ -181,13 +181,24 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
         if (level is null || !await db.Products.AnyAsync(item => item.Id == request.ProductId, cancellationToken))
             return NotFound();
 
+        if (request.BinNumber is < 1 or > 2)
+            return BadRequest("Bin number must be 1 or 2.");
+
         var row = await db.ShelfLevelInventories.FirstOrDefaultAsync(
-            item => item.ShelfLevelId == levelId && item.ProductId == request.ProductId, cancellationToken);
+            item => item.ShelfLevelId == levelId
+                && item.BinNumber == request.BinNumber
+                && item.ProductId == request.ProductId,
+            cancellationToken);
         var qty = Math.Max(0, request.Qty);
         if (row is null && qty > 0)
         {
             db.ShelfLevelInventories.Add(new ShelfLevelInventory
-                { ShelfLevelId = levelId, ProductId = request.ProductId, Qty = qty });
+                {
+                    ShelfLevelId = levelId,
+                    BinNumber = request.BinNumber,
+                    ProductId = request.ProductId,
+                    Qty = qty
+                });
         }
         else if (row is not null && qty == 0)
         {
@@ -231,8 +242,8 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
 
     private static ShelfLevelDto ToDto(ShelfLevel level) => new(
         level.Id, level.Code, level.LevelNumber, level.Inventory.Sum(item => item.Qty),
-        level.Inventory.OrderBy(item => item.Product!.Sku)
+        level.Inventory.OrderBy(item => item.BinNumber).ThenBy(item => item.Product!.Sku)
             .Select(item => new ShelfInventoryItemDto(
-                item.ProductId, item.Product!.Sku, item.Product.ProductName, item.Qty))
+                item.ProductId, item.Product!.Sku, item.Product.ProductName, item.Qty, item.BinNumber))
             .ToArray());
 }

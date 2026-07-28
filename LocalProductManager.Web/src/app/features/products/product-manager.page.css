@@ -20,7 +20,12 @@ nav { display: grid; gap: 4px; }
 nav button, nav a { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 0 11px; border: 0; border-radius: 6px; color: #53616d; background: transparent; text-align: left; text-decoration: none; font-size: 13px; font-weight: 650; }
 nav button:hover, nav a:hover, nav button.active { color: #123f4d; background: #e9f3f5; }
 nav span { width: 20px; color: #176b87; font-size: 18px; text-align: center; }
+.check-update { display:flex;align-items:center;gap:9px;width:100%;min-height:38px;margin-top:auto;padding:0 9px;border:1px solid #dce2e7;border-radius:6px;color:#53616d;background:#fff;text-align:left;font-size:12px;font-weight:700; }
+.check-update:hover:not(:disabled) { color:#123f4d;border-color:#9cb9c3;background:#e9f3f5; }
+.check-update:disabled { cursor:wait;opacity:.65; }
+.check-update span { color:#176b87;font-size:16px; }
 .connection { display: flex; align-items: flex-start; gap: 9px; margin-top: auto; padding: 12px 8px; border-top: 1px solid #e7ebee; }
+.check-update + .connection { margin-top:8px; }
 .connection strong, .connection small { display: block; }
 .connection strong { font-size: 12px; } .connection small { max-width: 155px; margin-top: 2px; overflow: hidden; color: #84919b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .online-dot { width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: #2d936c; box-shadow: 0 0 0 3px #dff3e9; }
