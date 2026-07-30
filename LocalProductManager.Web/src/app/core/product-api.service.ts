@@ -35,8 +35,28 @@ export class ProductApiService {
     return firstValueFrom(this.http.get<ProductListItem[]>(`${this.baseUrl}/products${suffix}`));
   }
 
+  async lookupExact(code: string): Promise<ProductListItem | null> {
+    try {
+      return await firstValueFrom(this.http.get<ProductListItem>(
+        `${this.baseUrl}/products/lookup`,
+        { params: { code } },
+      ));
+    } catch (error: any) {
+      if (error?.status === 404) return null;
+      throw error;
+    }
+  }
+
   getProduct(id: number): Promise<ProductDetail> {
     return firstValueFrom(this.http.get<ProductDetail>(`${this.baseUrl}/products/${id}`));
+  }
+
+  amazonMarketingProducts(): Promise<ProductListItem[]> {
+    return firstValueFrom(this.http.get<ProductListItem[]>(`${this.baseUrl}/amazon-marketing/products`));
+  }
+
+  amazonMarketingProduct(id: number): Promise<ProductDetail> {
+    return firstValueFrom(this.http.get<ProductDetail>(`${this.baseUrl}/amazon-marketing/products/${id}`));
   }
 
   exportProducts(): Promise<Blob> {
@@ -87,6 +107,15 @@ export class ProductApiService {
     return firstValueFrom(this.http.put<ProductDetail>(`${this.baseUrl}/products/${id}`, body));
   }
 
+  uploadProductImage(productId: number, file: File): Promise<{ imagePath: string }> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<{ imagePath: string }>(
+      `${this.baseUrl}/products/${productId}/image/upload`,
+      data,
+    ));
+  }
+
   deleteProduct(id: number): Promise<unknown> {
     return firstValueFrom(this.http.delete(`${this.baseUrl}/products/${id}`));
   }
@@ -114,7 +143,7 @@ export class ProductApiService {
 
   saveAttribution(productId: number, platform: AttributionPlatform, attributionUrl: string, amazonAsinId: number | null = null): Promise<AmazonAttributionLink> {
     return firstValueFrom(this.http.put<AmazonAttributionLink>(
-      `${this.baseUrl}/products/${productId}/amazon-attributions/${platform}`,
+      `${this.baseUrl}/amazon-marketing/products/${productId}/attributions/${platform}`,
       { attributionUrl, amazonAsinId },
     ));
   }

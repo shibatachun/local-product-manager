@@ -2,6 +2,15 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ProductListItem, ShelfDetail, ShelfLevel, Warehouse, WarehouseShelf } from './models';
+
+export interface ProductScannerLocation {
+  levelId: number;
+  binNumber: number;
+  key: string;
+  code: string;
+  description: string;
+  qty: number;
+}
 import { apiBaseUrl } from './api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -23,7 +32,7 @@ export class InventoryApiService {
   }
 
   createShelf(warehouseId: number, body: {
-    zoneCode: string; aisleNumber: number; levelCount: number; x: number; y: number;
+    zoneCode: string; rowNumber: number; levelCount: number; x: number; y: number;
   }): Promise<WarehouseShelf> {
     return firstValueFrom(this.http.post<WarehouseShelf>(
       `${this.baseUrl}/inventory/warehouses/${warehouseId}/shelves`, body));
@@ -31,6 +40,12 @@ export class InventoryApiService {
 
   getShelf(shelfId: number): Promise<ShelfDetail> {
     return firstValueFrom(this.http.get<ShelfDetail>(`${this.baseUrl}/inventory/shelves/${shelfId}`));
+  }
+
+  productLocations(productId: number): Promise<ProductScannerLocation[]> {
+    return firstValueFrom(this.http.get<ProductScannerLocation[]>(
+      `${this.baseUrl}/inventory/products/${productId}/locations`,
+    ));
   }
 
   addShelfLevel(shelfId: number): Promise<ShelfDetail> {
@@ -53,6 +68,11 @@ export class InventoryApiService {
   setInventory(levelId: number, productId: number, qty: number, binNumber = 1): Promise<ShelfLevel> {
     return firstValueFrom(this.http.put<ShelfLevel>(
       `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, qty, binNumber }));
+  }
+
+  adjustInventory(levelId: number, productId: number, delta: number, binNumber = 1): Promise<ShelfLevel> {
+    return firstValueFrom(this.http.patch<ShelfLevel>(
+      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, delta, binNumber }));
   }
 
   products(): Promise<ProductListItem[]> {

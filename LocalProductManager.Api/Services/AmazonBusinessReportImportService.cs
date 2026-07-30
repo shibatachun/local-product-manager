@@ -39,26 +39,25 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                         Value(row, "(Child) ASIN"),
                         StringComparison.OrdinalIgnoreCase));
 
-            Product? parentProduct = null;
+            AmazonMarketingProduct? parentProduct = null;
             if (isVariation)
             {
                 variationGroups++;
                 var parentSku = $"PARENT-{parentAsin}";
-                parentProduct = await db.Products
-                    .Include(product => product.Listings)
-                    .Include(product => product.AmazonAsins)
+                parentProduct = await db.AmazonMarketingProducts
+                    .Include(product => product.Asins)
                     .FirstOrDefaultAsync(product => product.Sku == parentSku, cancellationToken);
 
                 if (parentProduct is null)
                 {
-                    parentProduct = new Product
+                    parentProduct = new AmazonMarketingProduct
                     {
                         Sku = parentSku,
                         ProductName = BuildParentTitle(groupRows),
                         ProductType = "parent",
                         AmazonParentAsin = parentAsin
                     };
-                    db.Products.Add(parentProduct);
+                    db.AmazonMarketingProducts.Add(parentProduct);
                     parentCreated++;
                 }
                 else
@@ -70,10 +69,7 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                     updated++;
                 }
 
-                EnsureAmazonListing(parentProduct);
                 EnsureAsin(parentProduct, parentAsin, "parent", null);
-                await db.SaveChangesAsync(cancellationToken);
-                EnsureLocalInventoryId(parentProduct);
                 await db.SaveChangesAsync(cancellationToken);
             }
 
@@ -82,14 +78,13 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                 var sku = Value(row, "SKU");
                 var childAsin = Value(row, "(Child) ASIN").ToUpperInvariant();
                 var title = Value(row, "Title");
-                var product = await db.Products
-                    .Include(item => item.Listings)
-                    .Include(item => item.AmazonAsins)
+                var product = await db.AmazonMarketingProducts
+                    .Include(item => item.Asins)
                     .FirstOrDefaultAsync(item => item.Sku == sku, cancellationToken);
 
                 if (product is null)
                 {
-                    product = new Product
+                    product = new AmazonMarketingProduct
                     {
                         Sku = sku,
                         ProductName = string.IsNullOrWhiteSpace(title) ? sku : title,
@@ -98,7 +93,7 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                         SkuBase = ProductService.GetSkuBase(sku),
                         AmazonParentAsin = isVariation ? parentAsin : null
                     };
-                    db.Products.Add(product);
+                    db.AmazonMarketingProducts.Add(product);
                     if (isVariation) childCreated++; else standaloneCreated++;
                 }
                 else
@@ -112,10 +107,7 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
                     updated++;
                 }
 
-                EnsureAmazonListing(product);
                 EnsureAsin(product, childAsin, "child", isVariation ? parentAsin : null);
-                await db.SaveChangesAsync(cancellationToken);
-                EnsureLocalInventoryId(product);
                 await db.SaveChangesAsync(cancellationToken);
             }
         }
@@ -159,32 +151,13 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
             : title;
     }
 
-    private static void EnsureAmazonListing(Product product)
+    private static void EnsureAsin(AmazonMarketingProduct product, string asin, string asinType, string? parentAsin)
     {
-        if (product.Listings.All(listing => listing.Platform != "amazon"))
-        {
-            product.Listings.Add(new ProductListing
-            {
-                Platform = "amazon"
-            });
-        }
-    }
-
-    private static void EnsureLocalInventoryId(Product product)
-    {
-        if (string.IsNullOrWhiteSpace(product.LocalInventoryId))
-        {
-            product.LocalInventoryId = ProductService.BuildLocalInventoryId(product.Id);
-        }
-    }
-
-    private static void EnsureAsin(Product product, string asin, string asinType, string? parentAsin)
-    {
-        var existing = product.AmazonAsins.FirstOrDefault(
+        var existing = product.Asins.FirstOrDefault(
             item => string.Equals(item.Asin, asin, StringComparison.OrdinalIgnoreCase));
         if (existing is null)
         {
-            product.AmazonAsins.Add(new AmazonAsin
+            product.Asins.Add(new AmazonMarketingAsin
             {
                 Asin = asin,
                 AsinType = asinType,
@@ -195,7 +168,6 @@ public sealed class AmazonBusinessReportImportService(AppDbContext db)
         {
             existing.AsinType = asinType;
             existing.ParentAsin = parentAsin;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
     }
 }

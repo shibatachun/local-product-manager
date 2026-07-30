@@ -2,17 +2,29 @@ using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.IncludeFormattedMessage = true;
+    options.IncludeScopes = true;
+    options.AddOtlpExporter();
+});
 
 var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Data Source=Data/local-product-manager.db";
 var connectionString = ResolveSqliteConnectionString(
     configuredConnectionString,
     builder.Environment.ContentRootPath);
+connectionString = AddSqliteWriteSettings(connectionString);
 var dbPath = GetSqlitePath(connectionString);
 if (dbPath is not null)
 {
@@ -21,7 +33,20 @@ if (dbPath is not null)
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+builder.Services.AddHealthChecks();
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("inventory-api"))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddOtlpExporter())
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter());
 builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<InventoryWriteService>();
 builder.Services.AddScoped<ProductExportService>();
 builder.Services.AddScoped<AmazonAttributionImportService>();
 builder.Services.AddScoped<AmazonBusinessReportImportService>();
@@ -64,13 +89,6 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 const string appVersion = "2026-06-18-auth-permissions-v1";
-var angularRoot = Path.GetFullPath(Path.Combine(
-    app.Environment.ContentRootPath,
-    "..",
-    "LocalProductManager.Web",
-    "dist",
-    "LocalProductManager.Web",
-    "browser"));
 var updatesRoot = Path.GetFullPath(Path.Combine(
     app.Environment.ContentRootPath,
     "..",
@@ -82,6 +100,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     DatabaseSchemaService.Upgrade(db);
+    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
+    db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
 }
 
@@ -97,30 +117,10 @@ else
 app.UseCors("LanFrontend");
 app.MapGet("/api/app/version", () =>
 {
-    var indexPath = Path.Combine(angularRoot, "index.html");
-    var mainFiles = Directory.Exists(angularRoot)
-        ? Directory.GetFiles(angularRoot, "main-*.js")
-            .Select(path => new FileInfo(path))
-            .OrderByDescending(file => file.LastWriteTimeUtc)
-            .Select(file => new
-            {
-                file.Name,
-                lastWriteTime = file.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
-            })
-            .ToList()
-        : [];
-
     return Results.Ok(new
     {
         version = appVersion,
-        contentRoot = app.Environment.ContentRootPath,
-        angularRoot,
-        angularRootExists = Directory.Exists(angularRoot),
-        indexExists = File.Exists(indexPath),
-        indexLastWriteTime = File.Exists(indexPath)
-            ? File.GetLastWriteTime(indexPath).ToString("yyyy-MM-dd HH:mm:ss")
-            : null,
-        mainFiles
+        service = "inventory-api"
     });
 });
 app.UseStaticFiles(new StaticFileOptions
@@ -134,34 +134,11 @@ app.UseStaticFiles(new StaticFileOptions
         context.Context.Response.Headers.Expires = "0";
     }
 });
-if (Directory.Exists(angularRoot))
-{
-    var angularFiles = new PhysicalFileProvider(angularRoot);
-    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = angularFiles });
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = angularFiles,
-        OnPrepareResponse = context =>
-        {
-            context.Context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-            context.Context.Response.Headers.Pragma = "no-cache";
-            context.Context.Response.Headers.Expires = "0";
-        }
-    });
-}
 app.MapControllers();
-if (Directory.Exists(angularRoot))
+app.MapHealthChecks("/health", new HealthCheckOptions
 {
-    var indexPath = Path.Combine(angularRoot, "index.html");
-    app.MapFallback(async context =>
-    {
-        context.Response.ContentType = "text/html; charset=utf-8";
-        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-        context.Response.Headers.Pragma = "no-cache";
-        context.Response.Headers.Expires = "0";
-        await context.Response.SendFileAsync(indexPath);
-    });
-}
+    AllowCachingResponses = false
+});
 
 app.Run();
 
@@ -203,3 +180,24 @@ static string ResolveSqliteConnectionString(string connectionString, string cont
 
     return string.Join(';', parts);
 }
+
+static string AddSqliteWriteSettings(string connectionString)
+{
+    var parts = connectionString
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .ToList();
+
+    if (!parts.Any(value => value.StartsWith("Default Timeout=", StringComparison.OrdinalIgnoreCase)))
+    {
+        parts.Add("Default Timeout=10");
+    }
+
+    if (!parts.Any(value => value.StartsWith("Pooling=", StringComparison.OrdinalIgnoreCase)))
+    {
+        parts.Add("Pooling=True");
+    }
+
+    return string.Join(';', parts);
+}
+
+public partial class Program;

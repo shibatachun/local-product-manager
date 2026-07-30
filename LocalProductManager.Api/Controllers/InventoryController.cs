@@ -9,7 +9,10 @@ namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/inventory")]
-public sealed class InventoryController(AppDbContext db, AuthService auth) : ControllerBase
+public sealed class InventoryController(
+    AppDbContext db,
+    AuthService auth,
+    InventoryWriteService inventoryWrites) : ControllerBase
 {
     [HttpGet("warehouse")]
     public async Task<ActionResult<WarehouseDto?>> GetWarehouse(CancellationToken cancellationToken)
@@ -21,6 +24,46 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
             .OrderBy(item => item.Id)
             .FirstOrDefaultAsync(cancellationToken);
         return warehouse is null ? NoContent() : Ok(ToDto(warehouse));
+    }
+
+    [HttpGet("products/{productId:int}/locations")]
+    public async Task<ActionResult<IReadOnlyList<ScannerLocationDto>>> GetProductLocations(
+        int productId,
+        CancellationToken cancellationToken)
+    {
+        if (!await db.Products.AnyAsync(item => item.Id == productId, cancellationToken))
+            return NotFound();
+
+        var levels = await db.ShelfLevels
+            .AsNoTracking()
+            .OrderBy(level => level.Code)
+            .Select(level => new
+            {
+                level.Id,
+                level.Code,
+                level.LevelNumber,
+                level.WarehouseShelf!.RowNumber,
+                level.WarehouseShelf.RackNumber,
+                Bin01Qty = level.Inventory
+                    .Where(item => item.ProductId == productId && item.BinNumber == 1)
+                    .Sum(item => (int?)item.Qty) ?? 0,
+                Bin02Qty = level.Inventory
+                    .Where(item => item.ProductId == productId && item.BinNumber == 2)
+                    .Sum(item => (int?)item.Qty) ?? 0
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return Ok(levels.SelectMany(level => new[]
+        {
+            new ScannerLocationDto(
+                level.Id, 1, $"{level.Id}:1", $"{level.Code}-B01",
+                $"Row {level.RowNumber} · Rack {level.RackNumber} · Level {level.LevelNumber} · Bin 1",
+                level.Bin01Qty),
+            new ScannerLocationDto(
+                level.Id, 2, $"{level.Id}:2", $"{level.Code}-B02",
+                $"Row {level.RowNumber} · Rack {level.RackNumber} · Level {level.LevelNumber} · Bin 2",
+                level.Bin02Qty)
+        }).ToArray());
     }
 
     [HttpPost("warehouses")]
@@ -51,18 +94,18 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
         var zone = string.IsNullOrWhiteSpace(request.ZoneCode)
             ? "A"
             : request.ZoneCode.Trim().ToUpperInvariant()[..1];
-        var aisle = Math.Clamp(request.AisleNumber, 1, 99);
+        var row = Math.Clamp(request.RowNumber, 1, 99);
         var levelCount = Math.Clamp(request.LevelCount, 1, 20);
         var rackNumber = (await db.WarehouseShelves
-            .Where(shelf => shelf.WarehouseId == warehouseId && shelf.ZoneCode == zone && shelf.AisleNumber == aisle)
+            .Where(shelf => shelf.WarehouseId == warehouseId && shelf.ZoneCode == zone && shelf.RowNumber == row)
             .MaxAsync(shelf => (int?)shelf.RackNumber, cancellationToken) ?? 0) + 1;
-        var code = $"{warehouse.Code}-{zone}-{aisle:00}-R{rackNumber:000}";
+        var code = $"{warehouse.Code}-{zone}-{row:00}-R{rackNumber:000}";
         var shelf = new WarehouseShelf
         {
             WarehouseId = warehouseId,
             Code = code,
             ZoneCode = zone,
-            AisleNumber = aisle,
+            RowNumber = row,
             RackNumber = rackNumber,
             LevelCount = levelCount,
             X = Math.Clamp(request.X, 0, 82),
@@ -184,41 +227,43 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
         if (request.BinNumber is < 1 or > 2)
             return BadRequest("Bin number must be 1 or 2.");
 
-        var row = await db.ShelfLevelInventories.FirstOrDefaultAsync(
-            item => item.ShelfLevelId == levelId
-                && item.BinNumber == request.BinNumber
-                && item.ProductId == request.ProductId,
-            cancellationToken);
         var qty = Math.Max(0, request.Qty);
-        if (row is null && qty > 0)
-        {
-            db.ShelfLevelInventories.Add(new ShelfLevelInventory
-                {
-                    ShelfLevelId = levelId,
-                    BinNumber = request.BinNumber,
-                    ProductId = request.ProductId,
-                    Qty = qty
-                });
-        }
-        else if (row is not null && qty == 0)
-        {
-            db.ShelfLevelInventories.Remove(row);
-        }
-        else if (row is not null)
-        {
-            row.Qty = qty;
-            row.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-        await db.SaveChangesAsync(cancellationToken);
+        await inventoryWrites.SetAsync(
+            levelId, request.BinNumber, request.ProductId, qty, cancellationToken);
 
-        var product = await db.Products.FindAsync([request.ProductId], cancellationToken);
-        if (product is not null)
+        var updated = await db.ShelfLevels.AsNoTracking()
+            .Include(item => item.Inventory).ThenInclude(item => item.Product)
+            .FirstAsync(item => item.Id == levelId, cancellationToken);
+        return Ok(ToDto(updated));
+    }
+
+    [HttpPatch("levels/{levelId:int}/inventory")]
+    public async Task<ActionResult<ShelfLevelDto>> AdjustLevelInventory(
+        int levelId,
+        AdjustLevelInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Delta == 0)
+            return BadRequest("Inventory delta cannot be 0.");
+
+        if (request.BinNumber is < 1 or > 2)
+            return BadRequest("Bin number must be 1 or 2.");
+
+        if (!await db.ShelfLevels.AnyAsync(item => item.Id == levelId, cancellationToken)
+            || !await db.Products.AnyAsync(item => item.Id == request.ProductId, cancellationToken))
+            return NotFound();
+
+        var adjusted = await inventoryWrites.AdjustAsync(
+            levelId, request.BinNumber, request.ProductId, request.Delta, cancellationToken);
+        if (!adjusted)
         {
-            product.Qty = await db.ShelfLevelInventories
-                .Where(item => item.ProductId == request.ProductId)
-                .SumAsync(item => item.Qty, cancellationToken);
-            product.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
+            return Conflict(new
+            {
+                message = "Insufficient inventory for this stock-out operation.",
+                productId = request.ProductId,
+                levelId,
+                binNumber = request.BinNumber
+            });
         }
 
         var updated = await db.ShelfLevels.AsNoTracking()
@@ -232,7 +277,7 @@ public sealed class InventoryController(AppDbContext db, AuthService auth) : Con
         warehouse.Shelves.OrderBy(item => item.Code).Select(ToDto).ToArray());
 
     private static WarehouseShelfDto ToDto(WarehouseShelf shelf) => new(
-        shelf.Id, shelf.Code, shelf.ZoneCode, shelf.AisleNumber, shelf.RackNumber, shelf.LevelCount,
+        shelf.Id, shelf.Code, shelf.ZoneCode, shelf.RowNumber, shelf.RackNumber, shelf.LevelCount,
         shelf.X, shelf.Y, shelf.Width, shelf.Height, shelf.Rotation,
         shelf.Levels.SelectMany(level => level.Inventory).Sum(item => item.Qty));
 

@@ -45,13 +45,13 @@
 <section class="inventory-modal compact" *ngIf="addShelfOpen() && isAdmin()" role="dialog" aria-modal="true">
   <header><div><small>Warehouse layout</small><h2>Add shelf</h2></div><button type="button" (click)="addShelfOpen.set(false)">×</button></header>
   <div class="modal-content">
-    <p>The next rack number is assigned automatically using the warehouse, zone, and aisle.</p>
+    <p>The next rack number is assigned automatically using the warehouse, zone, and row.</p>
     <div class="form-row">
       <label>Zone code<input maxlength="1" [(ngModel)]="shelfForm.zoneCode" /></label>
-      <label>Aisle number<input type="number" min="1" max="99" [(ngModel)]="shelfForm.aisleNumber" /></label>
+      <label>Row number<input type="number" min="1" max="99" [(ngModel)]="shelfForm.rowNumber" /></label>
       <label>Number of levels<input type="number" min="1" max="20" [(ngModel)]="shelfForm.levelCount" /></label>
     </div>
-    <div class="code-preview">{{ warehouse()?.code }}-{{ shelfForm.zoneCode || 'A' }}-{{ shelfForm.aisleNumber | number:'2.0-0' }}-R###</div>
+    <div class="code-preview">{{ warehouse()?.code }}-{{ (shelfForm.zoneCode || 'A').toUpperCase() }}-{{ shelfForm.rowNumber | number:'2.0-0' }}-R{{ nextRackNumber() | number:'3.0-0' }}</div>
   </div>
   <footer><button type="button" (click)="addShelfOpen.set(false)">Cancel</button><button class="add-button" type="button" (click)="createShelf()" [disabled]="loading()">Create shelf</button></footer>
 </section>
@@ -86,14 +86,19 @@
         </div>
         <div class="inventory-list" *ngIf="selectedBinItems().length">
           <div *ngFor="let item of selectedBinItems()">
-            <span><strong>{{ item.productName }}</strong><code>{{ item.sku }}</code></span>
+            <button class="inventory-product-link" type="button" (click)="showProductDetail(item.productId)">
+              <strong>{{ item.productName }}</strong><code>{{ item.sku }}</code>
+            </button>
             <div class="inventory-item-actions"><b>{{ item.qty }}</b><button type="button" (click)="removeInventoryItem(item)" [disabled]="loading()">Remove</button></div>
           </div>
         </div>
         <div class="level-empty small" *ngIf="!selectedBinItems().length">No products stored in this bin.</div>
         <p class="delete-guidance" *ngIf="level.items.length">Set every product quantity to 0 or move the stock to another level before deleting this level.</p>
         <div class="stock-editor">
-          <h4>Add or update inventory</h4>
+          <div class="stock-editor-heading">
+            <h4>Add or update inventory</h4>
+            <button class="new-product-button" type="button" (click)="requestAddProduct()" [disabled]="loading()">+ Add new product</button>
+          </div>
           <label>Product
             <select [(ngModel)]="inventoryForm.productId" (ngModelChange)="onProductChanged($event)">
               <option [ngValue]="null">Choose product</option>

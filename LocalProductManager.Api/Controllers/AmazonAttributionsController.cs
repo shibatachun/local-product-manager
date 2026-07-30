@@ -19,12 +19,12 @@ public sealed class AmazonAttributionsController(
         [FromQuery] int? amazonAsinId,
         CancellationToken cancellationToken)
     {
-        if (!await db.Products.AnyAsync(product => product.Id == productId, cancellationToken))
+        if (!await db.AmazonMarketingProducts.AnyAsync(product => product.Id == productId, cancellationToken))
         {
             return NotFound();
         }
 
-        var query = db.AmazonAttributionLinks
+        var query = db.AmazonMarketingAttributionLinks
             .AsNoTracking()
             .Where(link => link.ProductId == productId);
 
@@ -37,7 +37,9 @@ public sealed class AmazonAttributionsController(
             .OrderBy(link => link.Platform)
             .ToListAsync(cancellationToken);
 
-        return Ok(links.Select(ProductMapper.ToDto).ToArray());
+        return Ok(links.Select(link => new AmazonAttributionLinkDto(
+            link.Id, link.ProductId, link.AmazonAsinId, link.Platform, link.AttributionUrl,
+            link.ImportedFileName, link.CreatedAt, link.UpdatedAt)).ToArray());
     }
 
     [HttpPut("{platform}")]

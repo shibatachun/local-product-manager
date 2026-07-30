@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { BrowserQRCodeSvgWriter } from '@zxing/browser';
+import { EncodeHintType } from '@zxing/library';
 import {
   AmazonAsin,
   AttributionPlatform,
@@ -18,6 +20,7 @@ import {
 } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService } from '../../core/product-api.service';
+import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
 import { FileStoragePanelComponent } from './file-storage-panel.component';
 import { VideoTrendPanelComponent } from './video-trend-panel.component';
 import { UnitConverterPanelComponent } from './unit-converter-panel.component';
@@ -161,14 +164,19 @@ interface PlatformChoice {
   ],
 })
 export class ProductManagerPage {
+  @ViewChild('inventoryPanel') inventoryPanel?: InventoryManagerPanelComponent;
+  @ViewChild('createdBarcode') createdBarcode?: ElementRef<SVGSVGElement>;
+  @ViewChild('detailBarcode') detailBarcode?: ElementRef<SVGSVGElement>;
   private readonly route = inject(ActivatedRoute);
   readonly api = inject(ProductApiService);
   readonly authApi = inject(AuthApiService);
+  private readonly inventoryApi = inject(InventoryApiService);
 
   readonly currentUser = signal<CurrentUser | null>(null);
   readonly products = signal<ProductListItem[]>([]);
   readonly marketingProducts = signal<ProductListItem[]>([]);
   readonly selectedProduct = signal<ProductDetail | null>(null);
+  readonly detailLocations = signal<ProductScannerLocation[]>([]);
   readonly search = signal('');
   readonly marketingSearch = signal('');
   readonly marketingProductFilter = signal<MarketingProductFilter>('family-one');
@@ -177,6 +185,10 @@ export class ProductManagerPage {
   readonly mobileMenuOpen = signal(false);
   readonly loading = signal(false);
   readonly wizardOpen = signal(false);
+  readonly pendingBinTarget = signal<{ levelId: number; binNumber: number; locationCode: string } | null>(null);
+  readonly createdBinProduct = signal<ProductListItem | null>(null);
+  readonly createdBinLocation = signal('');
+  readonly createdBinQuantity = signal(0);
   readonly importOpen = signal(false);
   readonly unitConverterOpen = signal(false);
   readonly detailOpen = signal(false);
@@ -188,6 +200,8 @@ export class ProductManagerPage {
   );
   readonly matchedImages = signal<string[]>([]);
   readonly detailMatchedImages = signal<string[]>([]);
+  pendingCreateImage: File | null = null;
+  createImagePreviewUrl = '';
   readonly importFile = signal<File | null>(null);
   readonly businessReportFile = signal<File | null>(null);
   readonly bulkAttributionFile = signal<File | null>(null);
@@ -447,6 +461,11 @@ export class ProductManagerPage {
   readonly pricingResult = signal<PricingEstimate | null>(null);
   readonly rmbToUsdRate = signal({ rate: 0.14, date: 'fallback', source: 'Fallback estimate' });
   readonly detailPricingResult = signal<PricingEstimate | null>(null);
+  private productsLoaded = false;
+  private marketingProductsLoaded = false;
+  private imageStorageRootsLoaded = false;
+  private storeLinksLoaded = false;
+  private exchangeRateLoaded = false;
 
   readonly stats = computed(() => {
     const products = this.products();
@@ -482,8 +501,8 @@ export class ProductManagerPage {
   async ngOnInit(): Promise<void> {
     const requestedView = this.route.snapshot.queryParamMap.get('view') as ViewMode | null;
     const validViews: ViewMode[] = ['products', 'inventory', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
-    if (requestedView && validViews.includes(requestedView)) this.changeView(requestedView);
-    await Promise.all([this.loadCurrentUser(), this.loadProducts(), this.loadImageStorageRoots(), this.loadStoreLinks(), this.loadRmbToUsdRate(false)]);
+    if (requestedView && validViews.includes(requestedView)) this.view.set(requestedView);
+    await Promise.all([this.loadCurrentUser(), this.ensureViewData(this.view())]);
   }
 
   async loadCurrentUser(): Promise<void> {
@@ -506,6 +525,7 @@ export class ProductManagerPage {
     try {
       const links = await this.api.storeLinks();
       this.storeLinks.set(links);
+      this.storeLinksLoaded = true;
       for (const link of links) this.storeLinkDrafts[link.platform] = link.url ?? '';
     } catch {
       this.storeLinks.set([]);
@@ -542,6 +562,7 @@ export class ProductManagerPage {
   async loadImageStorageRoots(): Promise<void> {
     try {
       this.imageStorageRoots.set(await this.api.imageStorageRoots());
+      this.imageStorageRootsLoaded = true;
     } catch {
       this.imageStorageRoots.set([]);
     }
@@ -595,6 +616,7 @@ export class ProductManagerPage {
   async loadProducts(): Promise<void> {
     await this.perform(async () => {
       this.products.set(await this.api.search(this.search(), this.platformFilter()));
+      this.productsLoaded = true;
       if (this.pricingProductId() !== null && !this.pricingProduct()) {
         this.pricingProductId.set(null);
       }
@@ -603,7 +625,8 @@ export class ProductManagerPage {
 
   async loadMarketingProducts(): Promise<void> {
     await this.perform(async () => {
-      this.marketingProducts.set(await this.api.search('', '', true));
+      this.marketingProducts.set(await this.api.amazonMarketingProducts());
+      this.marketingProductsLoaded = true;
     }, false);
   }
 
@@ -611,7 +634,30 @@ export class ProductManagerPage {
     this.view.set(view);
     this.mobileMenuOpen.set(false);
     this.detailOpen.set(false);
-    if (view === 'marketing') void this.loadMarketingProducts();
+    void this.ensureViewData(view);
+  }
+
+  private async ensureViewData(view: ViewMode): Promise<void> {
+    if (view === 'products') {
+      await Promise.all([
+        this.productsLoaded ? Promise.resolve() : this.loadProducts(),
+        this.imageStorageRootsLoaded ? Promise.resolve() : this.loadImageStorageRoots(),
+        this.storeLinksLoaded ? Promise.resolve() : this.loadStoreLinks(),
+      ]);
+      return;
+    }
+
+    if (view === 'pricing') {
+      await Promise.all([
+        this.productsLoaded ? Promise.resolve() : this.loadProducts(),
+        this.exchangeRateLoaded ? Promise.resolve() : this.loadRmbToUsdRate(false),
+      ]);
+      return;
+    }
+
+    if (view === 'marketing' && !this.marketingProductsLoaded) {
+      await this.loadMarketingProducts();
+    }
   }
 
   pageEyebrow(): string {
@@ -667,6 +713,7 @@ export class ProductManagerPage {
   async loadRmbToUsdRate(showErrors = true): Promise<void> {
     try {
       this.rmbToUsdRate.set(await this.api.rmbToUsdRate());
+      this.exchangeRateLoaded = true;
       this.pricingResult.set(null);
       this.detailPricingResult.set(null);
     } catch {
@@ -799,7 +846,7 @@ export class ProductManagerPage {
 
   async selectMarketingProduct(productId: number): Promise<void> {
     await this.perform(async () => {
-      this.selectedProduct.set(await this.api.getProduct(productId));
+      this.selectedProduct.set(await this.api.amazonMarketingProduct(productId));
       this.detailOpen.set(false);
     }, false);
   }
@@ -831,7 +878,15 @@ export class ProductManagerPage {
   }
 
   openWizard(): void {
+    this.pendingBinTarget.set(null);
     this.resetWizard();
+    this.wizardOpen.set(true);
+  }
+
+  openWizardForBin(target: { levelId: number; binNumber: number; locationCode: string }): void {
+    this.resetWizard();
+    this.createForm.qty = 1;
+    this.pendingBinTarget.set(target);
     this.wizardOpen.set(true);
   }
 
@@ -939,6 +994,7 @@ export class ProductManagerPage {
 
   closeWizard(): void {
     this.wizardOpen.set(false);
+    this.pendingBinTarget.set(null);
   }
 
   async nextWizardStep(): Promise<void> {
@@ -1001,9 +1057,39 @@ export class ProductManagerPage {
     this.createForm.imagePath = path;
   }
 
+  selectCreateImage(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+    if (!file) return;
+    if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
+    this.pendingCreateImage = file;
+    this.createImagePreviewUrl = URL.createObjectURL(file);
+    this.createForm.imagePath = '';
+  }
+
+  useCreateRemoteImage(url: string): void {
+    this.createForm.imagePath = url.trim();
+    this.pendingCreateImage = null;
+    if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
+    this.createImagePreviewUrl = this.createForm.imagePath;
+  }
+
+  async selectDetailImage(event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    const product = this.selectedProduct();
+    if (!file || !product) return;
+    await this.perform(async () => {
+      const result = await this.api.uploadProductImage(product.id, file);
+      this.editForm.imagePath = result.imagePath;
+      this.detailMatchedImages.set([result.imagePath]);
+      this.bumpProductImageVersion(product.id);
+      this.showNotice('Product image uploaded.');
+    });
+    (event.target as HTMLInputElement).value = '';
+  }
+
   async finishCreate(): Promise<void> {
     await this.perform(async () => {
-      if (!await this.checkCreateSkuDuplicate(false)) return;
+      if (!await this.checkCreateSkuDuplicate()) return;
       const product = await this.api.createProduct({
         localInventoryId: this.createForm.localInventoryId || null,
         sku: this.createForm.sku,
@@ -1020,6 +1106,9 @@ export class ProductManagerPage {
         imagePath: this.createForm.imagePath || null,
         imageSource: this.imageSourceFor(this.createForm.imagePath),
       });
+      if (this.pendingCreateImage) {
+        await this.api.uploadProductImage(product.id, this.pendingCreateImage);
+      }
 
       for (const choice of this.platformChoices.filter((item) => item.selected)) {
         await this.api.saveListing(product.id, { platform: choice.platform, listingUrl: choice.url || null });
@@ -1034,6 +1123,26 @@ export class ProductManagerPage {
         });
       }
 
+      const binTarget = this.pendingBinTarget();
+      if (binTarget) {
+        const quantity = Math.max(1, Math.floor(Number(this.createForm.qty) || 0));
+        await this.inventoryApi.setInventory(
+          binTarget.levelId,
+          product.id,
+          quantity,
+          binTarget.binNumber,
+        );
+        this.pendingBinTarget.set(null);
+        this.wizardOpen.set(false);
+        await this.loadProducts();
+        await this.inventoryPanel?.refreshAfterProductAdded(binTarget.levelId, product.id);
+        this.createdBinProduct.set(product);
+        this.createdBinLocation.set(binTarget.locationCode);
+        this.createdBinQuantity.set(quantity);
+        setTimeout(() => this.renderCreatedBarcode());
+        return;
+      }
+
       this.wizardOpen.set(false);
       await this.loadProducts();
       await this.openDetail(product.id);
@@ -1041,10 +1150,124 @@ export class ProductManagerPage {
     });
   }
 
+  createdBarcodeValue(product: ProductListItem): string {
+    return `LPM|${product.localInventoryId || `INV-${product.id}`}`;
+  }
+
+  closeCreatedBinProduct(): void {
+    this.createdBinProduct.set(null);
+  }
+
+  printCreatedProductLabel(): void {
+    const product = this.createdBinProduct();
+    const svg = this.createdBarcode?.nativeElement;
+    if (!product || !svg) return;
+    const qrMarkup = svg.firstElementChild?.outerHTML || svg.outerHTML;
+
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0';
+    frame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc) {
+      frame.remove();
+      return;
+    }
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>LPM label</title><style>
+      @page{size:50mm 30mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}
+      body{font-family:Arial,sans-serif}.label{position:absolute;top:0;left:0;display:flex;width:50mm;height:30mm;flex-direction:column;align-items:center;justify-content:center;padding:2mm;overflow:hidden;text-align:center}
+      strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+      svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
+    </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)}</code>
+      <small>${this.escapeHtml(product.sku)} · ${this.escapeHtml(this.createdBinLocation())}</small></div></body></html>`);
+    doc.close();
+    setTimeout(() => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      setTimeout(() => frame.remove(), 1500);
+    }, 300);
+  }
+
+  private renderCreatedBarcode(): void {
+    const product = this.createdBinProduct();
+    const svg = this.createdBarcode?.nativeElement;
+    if (!product || !svg) return;
+    const hints = new Map<EncodeHintType, unknown>([
+      [EncodeHintType.ERROR_CORRECTION, 'M'],
+      [EncodeHintType.MARGIN, 2],
+    ]);
+    svg.replaceChildren();
+    const qr = new BrowserQRCodeSvgWriter().write(this.createdBarcodeValue(product), 160, 160, hints);
+    qr.setAttribute('width', '100%');
+    qr.setAttribute('height', '100%');
+    qr.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.appendChild(qr);
+  }
+
+  printDetailProductLabel(): void {
+    const product = this.selectedProduct();
+    const svg = this.detailBarcode?.nativeElement;
+    if (!product || !svg) return;
+    const qrMarkup = svg.firstElementChild?.outerHTML || svg.outerHTML;
+
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0';
+    frame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc) {
+      frame.remove();
+      return;
+    }
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>LPM label</title><style>
+      @page{size:50mm 30mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}
+      body{font-family:Arial,sans-serif}.label{position:absolute;top:0;left:0;display:flex;width:50mm;height:30mm;flex-direction:column;align-items:center;justify-content:center;padding:2mm;overflow:hidden;text-align:center}
+      strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+      svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
+    </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)}</code>
+      <small>${this.escapeHtml(product.sku)}</small></div></body></html>`);
+    doc.close();
+    setTimeout(() => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      setTimeout(() => frame.remove(), 1500);
+    }, 300);
+  }
+
+  private renderDetailBarcode(): void {
+    const product = this.selectedProduct();
+    const svg = this.detailBarcode?.nativeElement;
+    if (!product || !svg) return;
+    const hints = new Map<EncodeHintType, unknown>([
+      [EncodeHintType.ERROR_CORRECTION, 'M'],
+      [EncodeHintType.MARGIN, 2],
+    ]);
+    svg.replaceChildren();
+    const qr = new BrowserQRCodeSvgWriter().write(this.createdBarcodeValue(product), 160, 160, hints);
+    qr.setAttribute('width', '100%');
+    qr.setAttribute('height', '100%');
+    qr.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.appendChild(qr);
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[character]!);
+  }
+
   async openDetail(productId: number): Promise<void> {
     await this.perform(async () => {
-      const product = await this.api.getProduct(productId);
+      const [product, locations] = await Promise.all([
+        this.api.getProduct(productId),
+        this.inventoryApi.productLocations(productId),
+      ]);
       this.selectedProduct.set(product);
+      this.detailLocations.set(locations.filter(location => location.qty > 0));
       this.editForm.localInventoryId = product.localInventoryId ?? '';
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
@@ -1064,11 +1287,13 @@ export class ProductManagerPage {
       this.detailOpen.set(true);
       this.detailMatchedImages.set(product.imagePath ? [product.imagePath] : []);
       this.syncDetailPricing(product);
+      setTimeout(() => this.renderDetailBarcode());
     }, false);
   }
 
   closeDetail(): void {
     this.detailOpen.set(false);
+    this.detailLocations.set([]);
   }
 
   async updateProduct(): Promise<void> {
@@ -1104,7 +1329,7 @@ export class ProductManagerPage {
     });
   }
 
-  private async checkCreateSkuDuplicate(showSameBaseNotice = true): Promise<boolean> {
+  private async checkCreateSkuDuplicate(): Promise<boolean> {
     const sku = this.createForm.sku.trim();
     if (!sku) return false;
     const duplicate = await this.api.checkDuplicateSku(sku);
@@ -1114,14 +1339,6 @@ export class ProductManagerPage {
         await this.openDetail(duplicate.exactProductId);
       }
       return false;
-    }
-
-    if (showSameBaseNotice && duplicate.sameBaseProducts.length) {
-      const related = duplicate.sameBaseProducts
-        .slice(0, 3)
-        .map((product) => product.sku)
-        .join(', ');
-      this.showNotice(`No exact duplicate. Same SKU number prefix found: ${related}.`);
     }
 
     return true;
@@ -1808,6 +2025,9 @@ export class ProductManagerPage {
   }
 
   private resetWizard(): void {
+    if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
+    this.pendingCreateImage = null;
+    this.createImagePreviewUrl = '';
     Object.assign(this.createForm, {
       localInventoryId: '',
       sku: '',

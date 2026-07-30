@@ -95,7 +95,7 @@ export interface WarehouseShelf {
   id: number;
   code: string;
   zoneCode: string;
-  aisleNumber: number;
+  rowNumber: number;
   rackNumber: number;
   levelCount: number;
   x: number;

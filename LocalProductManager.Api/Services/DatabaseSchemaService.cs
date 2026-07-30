@@ -265,7 +265,131 @@ public sealed class DatabaseSchemaService
         db.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS IX_video_trend_items_Platform ON video_trend_items (Platform)");
 
+        CreateAmazonMarketingSchema(db);
+        SeparateAmazonMarketingData(db);
         RemoveDemoSocialData(db);
+    }
+
+    private static void CreateAmazonMarketingSchema(DbContext db)
+    {
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS app_schema_state (
+                Key TEXT NOT NULL PRIMARY KEY,
+                AppliedAt TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS amazon_marketing_products (
+                Id INTEGER NOT NULL PRIMARY KEY,
+                Sku TEXT NOT NULL,
+                ProductName TEXT NOT NULL,
+                ImageUrl TEXT NULL,
+                ProductType TEXT NOT NULL,
+                SkuBase TEXT NULL,
+                AmazonParentAsin TEXT NULL,
+                ParentProductId INTEGER NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CONSTRAINT FK_amazon_marketing_products_parent
+                    FOREIGN KEY (ParentProductId) REFERENCES amazon_marketing_products (Id) ON DELETE RESTRICT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_amazon_marketing_products_Sku ON amazon_marketing_products (Sku);
+            CREATE TABLE IF NOT EXISTS amazon_marketing_asins (
+                Id INTEGER NOT NULL PRIMARY KEY,
+                ProductId INTEGER NOT NULL,
+                Asin TEXT NOT NULL,
+                AsinType TEXT NOT NULL,
+                ParentAsin TEXT NULL,
+                AmazonAttributeDone INTEGER NOT NULL,
+                CONSTRAINT FK_amazon_marketing_asins_product
+                    FOREIGN KEY (ProductId) REFERENCES amazon_marketing_products (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_amazon_marketing_asins_ProductId_Asin
+                ON amazon_marketing_asins (ProductId, Asin);
+            CREATE TABLE IF NOT EXISTS amazon_marketing_attribution_links (
+                Id INTEGER NOT NULL PRIMARY KEY,
+                ProductId INTEGER NOT NULL,
+                AmazonAsinId INTEGER NULL,
+                Platform TEXT NOT NULL,
+                AttributionUrl TEXT NOT NULL,
+                ImportedFileName TEXT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CONSTRAINT FK_amazon_marketing_links_product
+                    FOREIGN KEY (ProductId) REFERENCES amazon_marketing_products (Id) ON DELETE CASCADE,
+                CONSTRAINT FK_amazon_marketing_links_asin
+                    FOREIGN KEY (AmazonAsinId) REFERENCES amazon_marketing_asins (Id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_amazon_marketing_links_ProductId_Asin_Platform
+                ON amazon_marketing_attribution_links (ProductId, AmazonAsinId, Platform);
+            """);
+    }
+
+    private static void SeparateAmazonMarketingData(DbContext db)
+    {
+        const string migrationKey = "separate-amazon-marketing-v1";
+        using var check = db.Database.GetDbConnection().CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM app_schema_state WHERE Key = $key";
+        var parameter = check.CreateParameter();
+        parameter.ParameterName = "$key";
+        parameter.Value = migrationKey;
+        check.Parameters.Add(parameter);
+        if (Convert.ToInt32(check.ExecuteScalar()) > 0) return;
+
+        using var transaction = db.Database.BeginTransaction();
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TEMP TABLE amazon_migration_ids AS
+            SELECT p.Id,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM product_listings other
+                    WHERE other.ProductId = p.Id AND lower(other.Platform) <> 'amazon'
+                ) THEN 1 ELSE 0 END AS HasNonAmazon
+            FROM products p
+            WHERE EXISTS (SELECT 1 FROM product_listings l WHERE l.ProductId = p.Id AND lower(l.Platform) = 'amazon')
+               OR EXISTS (SELECT 1 FROM amazon_asins a WHERE a.ProductId = p.Id)
+               OR EXISTS (SELECT 1 FROM amazon_attribution_links x WHERE x.ProductId = p.Id);
+
+            INSERT INTO amazon_marketing_products
+                (Id, Sku, ProductName, ImageUrl, ProductType, SkuBase, AmazonParentAsin, ParentProductId, CreatedAt, UpdatedAt)
+            SELECT p.Id, p.Sku, p.ProductName, p.ImagePath, p.ProductType, p.SkuBase, p.AmazonParentAsin,
+                CASE WHEN parent.Id IS NOT NULL THEN p.ParentProductId ELSE NULL END,
+                p.CreatedAt, p.UpdatedAt
+            FROM products p
+            JOIN amazon_migration_ids ids ON ids.Id = p.Id
+            LEFT JOIN amazon_migration_ids parent ON parent.Id = p.ParentProductId;
+
+            INSERT INTO amazon_marketing_asins
+                (Id, ProductId, Asin, AsinType, ParentAsin, AmazonAttributeDone)
+            SELECT a.Id, a.ProductId, a.Asin, a.AsinType, a.ParentAsin, a.AmazonAttributeDone
+            FROM amazon_asins a JOIN amazon_migration_ids ids ON ids.Id = a.ProductId;
+
+            INSERT INTO amazon_marketing_attribution_links
+                (Id, ProductId, AmazonAsinId, Platform, AttributionUrl, ImportedFileName, CreatedAt, UpdatedAt)
+            SELECT x.Id, x.ProductId, x.AmazonAsinId, x.Platform, x.AttributionUrl,
+                x.ImportedFileName, x.CreatedAt, x.UpdatedAt
+            FROM amazon_attribution_links x JOIN amazon_migration_ids ids ON ids.Id = x.ProductId;
+            """);
+
+        var oldLinks = db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM amazon_attribution_links").Single();
+        var newLinks = db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM amazon_marketing_attribution_links").Single();
+        if (oldLinks != newLinks)
+            throw new InvalidOperationException($"Amazon attribution migration validation failed: {oldLinks} source links, {newLinks} copied links.");
+
+        db.Database.ExecuteSqlRaw(
+            """
+            DELETE FROM shelf_level_inventory;
+            UPDATE products SET Qty = 0, UpdatedAt = CURRENT_TIMESTAMP WHERE Qty <> 0;
+            DELETE FROM amazon_attribution_links;
+            DELETE FROM amazon_asins;
+            DELETE FROM product_listings WHERE lower(Platform) = 'amazon';
+            UPDATE products SET ParentProductId = NULL
+            WHERE ParentProductId IN (SELECT Id FROM amazon_migration_ids WHERE HasNonAmazon = 0);
+            DELETE FROM products
+            WHERE Id IN (SELECT Id FROM amazon_migration_ids WHERE HasNonAmazon = 0);
+            INSERT INTO app_schema_state (Key, AppliedAt) VALUES ('separate-amazon-marketing-v1', CURRENT_TIMESTAMP);
+            DROP TABLE amazon_migration_ids;
+            """);
+        transaction.Commit();
     }
 
     private static void RemoveDemoSocialData(DbContext db)

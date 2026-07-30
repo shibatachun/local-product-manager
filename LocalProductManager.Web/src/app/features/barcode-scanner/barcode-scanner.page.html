@@ -55,7 +55,7 @@
         <div><dt>SKU</dt><dd>{{ item.sku }}</dd></div>
         <div><dt>Product name</dt><dd>{{ item.productName }}</dd></div>
         <div><dt>Quantity</dt><dd class="quantity">{{ item.qty }}</dd></div>
-        <div><dt>Location</dt><dd><span class="location" *ngFor="let location of locations()">{{ location.code }} · {{ location.qty }}</span><span class="muted" *ngIf="!locations().length">No warehouse location assigned</span></dd></div>
+        <div><dt>Location</dt><dd><span class="location" *ngFor="let location of locations()">{{ location.description }} · {{ location.qty }}</span><span class="muted" *ngIf="!locations().length">No warehouse location assigned</span></dd></div>
       </dl>
       <div class="operations" *ngIf="!operation()">
         <button class="stock-in" type="button" (click)="startOperation('in')">＋ Stock in</button>
@@ -66,7 +66,7 @@
         <label>Location
           <select name="operationLocation" [(ngModel)]="operationLocationKey" required>
             <option [ngValue]="null">Choose warehouse location</option>
-            <option *ngFor="let location of operationLocations()" [ngValue]="location.key">{{ location.code }} · Current {{ location.qty }}</option>
+            <option *ngFor="let location of operationLocations()" [ngValue]="location.key">{{ location.description }} · Current {{ location.qty }}</option>
           </select>
         </label>
         <label>Quantity

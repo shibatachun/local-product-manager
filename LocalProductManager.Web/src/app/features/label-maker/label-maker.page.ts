@@ -5,9 +5,11 @@ import { RouterLink } from '@angular/router';
 import { BrowserQRCodeSvgWriter } from '@zxing/browser';
 import { EncodeHintType } from '@zxing/library';
 import { ProductApiService } from '../../core/product-api.service';
+import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
 
-type LabelPreset = { name: string; width: number; height: number };
+type LabelPreset = { name: string; width: number; height: number; columns: 1 | 2 };
+type BinLabel = { code: string; description: string };
 
 @Component({
   selector: 'app-label-maker',
@@ -20,25 +22,29 @@ export class LabelMakerPage implements AfterViewChecked {
   @Input() embedded = false;
   @ViewChildren('barcode') barcodeElements?: QueryList<ElementRef<HTMLElement>>;
   private readonly api = inject(ProductApiService);
+  private readonly inventoryApi = inject(InventoryApiService);
 
   readonly products = signal<ProductListItem[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
   readonly mobileMenuOpen = signal(false);
   readonly selectedIds = signal(new Set<number>());
+  readonly bins = signal<BinLabel[]>([]);
+  readonly selectedBinCodes = signal(new Set<string>());
+  labelMode: 'product' | 'bin' = 'product';
+  binSearch = '';
+  binDescription = '';
 
   readonly presets: LabelPreset[] = [
-    { name: '50 × 30 mm', width: 50, height: 30 },
-    { name: '2 × 1 in', width: 50.8, height: 25.4 },
-    { name: '3 × 1 in', width: 76.2, height: 25.4 },
-    { name: '4 × 2 in', width: 101.6, height: 50.8 },
+    { name: '70 × 20 mm · Single column', width: 70, height: 20, columns: 1 },
+    { name: '50 × 30 mm · Double column', width: 50, height: 30, columns: 2 },
   ];
   search = '';
   preset = this.presets[0];
   widthMm = this.preset.width;
   heightMm = this.preset.height;
   labelGapMm = 3;
-  columns: 1 | 2 = 2;
+  columns: 1 | 2 = this.preset.columns;
   columnGapMm = 0;
   rowGapMm = 0;
   sideMarginMm = 0;
@@ -49,7 +55,10 @@ export class LabelMakerPage implements AfterViewChecked {
   showName = true;
   showQuantity = false;
 
-  constructor() { void this.loadProducts(); }
+  constructor() {
+    void this.loadProducts();
+    void this.loadBins();
+  }
 
   ngAfterViewChecked(): void {
     this.barcodeElements?.forEach(reference => {
@@ -92,6 +101,26 @@ export class LabelMakerPage implements AfterViewChecked {
     return rows;
   }
 
+  get filteredBins(): BinLabel[] {
+    const keyword = this.binSearch.trim().toLocaleLowerCase();
+    return this.bins().filter(bin => !keyword ||
+      bin.code.toLocaleLowerCase().includes(keyword) ||
+      bin.description.toLocaleLowerCase().includes(keyword));
+  }
+
+  get selectedBins(): BinLabel[] {
+    const codes = this.selectedBinCodes();
+    return this.bins().filter(bin => codes.has(bin.code));
+  }
+
+  get binLabelRows(): BinLabel[][] {
+    const rows: BinLabel[][] = [];
+    for (let index = 0; index < this.selectedBins.length; index += this.columns) {
+      rows.push(this.selectedBins.slice(index, index + this.columns));
+    }
+    return rows;
+  }
+
   get rollWidthMm(): number {
     return (this.widthMm * this.columns) + (this.columnGapMm * (this.columns - 1)) + (this.sideMarginMm * 2);
   }
@@ -100,19 +129,14 @@ export class LabelMakerPage implements AfterViewChecked {
     return this.heightMm + this.rowGapMm;
   }
 
-  useTwoColumnRoll(): void {
-    this.columns = 2;
-    this.widthMm = 50;
-    this.heightMm = 30;
-    this.columnGapMm = 0;
-    this.rowGapMm = 0;
-    this.sideMarginMm = 0;
-  }
-
   selectPreset(preset: LabelPreset): void {
     this.preset = preset;
     this.widthMm = preset.width;
     this.heightMm = preset.height;
+    this.columns = preset.columns;
+    this.columnGapMm = 0;
+    this.rowGapMm = 0;
+    this.sideMarginMm = 0;
   }
 
   toggleProduct(id: number): void {
@@ -128,6 +152,20 @@ export class LabelMakerPage implements AfterViewChecked {
   }
 
   clearSelection(): void { this.selectedIds.set(new Set()); }
+
+  toggleBin(code: string): void {
+    const next = new Set(this.selectedBinCodes());
+    next.has(code) ? next.delete(code) : next.add(code);
+    this.selectedBinCodes.set(next);
+  }
+
+  selectVisibleBins(): void {
+    const next = new Set(this.selectedBinCodes());
+    this.filteredBins.forEach(bin => next.add(bin.code));
+    this.selectedBinCodes.set(next);
+  }
+
+  clearBinSelection(): void { this.selectedBinCodes.set(new Set()); }
 
   inventoryNumber(product: ProductListItem): string {
     return product.localInventoryId || `INV-${product.id}`;
@@ -198,6 +236,40 @@ export class LabelMakerPage implements AfterViewChecked {
     }, 300);
   }
 
+  printBinLabels(): void {
+    if (!this.selectedBins.length) return;
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.bin-label-sheet .label-row'));
+    if (!rows.length) return;
+
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0';
+    frame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc) {
+      frame.remove();
+      return;
+    }
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Bin labels</title><style>
+      @page{size:${this.rollWidthMm}mm ${this.rollRowHeightMm}mm;margin:0}*{box-sizing:border-box}
+      html,body{width:${this.rollWidthMm}mm;margin:0;padding:0;background:#fff}
+      body{color:#000;font-family:Consolas,"Cascadia Mono",monospace}
+      .label-row{display:flex;width:${this.rollWidthMm}mm;height:${this.rollRowHeightMm}mm;gap:${this.columnGapMm}mm;margin:0;padding:0 ${this.sideMarginMm}mm ${this.rowGapMm}mm;overflow:hidden;break-after:page;page-break-after:always}
+      .label-row:last-child{break-after:auto;page-break-after:auto}
+      .bin-label{display:flex;flex:0 0 ${this.widthMm}mm;flex-direction:column;align-items:center;justify-content:center;gap:1.2mm;width:${this.widthMm}mm;height:${this.heightMm}mm;padding:2.5mm;overflow:hidden;text-align:center}
+      .bin-description{display:block;max-width:100%;overflow:hidden;font-family:Arial,sans-serif;font-size:${Math.max(9, this.fontSize)}px;font-weight:700;line-height:1.15;overflow-wrap:anywhere}
+      .bin-code{display:block;max-width:100%;font-size:${Math.max(14, this.fontSize + 5)}px;font-weight:900;line-height:1.05;word-break:break-all}
+      .blank-label{visibility:hidden}
+    </style></head><body>${rows.map(row => row.outerHTML).join('')}</body></html>`);
+    doc.close();
+    setTimeout(() => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      setTimeout(() => frame.remove(), 1500);
+    }, 300);
+  }
+
   private async loadProducts(): Promise<void> {
     try {
       const parents = await this.api.search();
@@ -207,6 +279,29 @@ export class LabelMakerPage implements AfterViewChecked {
       this.error.set('Unable to load inventory products.');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  private async loadBins(): Promise<void> {
+    try {
+      const warehouse = await this.inventoryApi.getWarehouse();
+      if (!warehouse) return;
+      const shelves = await Promise.all(
+        warehouse.shelves.map(async shelf => ({
+          rowNumber: shelf.rowNumber,
+          rackNumber: shelf.rackNumber,
+          detail: await this.inventoryApi.getShelf(shelf.id),
+        })),
+      );
+      const bins = shelves
+        .flatMap(shelf => shelf.detail.levels.flatMap(level => [1, 2].map(binNumber => ({
+          code: `${level.code}-B${binNumber.toString().padStart(2, '0')}`,
+          description: `Row ${shelf.rowNumber} · Rack ${shelf.rackNumber} · Level ${level.levelNumber} · Bin ${binNumber}`,
+        }))))
+        .sort((left, right) => left.code.localeCompare(right.code));
+      this.bins.set(bins);
+    } catch {
+      this.error.set('Unable to load warehouse bin labels.');
     }
   }
 }

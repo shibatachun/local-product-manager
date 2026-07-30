@@ -6,7 +6,7 @@ public sealed class WarehouseShelf
     public int WarehouseId { get; set; }
     public required string Code { get; set; }
     public required string ZoneCode { get; set; }
-    public int AisleNumber { get; set; }
+    public int RowNumber { get; set; }
     public int RackNumber { get; set; }
     public int LevelCount { get; set; }
     public decimal X { get; set; }

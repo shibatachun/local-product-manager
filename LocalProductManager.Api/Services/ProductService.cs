@@ -71,6 +71,26 @@ public sealed class ProductService(AppDbContext db)
         return product is null ? null : ProductMapper.ToDetailDto(product);
     }
 
+    public async Task<ProductListItemDto?> LookupExactAsync(string code, CancellationToken cancellationToken)
+    {
+        var normalized = code.Trim();
+        if (normalized.Length == 0) return null;
+
+        var product = await db.Products
+            .AsNoTracking()
+            .Include(item => item.Listings)
+            .Include(item => item.AmazonAsins)
+            .Include(item => item.ChildProducts)
+                .ThenInclude(child => child.Listings)
+            .Include(item => item.ChildProducts)
+                .ThenInclude(child => child.AmazonAsins)
+            .FirstOrDefaultAsync(
+                item => item.LocalInventoryId == normalized || item.Sku == normalized,
+                cancellationToken);
+
+        return product is null ? null : ProductMapper.ToListItemDto(product);
+    }
+
     public async Task<ProductDuplicateCheckDto> CheckDuplicateAsync(
         string sku,
         int? excludeProductId,

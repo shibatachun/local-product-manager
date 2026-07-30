@@ -55,8 +55,10 @@ public sealed class AuthController(
             .ToListAsync(cancellationToken);
 
         var cutoff = DateTimeOffset.UtcNow.AddDays(-7);
-        var sessions = await db.AppUserSessions
+        var sessionRows = await db.AppUserSessions
             .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var sessions = sessionRows
             .Where(session => session.LastSeenAt >= cutoff)
             .OrderByDescending(session => session.LastSeenAt)
             .Select(session => new UserSessionAdminDto(
@@ -68,7 +70,7 @@ public sealed class AuthController(
                 session.IsHost,
                 session.CreatedAt,
                 session.LastSeenAt))
-            .ToListAsync(cancellationToken);
+            .ToArray();
 
         return Ok(new { users, sessions });
     }

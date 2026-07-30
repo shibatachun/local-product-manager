@@ -9,6 +9,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ProductListing> ProductListings => Set<ProductListing>();
     public DbSet<AmazonAsin> AmazonAsins => Set<AmazonAsin>();
     public DbSet<AmazonAttributionLink> AmazonAttributionLinks => Set<AmazonAttributionLink>();
+    public DbSet<AmazonMarketingProduct> AmazonMarketingProducts => Set<AmazonMarketingProduct>();
+    public DbSet<AmazonMarketingAsin> AmazonMarketingAsins => Set<AmazonMarketingAsin>();
+    public DbSet<AmazonMarketingAttributionLink> AmazonMarketingAttributionLinks => Set<AmazonMarketingAttributionLink>();
     public DbSet<SocialAccount> SocialAccounts => Set<SocialAccount>();
     public DbSet<SocialMetricSnapshot> SocialMetricSnapshots => Set<SocialMetricSnapshot>();
     public DbSet<SocialVideoMetricSnapshot> SocialVideoMetricSnapshots => Set<SocialVideoMetricSnapshot>();
@@ -64,6 +67,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(item => item.Code).IsUnique();
             entity.Property(item => item.Code).HasMaxLength(64).IsRequired();
             entity.Property(item => item.ZoneCode).HasMaxLength(8).IsRequired();
+            entity.Property(item => item.RowNumber).HasColumnName("AisleNumber");
             entity.HasOne(item => item.Warehouse).WithMany(item => item.Shelves)
                 .HasForeignKey(item => item.WarehouseId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -127,6 +131,36 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(asin => asin.AttributionLinks)
                 .HasForeignKey(link => link.AmazonAsinId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AmazonMarketingProduct>(entity =>
+        {
+            entity.ToTable("amazon_marketing_products");
+            entity.HasIndex(item => item.Sku).IsUnique();
+            entity.Property(item => item.Sku).HasMaxLength(128).IsRequired();
+            entity.Property(item => item.ProductName).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.ImageUrl).HasMaxLength(2048);
+            entity.Property(item => item.ProductType).HasMaxLength(16).IsRequired();
+            entity.HasOne(item => item.ParentProduct).WithMany(item => item.ChildProducts)
+                .HasForeignKey(item => item.ParentProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AmazonMarketingAsin>(entity =>
+        {
+            entity.ToTable("amazon_marketing_asins");
+            entity.HasIndex(item => new { item.ProductId, item.Asin }).IsUnique();
+            entity.HasOne(item => item.Product).WithMany(item => item.Asins)
+                .HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AmazonMarketingAttributionLink>(entity =>
+        {
+            entity.ToTable("amazon_marketing_attribution_links");
+            entity.HasIndex(item => new { item.ProductId, item.AmazonAsinId, item.Platform }).IsUnique();
+            entity.HasOne(item => item.Product).WithMany(item => item.AttributionLinks)
+                .HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.AmazonAsin).WithMany()
+                .HasForeignKey(item => item.AmazonAsinId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<SocialAccount>(entity =>

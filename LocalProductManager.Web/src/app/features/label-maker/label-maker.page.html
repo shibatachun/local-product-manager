@@ -2,7 +2,7 @@
   <header class="topbar">
     <a routerLink="/" class="back" aria-label="Back to products">←</a>
     <div><span>Inventory tools</span><h1>Label Maker</h1></div>
-    <button class="print-top" type="button" [disabled]="!selectedProducts.length" (click)="printLabels()">Print labels</button>
+    <button class="print-top" type="button" [disabled]="labelMode === 'product' ? !selectedProducts.length : !selectedBins.length" (click)="labelMode === 'product' ? printLabels() : printBinLabels()">Print labels</button>
   </header>
 
   <div class="mobile-menu-bar">
@@ -30,7 +30,6 @@
       <section>
         <h2>Label size</h2>
         <div class="presets"><button type="button" *ngFor="let item of presets" [class.active]="preset === item" (click)="selectPreset(item)">{{ item.name }}</button></div>
-        <button class="roll-preset" type="button" (click)="useTwoColumnRoll()">Double roll · 50 × 30 mm</button>
         <div class="field-grid">
           <label>Width (mm)<input type="number" min="20" max="200" [(ngModel)]="widthMm" /></label>
           <label>Height (mm)<input type="number" min="15" max="150" [(ngModel)]="heightMm" /></label>
@@ -49,7 +48,7 @@
           <label>Roll width<input [value]="rollWidthMm + ' mm'" readonly /></label>
         </div>
       </section>
-      <section>
+      <section *ngIf="labelMode === 'product'">
         <h2>Label content</h2>
         <label class="check"><input type="checkbox" [(ngModel)]="showInv" /> INV number</label>
         <label class="check"><input type="checkbox" [(ngModel)]="showSku" /> SKU</label>
@@ -58,15 +57,27 @@
         <label>Text size <input type="range" min="8" max="18" [(ngModel)]="fontSize" /></label>
         <label>QR code size <input type="range" min="36" max="85" [(ngModel)]="barcodeHeight" (ngModelChange)="rerenderBarcodes()" /></label>
       </section>
+      <section *ngIf="labelMode === 'bin'">
+        <h2>Bin label content</h2>
+        <p class="bin-content-note">Prints the complete Warehouse, Shelf, Layer and Bin number without a QR code.</p>
+        <label>Top description override (optional)
+          <input type="text" maxlength="80" [(ngModel)]="binDescription" placeholder="Defaults to Row xx · Rack xx · Level xx · Bin xx" />
+        </label>
+        <label>Text size <input type="range" min="8" max="24" [(ngModel)]="fontSize" /></label>
+      </section>
       <section class="printer">
         <h2>Printer</h2>
         <p>Uses the printer connected to this device. Choose your label printer in the system print dialog and set scale to 100%.</p>
-        <button class="primary" type="button" [disabled]="!selectedProducts.length" (click)="printLabels()">Connect & print</button>
+        <button class="primary" type="button" [disabled]="labelMode === 'product' ? !selectedProducts.length : !selectedBins.length" (click)="labelMode === 'product' ? printLabels() : printBinLabels()">Connect & print</button>
       </section>
     </aside>
 
     <section class="workspace">
-      <div class="product-picker">
+      <div class="label-mode-switch">
+        <button type="button" [class.active]="labelMode === 'product'" (click)="labelMode = 'product'">Product labels</button>
+        <button type="button" [class.active]="labelMode === 'bin'" (click)="labelMode = 'bin'">Bin labels</button>
+      </div>
+      <div class="product-picker" *ngIf="labelMode === 'product'">
         <div><h2>Inventory labels</h2><p>One label per selected INV number.</p></div>
         <input [(ngModel)]="search" placeholder="Search INV, SKU or product" />
         <div class="selection-actions"><button type="button" (click)="selectVisible()">Select visible</button><button type="button" (click)="clearSelection()">Clear</button></div>
@@ -79,7 +90,20 @@
         </div>
       </div>
 
-      <div class="preview-area">
+      <div class="product-picker" *ngIf="labelMode === 'bin'">
+        <div><h2>Warehouse Bin labels</h2><p>Full Layer and B01/B02 number only. No QR code.</p></div>
+        <input [(ngModel)]="binSearch" placeholder="Search warehouse bin number" />
+        <div class="selection-actions"><button type="button" (click)="selectVisibleBins()">Select visible</button><button type="button" (click)="clearBinSelection()">Clear</button></div>
+        <div class="product-list">
+          <label *ngFor="let bin of filteredBins">
+            <input type="checkbox" [checked]="selectedBinCodes().has(bin.code)" (change)="toggleBin(bin.code)" />
+            <span><strong>{{ bin.code }}</strong><small>{{ bin.description }}</small></span>
+          </label>
+          <p class="error" *ngIf="error()">{{ error() }}</p>
+        </div>
+      </div>
+
+      <div class="preview-area" *ngIf="labelMode === 'product'">
         <div class="preview-heading"><div><h2>Preview</h2><p>{{ selectedProducts.length }} label{{ selectedProducts.length === 1 ? '' : 's' }} selected</p></div><span>LPM QR</span></div>
         <div class="label-sheet">
           <div class="label-row" *ngFor="let row of labelRows">
@@ -92,6 +116,20 @@
             <article class="product-label blank-label" *ngIf="columns === 2 && row.length === 1" aria-hidden="true"></article>
           </div>
           <div class="empty" *ngIf="!selectedProducts.length">Select a product to preview its label.</div>
+        </div>
+      </div>
+
+      <div class="preview-area" *ngIf="labelMode === 'bin'">
+        <div class="preview-heading"><div><h2>Bin label preview</h2><p>{{ selectedBins.length }} label{{ selectedBins.length === 1 ? '' : 's' }} selected</p></div><span>TEXT ONLY</span></div>
+        <div class="label-sheet bin-label-sheet">
+          <div class="label-row" *ngFor="let row of binLabelRows">
+            <article class="product-label bin-label" *ngFor="let bin of row">
+              <span class="bin-description">{{ binDescription.trim() || bin.description }}</span>
+              <strong class="bin-code">{{ bin.code }}</strong>
+            </article>
+            <article class="product-label bin-label blank-label" *ngIf="columns === 2 && row.length === 1" aria-hidden="true"></article>
+          </div>
+          <div class="empty" *ngIf="!selectedBins.length">Select a warehouse Bin to preview its label.</div>
         </div>
       </div>
     </section>

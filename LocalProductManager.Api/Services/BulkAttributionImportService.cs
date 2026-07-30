@@ -55,25 +55,19 @@ public sealed class BulkAttributionImportService(
             }
 
             matchedProducts++;
-            var clickThroughUrl = FindClickThroughValue(row);
-            if (!string.IsNullOrWhiteSpace(clickThroughUrl))
-            {
-                await UpsertAmazonListingAsync(product.Id, clickThroughUrl, cancellationToken);
-            }
-
             foreach (var platform in AllowedValues.AttributionPlatforms)
             {
                 var value = FindPlatformValue(row, platform);
                 if (string.IsNullOrWhiteSpace(value)) continue;
 
-                var link = await db.AmazonAttributionLinks.FirstOrDefaultAsync(
+                var link = await db.AmazonMarketingAttributionLinks.FirstOrDefaultAsync(
                     item => item.ProductId == product.Id &&
                         item.AmazonAsinId == null &&
                         item.Platform == platform,
                     cancellationToken);
                 if (link is null)
                 {
-                    db.AmazonAttributionLinks.Add(new AmazonAttributionLink
+                    db.AmazonMarketingAttributionLinks.Add(new AmazonMarketingAttributionLink
                     {
                         ProductId = product.Id,
                         Platform = platform,
@@ -114,48 +108,24 @@ public sealed class BulkAttributionImportService(
         return column is null ? null : AmazonAttributionImportService.CleanUrl(row[column]);
     }
 
-    private async Task UpsertAmazonListingAsync(
-        int productId,
-        string listingUrl,
-        CancellationToken cancellationToken)
+    private async Task<AmazonMarketingProduct?> MatchProductBySkuAsync(string sku, CancellationToken cancellationToken)
     {
-        var listing = await db.ProductListings.FirstOrDefaultAsync(
-            item => item.ProductId == productId && item.Platform == "amazon",
-            cancellationToken);
-        if (listing is null)
-        {
-            db.ProductListings.Add(new ProductListing
-            {
-                ProductId = productId,
-                Platform = "amazon",
-                ListingUrl = listingUrl
-            });
-        }
-        else
-        {
-            listing.ListingUrl = listingUrl;
-            listing.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-    }
-
-    private async Task<Product?> MatchProductBySkuAsync(string sku, CancellationToken cancellationToken)
-    {
-        var product = await db.Products.FirstOrDefaultAsync(item => item.Sku == sku, cancellationToken);
+        var product = await db.AmazonMarketingProducts.FirstOrDefaultAsync(item => item.Sku == sku, cancellationToken);
         if (product is not null) return product;
 
         var token = ExtractFiveDigitToken(sku);
         return token is null ? null : await MatchProductByTokenAsync(token, cancellationToken);
     }
 
-    private async Task<Product?> MatchProductByFileNameAsync(string fileName, CancellationToken cancellationToken)
+    private async Task<AmazonMarketingProduct?> MatchProductByFileNameAsync(string fileName, CancellationToken cancellationToken)
     {
         var token = ExtractFiveDigitToken(Path.GetFileNameWithoutExtension(fileName));
         return token is null ? null : await MatchProductByTokenAsync(token, cancellationToken);
     }
 
-    private async Task<Product?> MatchProductByTokenAsync(string token, CancellationToken cancellationToken)
+    private async Task<AmazonMarketingProduct?> MatchProductByTokenAsync(string token, CancellationToken cancellationToken)
     {
-        var products = await db.Products
+        var products = await db.AmazonMarketingProducts
             .Where(product => product.Sku.Contains(token))
             .OrderByDescending(product => product.ParentProductId == null)
             .ThenByDescending(product => product.ProductType == "parent")

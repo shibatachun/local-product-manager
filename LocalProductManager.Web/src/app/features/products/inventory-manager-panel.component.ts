@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, ElementRef, HostListener, inject, input, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, inject, input, output, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem, ShelfDetail, ShelfInventoryItem, ShelfLevel, Warehouse, WarehouseShelf } from '../../core/models';
@@ -12,6 +12,8 @@ import { ProductListItem, ShelfDetail, ShelfInventoryItem, ShelfLevel, Warehouse
 })
 export class InventoryManagerPanelComponent {
   readonly isAdmin = input(false);
+  readonly addProductToBin = output<{ levelId: number; binNumber: number; locationCode: string }>();
+  readonly openProductDetail = output<number>();
   @ViewChild('warehouseStage') warehouseStage?: ElementRef<HTMLElement>;
   private readonly api = inject(InventoryApiService);
   readonly warehouse = signal<Warehouse | null>(null);
@@ -24,7 +26,7 @@ export class InventoryManagerPanelComponent {
   readonly loading = signal(false);
   readonly notice = signal('');
   readonly warehouseName = signal('Main Warehouse');
-  readonly shelfForm = { zoneCode: 'A', aisleNumber: 1, levelCount: 5 };
+  readonly shelfForm = { zoneCode: 'A', rowNumber: 1, levelCount: 5 };
   readonly inventoryForm = { productId: null as number | null, qty: 0 };
   readonly totalQty = computed(() => this.warehouse()?.shelves.reduce((sum, shelf) => sum + shelf.totalQty, 0) ?? 0);
   readonly selectedBinItems = computed(() =>
@@ -60,6 +62,20 @@ export class InventoryManagerPanelComponent {
     this.addShelfOpen.set(true);
   }
 
+  async refreshAfterProductAdded(levelId: number, productId: number): Promise<void> {
+    const shelfId = this.selectedShelf()?.id;
+    await this.run(async () => {
+      this.products.set(await this.api.products());
+      if (!shelfId) return;
+      const shelf = await this.api.getShelf(shelfId);
+      this.selectedShelf.set(shelf);
+      this.selectedLevel.set(shelf.levels.find(level => level.id === levelId) ?? null);
+      this.inventoryForm.productId = productId;
+      this.onProductChanged(productId);
+      await this.refreshWarehouse();
+    });
+  }
+
   async createShelf(): Promise<void> {
     if (!this.isAdmin()) {
       this.showNotice('Only administrators can add shelves.');
@@ -70,7 +86,7 @@ export class InventoryManagerPanelComponent {
     const index = warehouse.shelves.length;
     const shelf = await this.run(async () => this.api.createShelf(warehouse.id, {
       zoneCode: this.shelfForm.zoneCode,
-      aisleNumber: this.shelfForm.aisleNumber,
+      rowNumber: this.shelfForm.rowNumber,
       levelCount: this.shelfForm.levelCount,
       x: 5 + (index % 4) * 23,
       y: 8 + Math.floor(index / 4) * 22,
@@ -79,6 +95,15 @@ export class InventoryManagerPanelComponent {
     this.warehouse.set({ ...warehouse, shelves: [...warehouse.shelves, shelf] });
     this.addShelfOpen.set(false);
     this.showNotice(`${shelf.code} created with ${shelf.levelCount} levels.`);
+  }
+
+  nextRackNumber(): number {
+    const zoneCode = (this.shelfForm.zoneCode.trim() || 'A').slice(0, 1).toUpperCase();
+    const rowNumber = Math.min(99, Math.max(1, Math.trunc(Number(this.shelfForm.rowNumber) || 1)));
+    const shelves = this.warehouse()?.shelves ?? [];
+    return shelves
+      .filter(shelf => shelf.zoneCode.toUpperCase() === zoneCode && shelf.rowNumber === rowNumber)
+      .reduce((maximum, shelf) => Math.max(maximum, shelf.rackNumber), 0) + 1;
   }
 
   async openShelf(shelf: WarehouseShelf): Promise<void> {
@@ -205,6 +230,17 @@ export class InventoryManagerPanelComponent {
     this.showNotice(`${level.code}-B${this.selectedBin().toString().padStart(2, '0')} inventory updated.`);
   }
 
+  requestAddProduct(): void {
+    const level = this.selectedLevel();
+    if (!level) return;
+    const binNumber = this.selectedBin();
+    this.addProductToBin.emit({
+      levelId: level.id,
+      binNumber,
+      locationCode: `${level.code}-B${binNumber.toString().padStart(2, '0')}`,
+    });
+  }
+
   async removeInventoryItem(item: ShelfInventoryItem): Promise<void> {
     const level = this.selectedLevel();
     if (!level) return;
@@ -215,6 +251,11 @@ export class InventoryManagerPanelComponent {
     this.applyUpdatedLevel(updated);
     await this.load();
     this.showNotice(`${item.productName} removed from ${locationCode}.`);
+  }
+
+  showProductDetail(productId: number): void {
+    this.shelfOpen.set(false);
+    this.openProductDetail.emit(productId);
   }
 
   async addLevel(): Promise<void> {

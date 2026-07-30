@@ -16,7 +16,7 @@ public sealed class AttributionFolderImportService(
         IReadOnlyList<IFormFile> files,
         CancellationToken cancellationToken)
     {
-        var products = await db.Products
+        var products = await db.AmazonMarketingProducts
             .AsNoTracking()
             .Select(product => new ProductMatch(product.Id, product.Sku, product.ProductType, product.ParentProductId, null))
             .ToListAsync(cancellationToken);

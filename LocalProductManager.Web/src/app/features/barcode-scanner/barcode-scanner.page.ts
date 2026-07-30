@@ -13,6 +13,7 @@ type ScannerLocation = {
   binNumber: number;
   key: string;
   code: string;
+  description: string;
   qty: number;
 };
 
@@ -131,12 +132,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.showAdd.set(false);
     this.scannedCode.set(code);
     try {
-      const matches = await this.api.search(code);
-      const normalized = code.toLocaleLowerCase();
-      const found = this.flatten(matches).find(item =>
-        item.sku.trim().toLocaleLowerCase() === normalized ||
-        item.localInventoryId?.trim().toLocaleLowerCase() === normalized,
-      ) ?? null;
+      const found = await this.api.lookupExact(code);
       this.product.set(found);
       this.notFound.set(!found);
       if (found) await this.loadLocations(found.id);
@@ -196,10 +192,6 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.manualCode = '';
   }
 
-  private flatten(products: ProductListItem[]): ProductListItem[] {
-    return products.flatMap(product => [product, ...product.children]);
-  }
-
   startOperation(type: 'in' | 'out'): void {
     this.operation.set(type);
     this.operationQty = 1;
@@ -229,18 +221,18 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
       return;
     }
     if (type === 'out' && amount > location.qty) {
-      this.error.set(`Only ${location.qty} item(s) are available at ${location.code}.`);
+      this.error.set(`Only ${location.qty} item(s) are available at ${location.description}.`);
       return;
     }
 
     this.loading.set(true);
     this.error.set('');
     try {
-      const newQty = type === 'in' ? location.qty + amount : location.qty - amount;
-      await this.inventoryApi.setInventory(location.levelId, product.id, newQty, location.binNumber);
+      const delta = type === 'in' ? amount : -amount;
+      await this.inventoryApi.adjustInventory(location.levelId, product.id, delta, location.binNumber);
       this.product.set(await this.api.getProduct(product.id));
       await this.loadLocations(product.id);
-      this.success.set(`${type === 'in' ? 'Stock in' : 'Stock out'} completed: ${amount} item(s) at ${location.code}.`);
+      this.success.set(`${type === 'in' ? 'Stock in' : 'Stock out'} completed: ${amount} item(s) at ${location.description}.`);
       this.cancelOperation();
     } catch {
       this.error.set('The inventory operation could not be completed.');
@@ -250,24 +242,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   }
 
   private async loadLocations(productId: number): Promise<void> {
-    const warehouse = await this.inventoryApi.getWarehouse();
-    if (!warehouse) {
-      this.locations.set([]);
-      this.warehouseLevels.set([]);
-      return;
-    }
-    const shelves = await Promise.all(warehouse.shelves.map(shelf => this.inventoryApi.getShelf(shelf.id)));
-    const levels = shelves.flatMap(shelf => shelf.levels.flatMap(level =>
-      [1, 2].map(binNumber => {
-        const item = level.items.find(row => row.productId === productId && row.binNumber === binNumber);
-        return {
-          levelId: level.id,
-          binNumber,
-          key: `${level.id}:${binNumber}`,
-          code: `${level.code}-B${binNumber.toString().padStart(2, '0')}`,
-          qty: item?.qty ?? 0,
-        };
-      })));
+    const levels = await this.inventoryApi.productLocations(productId);
     this.warehouseLevels.set(levels);
     this.locations.set(levels.filter(level => level.qty > 0));
   }

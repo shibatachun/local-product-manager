@@ -12,8 +12,12 @@ public sealed class ProductImagesController(
     AppDbContext db,
     ImageFileService imageFiles,
     RemoteImageProxyService remoteImages,
-    AmazonImageLookupService amazonImages) : ControllerBase
+    AmazonImageLookupService amazonImages,
+    IWebHostEnvironment environment) : ControllerBase
 {
+    private static readonly HashSet<string> AllowedUploadExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp" };
+
     [HttpGet]
     public async Task<IActionResult> Get(
         int productId,
@@ -77,6 +81,39 @@ public sealed class ProductImagesController(
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "The image share is temporarily unavailable.");
         }
+    }
+
+    [HttpPost("upload")]
+    [RequestSizeLimit(15 * 1024 * 1024)]
+    public async Task<IActionResult> Upload(
+        int productId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var product = await db.Products.FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
+        if (product is null) return NotFound();
+        if (file.Length is <= 0 or > 15 * 1024 * 1024)
+            return BadRequest("Choose an image no larger than 15 MB.");
+
+        var extension = Path.GetExtension(file.FileName);
+        if (!AllowedUploadExtensions.Contains(extension) ||
+            !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Choose a JPG, PNG, WebP, GIF, or BMP image.");
+
+        var uploadRoot = Path.Combine(environment.ContentRootPath, "Data", "product-images");
+        Directory.CreateDirectory(uploadRoot);
+        imageFiles.AddRoot(uploadRoot);
+        var fullPath = Path.Combine(uploadRoot, $"{productId}-{Guid.NewGuid():N}{extension.ToLowerInvariant()}");
+        await using (var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        product.ImagePath = fullPath;
+        product.ImageSource = "local";
+        product.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new { imagePath = fullPath });
     }
 
     [HttpPost("from-amazon")]

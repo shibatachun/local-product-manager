@@ -19,7 +19,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         int? amazonAsinId,
         CancellationToken cancellationToken)
     {
-        var productExists = await db.Products.AnyAsync(product => product.Id == productId, cancellationToken);
+        var productExists = await db.AmazonMarketingProducts.AnyAsync(product => product.Id == productId, cancellationToken);
         if (!productExists)
         {
             return null;
@@ -27,7 +27,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
 
         if (amazonAsinId.HasValue)
         {
-            var asinExists = await db.AmazonAsins.AnyAsync(
+            var asinExists = await db.AmazonMarketingAsins.AnyAsync(
                 asin => asin.Id == amazonAsinId.Value && asin.ProductId == productId,
                 cancellationToken);
 
@@ -46,12 +46,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
             return new ImportAmazonAttributionResult(0, []);
         }
 
-        var imported = new List<AmazonAttributionLink>();
-        var clickThroughUrl = ExtractClickThroughUrl(rows);
-        if (!string.IsNullOrWhiteSpace(clickThroughUrl))
-        {
-            await UpsertAmazonListingAsync(productId, clickThroughUrl, cancellationToken);
-        }
+        var imported = new List<AmazonMarketingAttributionLink>();
 
         var links = ExtractPlatformLinks(rows, csv);
         foreach (var (platform, url) in links)
@@ -69,7 +64,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return new ImportAmazonAttributionResult(imported.Count, imported.Select(ProductMapper.ToDto).ToArray());
+        return new ImportAmazonAttributionResult(imported.Count, imported.Select(ToDto).ToArray());
     }
 
     public async Task<AmazonAttributionLinkDto?> UpsertAsync(
@@ -84,7 +79,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
             throw new ArgumentException($"Unsupported attribution platform: {platform}");
         }
 
-        var productExists = await db.Products.AnyAsync(product => product.Id == productId, cancellationToken);
+        var productExists = await db.AmazonMarketingProducts.AnyAsync(product => product.Id == productId, cancellationToken);
         if (!productExists)
         {
             return null;
@@ -99,10 +94,10 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
             cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
-        return ProductMapper.ToDto(link);
+        return ToDto(link);
     }
 
-    private async Task<AmazonAttributionLink> UpsertLinkAsync(
+    private async Task<AmazonMarketingAttributionLink> UpsertLinkAsync(
         int productId,
         int? amazonAsinId,
         string platform,
@@ -110,7 +105,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         string? importedFileName,
         CancellationToken cancellationToken)
     {
-        var link = await db.AmazonAttributionLinks.FirstOrDefaultAsync(existing =>
+        var link = await db.AmazonMarketingAttributionLinks.FirstOrDefaultAsync(existing =>
             existing.ProductId == productId &&
             existing.AmazonAsinId == amazonAsinId &&
             existing.Platform == platform,
@@ -118,7 +113,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
 
         if (link is null)
         {
-            link = new AmazonAttributionLink
+            link = new AmazonMarketingAttributionLink
             {
                 ProductId = productId,
                 AmazonAsinId = amazonAsinId,
@@ -126,7 +121,7 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
                 AttributionUrl = attributionUrl,
                 ImportedFileName = importedFileName
             };
-            db.AmazonAttributionLinks.Add(link);
+            db.AmazonMarketingAttributionLinks.Add(link);
         }
         else
         {
@@ -138,29 +133,9 @@ public sealed class AmazonAttributionImportService(AppDbContext db)
         return link;
     }
 
-    private async Task UpsertAmazonListingAsync(
-        int productId,
-        string listingUrl,
-        CancellationToken cancellationToken)
-    {
-        var listing = await db.ProductListings.FirstOrDefaultAsync(
-            existing => existing.ProductId == productId && existing.Platform == "amazon",
-            cancellationToken);
-        if (listing is null)
-        {
-            db.ProductListings.Add(new ProductListing
-            {
-                ProductId = productId,
-                Platform = "amazon",
-                ListingUrl = listingUrl
-            });
-        }
-        else
-        {
-            listing.ListingUrl = listingUrl;
-            listing.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-    }
+    private static AmazonAttributionLinkDto ToDto(AmazonMarketingAttributionLink link) => new(
+        link.Id, link.ProductId, link.AmazonAsinId, link.Platform, link.AttributionUrl,
+        link.ImportedFileName, link.CreatedAt, link.UpdatedAt);
 
     internal static string NormalizeHeader(string value) => value
         .Trim()

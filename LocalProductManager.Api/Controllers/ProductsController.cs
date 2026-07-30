@@ -1,4 +1,5 @@
 using LocalProductManager.Api.Dtos;
+using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,8 @@ namespace LocalProductManager.Api.Controllers;
 [Route("api/products")]
 public sealed class ProductsController(
     ProductService products,
-    ProductExportService productExport) : ControllerBase
+    ProductExportService productExport,
+    AppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ProductListItemDto>>> Search(
@@ -31,6 +33,20 @@ public sealed class ProductsController(
             content,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             fileName);
+    }
+
+    [HttpGet("lookup")]
+    public async Task<ActionResult<ProductListItemDto>> Lookup(
+        [FromQuery] string code,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return BadRequest("Inventory ID or SKU is required.");
+        }
+
+        var product = await products.LookupExactAsync(code, cancellationToken);
+        return product is null ? NotFound() : Ok(product);
     }
 
     [HttpGet("{productId:int}")]
@@ -118,6 +134,32 @@ public sealed class ProductsController(
     [HttpDelete("{productId:int}")]
     public async Task<IActionResult> Delete(int productId, CancellationToken cancellationToken)
     {
+        var occupiedRows = await db.ShelfLevelInventories
+            .AsNoTracking()
+            .Where(item => item.ProductId == productId && item.Qty > 0)
+            .Include(item => item.ShelfLevel)
+            .OrderBy(item => item.ShelfLevel!.Code)
+            .ThenBy(item => item.BinNumber)
+            .Select(item => new
+            {
+                levelCode = item.ShelfLevel!.Code,
+                item.BinNumber,
+                qty = item.Qty
+            })
+            .ToArrayAsync(cancellationToken);
+        if (occupiedRows.Length > 0)
+        {
+            return Conflict(new
+            {
+                message = "This product cannot be deleted while it still has stock in a warehouse layer. Clear or move the stock first.",
+                locations = occupiedRows.Select(item => new
+                {
+                    location = $"{item.levelCode}-B{item.BinNumber:00}",
+                    item.qty
+                })
+            });
+        }
+
         var deleted = await products.DeleteAsync(productId, cancellationToken);
         return deleted ? NoContent() : NotFound();
     }

@@ -156,7 +156,7 @@ public sealed class FacebookReportImportService(AppDbContext db)
         account ??= await query
             .OrderByDescending(item => db.SocialVideoMetricSnapshots.Any(row => row.SocialAccountId == item.Id))
             .ThenByDescending(item => db.SocialMetricSnapshots.Any(row => row.SocialAccountId == item.Id))
-            .ThenByDescending(item => item.UpdatedAt)
+            .ThenByDescending(item => item.Id)
             .ThenBy(item => item.AccountName)
             .FirstOrDefaultAsync(cancellationToken);
         if (account is null)

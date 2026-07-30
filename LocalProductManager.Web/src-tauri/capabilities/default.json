@@ -4,7 +4,7 @@
   "description": "Default permissions for the LocalProductManager desktop window",
   "windows": ["main"],
   "remote": {
-    "urls": ["https://inventory.jjgqaz.com:7265/*"]
+    "urls": ["https://192.168.0.160/*"]
   },
   "permissions": ["core:default", "allow-check-for-updates"]
 }
