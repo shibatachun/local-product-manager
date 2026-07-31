@@ -126,6 +126,33 @@ public sealed class DatabaseSchemaService
             "DROP INDEX IF EXISTS IX_shelf_level_inventory_ShelfLevelId_ProductId");
         db.Database.ExecuteSqlRaw(
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_shelf_level_inventory_ShelfLevelId_BinNumber_ProductId ON shelf_level_inventory (ShelfLevelId, BinNumber, ProductId)");
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS inventory_history (
+                Id INTEGER NOT NULL CONSTRAINT PK_inventory_history PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                LocalInventoryId TEXT NULL,
+                Sku TEXT NOT NULL,
+                ProductName TEXT NOT NULL,
+                ShelfLevelId INTEGER NOT NULL,
+                BinNumber INTEGER NOT NULL,
+                LocationCode TEXT NOT NULL,
+                LocationDescription TEXT NOT NULL,
+                Operation TEXT NOT NULL,
+                BeforeQty INTEGER NOT NULL,
+                AfterQty INTEGER NOT NULL,
+                Delta INTEGER NOT NULL,
+                UserName TEXT NOT NULL,
+                UserRole TEXT NOT NULL,
+                RemoteIp TEXT NULL,
+                UserAgent TEXT NULL,
+                Source TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_inventory_history_CreatedAt ON inventory_history (CreatedAt);
+            CREATE INDEX IF NOT EXISTS IX_inventory_history_ProductId ON inventory_history (ProductId);
+            CREATE INDEX IF NOT EXISTS IX_inventory_history_ShelfLevelId ON inventory_history (ShelfLevelId);
+            """);
         var shelfColumns = GetColumns(db, "warehouse_shelves");
         if (shelfColumns.Count > 0 && !shelfColumns.Contains("Rotation"))
         {

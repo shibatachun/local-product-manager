@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, ElementRef, HostListener, inject, input, output, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { InventoryApiService } from '../../core/inventory-api.service';
+import { InventoryApiService, InventoryHistoryEntry } from '../../core/inventory-api.service';
 import { ProductListItem, ShelfDetail, ShelfInventoryItem, ShelfLevel, Warehouse, WarehouseShelf } from '../../core/models';
 
 @Component({
@@ -25,6 +25,10 @@ export class InventoryManagerPanelComponent {
   readonly shelfOpen = signal(false);
   readonly loading = signal(false);
   readonly notice = signal('');
+  readonly activeTab = signal<'layout' | 'history'>('layout');
+  readonly history = signal<InventoryHistoryEntry[]>([]);
+  readonly historySearch = signal('');
+  readonly historyOperation = signal('');
   readonly warehouseName = signal('Main Warehouse');
   readonly shelfForm = { zoneCode: 'A', rowNumber: 1, levelCount: 5 };
   readonly inventoryForm = { productId: null as number | null, qty: 0 };
@@ -60,6 +64,27 @@ export class InventoryManagerPanelComponent {
       return;
     }
     this.addShelfOpen.set(true);
+  }
+
+  async selectTab(tab: 'layout' | 'history'): Promise<void> {
+    if (tab === 'history' && !this.isAdmin()) return;
+    this.activeTab.set(tab);
+    if (tab === 'history') await this.loadHistory();
+  }
+
+  async loadHistory(): Promise<void> {
+    if (!this.isAdmin()) return;
+    await this.run(async () => {
+      this.history.set(await this.api.history(
+        this.historySearch().trim(),
+        this.historyOperation(),
+        500,
+      ));
+    });
+  }
+
+  historyAction(entry: InventoryHistoryEntry): string {
+    return entry.operation === 'stock_in' ? 'Stock in' : 'Stock out';
   }
 
   async refreshAfterProductAdded(levelId: number, productId: number): Promise<void> {

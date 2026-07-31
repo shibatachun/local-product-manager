@@ -12,7 +12,9 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
-      registrationStrategy: 'registerWhenStable:30000',
+      // Do not let the first-time app-shell prefetch compete with product
+      // thumbnails for the browser's newly established HTTPS connections.
+      registrationStrategy: 'registerWithDelay:30000',
     }),
   ]
 };

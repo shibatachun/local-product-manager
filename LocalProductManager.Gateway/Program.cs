@@ -59,6 +59,7 @@ var frontendDistPath = builder.Configuration["FrontendDistPath"]
         "LocalProductManager.Web",
         "browser"));
 var frontendIndexPath = Path.Combine(frontendDistPath, "index.html");
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://127.0.0.1:5077";
 if (!File.Exists(frontendIndexPath))
 {
     throw new FileNotFoundException(
@@ -127,7 +128,7 @@ app.MapWhen(context => IsApiRequest(context.Request.Path), api =>
     api.Run(async context =>
     {
         var targetUri = new Uri(
-            $"http://127.0.0.1:5077{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}");
+            $"{apiBaseUrl}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}");
         using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), targetUri);
         if (context.Request.ContentLength > 0 || context.Request.Headers.ContainsKey("Transfer-Encoding"))
         {

@@ -567,6 +567,23 @@
         <div class="detail-image-toolbar">
           <span><strong>Product image</strong><small>Choose a local image, enter a network URL, or take a photo.</small></span>
         </div>
+        <div class="detail-image-preview" *ngIf="editForm.imagePath; else noDetailImage">
+          <img
+            [src]="productImageUrl(product.id, false, 512)"
+            [alt]="product.productName"
+            decoding="async"
+            (error)="showBrokenDetailImage($event)" />
+          <div class="detail-image-preview-fallback">
+            <strong>{{ productInitial(product) }}</strong>
+            <span>Image preview unavailable</span>
+          </div>
+        </div>
+        <ng-template #noDetailImage>
+          <div class="detail-image-preview detail-image-preview-empty">
+            <strong>{{ productInitial(product) }}</strong>
+            <span>No product image</span>
+          </div>
+        </ng-template>
         <div class="form-grid">
           <label class="wide">Network image URL<input [(ngModel)]="editForm.imagePath" placeholder="https://example.com/product.jpg" /></label>
           <label>Choose local image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectDetailImage($event)" /></label>

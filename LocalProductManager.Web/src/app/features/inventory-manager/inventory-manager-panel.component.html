@@ -1,4 +1,9 @@
-<section class="inventory-shell">
+<nav class="inventory-tabs" *ngIf="isAdmin()" aria-label="Inventory manager views">
+  <button type="button" [class.active]="activeTab() === 'layout'" (click)="selectTab('layout')">Warehouse</button>
+  <button type="button" [class.active]="activeTab() === 'history'" (click)="selectTab('history')">History</button>
+</nav>
+
+<section class="inventory-shell" *ngIf="activeTab() === 'layout'">
   <div class="inventory-toolbar">
     <div>
       <strong>{{ warehouse()?.name || 'No warehouse created' }}</strong>
@@ -39,6 +44,34 @@
       <span>+</span><strong>Add the first shelf</strong><small>Shelf code is generated automatically</small>
     </button>
   </div>
+</section>
+
+<section class="inventory-history" *ngIf="isAdmin() && activeTab() === 'history'">
+  <header>
+    <div><small>Inventory audit log</small><h2>Stock history</h2><p>Every recorded stock-in, stock-out, removal, and quantity correction.</p></div>
+    <button type="button" (click)="loadHistory()" [disabled]="loading()">Refresh</button>
+  </header>
+  <div class="history-filters">
+    <label>Search<input [ngModel]="historySearch()" (ngModelChange)="historySearch.set($event)" (keyup.enter)="loadHistory()" placeholder="SKU, product, inventory ID, location, or user" /></label>
+    <label>Operation<select [ngModel]="historyOperation()" (ngModelChange)="historyOperation.set($event); loadHistory()"><option value="">All operations</option><option value="stock_in">Stock in</option><option value="stock_out">Stock out</option></select></label>
+    <button class="history-search-button" type="button" (click)="loadHistory()" [disabled]="loading()">Search</button>
+  </div>
+  <div class="history-summary">Showing the latest {{ history().length }} record{{ history().length === 1 ? '' : 's' }}</div>
+  <div class="history-table-wrap" *ngIf="history().length; else noHistory">
+    <table class="history-table">
+      <thead><tr><th>Time</th><th>Operation</th><th>Product</th><th>Location</th><th>Quantity</th><th>Operator</th><th>Request details</th></tr></thead>
+      <tbody><tr *ngFor="let entry of history()">
+        <td><strong>{{ entry.createdAt | date:'MMM d, y' }}</strong><small>{{ entry.createdAt | date:'h:mm:ss a' }}</small></td>
+        <td><span class="history-operation" [class.stock-in]="entry.operation === 'stock_in'" [class.stock-out]="entry.operation === 'stock_out'">{{ historyAction(entry) }}</span><small>{{ entry.source === 'adjust' ? 'Incremental adjustment' : 'Quantity set' }}</small></td>
+        <td><button type="button" class="history-product" (click)="showProductDetail(entry.productId)"><strong>{{ entry.productName }}</strong><code>{{ entry.sku }}</code><small>{{ entry.localInventoryId || ('Product #' + entry.productId) }}</small></button></td>
+        <td><strong>{{ entry.locationDescription }}</strong><code>{{ entry.locationCode }}</code><small>Level #{{ entry.shelfLevelId }} · Bin {{ entry.binNumber }}</small></td>
+        <td><strong class="history-delta" [class.positive]="entry.delta > 0">{{ entry.delta > 0 ? '+' : '' }}{{ entry.delta }}</strong><small>{{ entry.beforeQty }} → {{ entry.afterQty }}</small></td>
+        <td><strong>{{ entry.userName }}</strong><small>{{ entry.userRole }}</small></td>
+        <td><code>{{ entry.remoteIp || 'Unknown IP' }}</code><small [title]="entry.userAgent || ''">{{ entry.userAgent || 'No user agent' }}</small></td>
+      </tr></tbody>
+    </table>
+  </div>
+  <ng-template #noHistory><div class="history-empty">No inventory history matches the current filters.</div></ng-template>
 </section>
 
 <div class="inventory-backdrop" *ngIf="addShelfOpen() && isAdmin()" (click)="addShelfOpen.set(false)"></div>

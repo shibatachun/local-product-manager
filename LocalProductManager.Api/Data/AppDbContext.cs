@@ -23,6 +23,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<WarehouseShelf> WarehouseShelves => Set<WarehouseShelf>();
     public DbSet<ShelfLevel> ShelfLevels => Set<ShelfLevel>();
     public DbSet<ShelfLevelInventory> ShelfLevelInventories => Set<ShelfLevelInventory>();
+    public DbSet<InventoryHistoryEntry> InventoryHistory => Set<InventoryHistoryEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -131,6 +132,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(asin => asin.AttributionLinks)
                 .HasForeignKey(link => link.AmazonAsinId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<InventoryHistoryEntry>(entity =>
+        {
+            entity.ToTable("inventory_history");
+            entity.HasIndex(item => item.CreatedAt);
+            entity.HasIndex(item => item.ProductId);
+            entity.HasIndex(item => item.ShelfLevelId);
+            entity.Property(item => item.LocalInventoryId).HasMaxLength(64);
+            entity.Property(item => item.Sku).HasMaxLength(128).IsRequired();
+            entity.Property(item => item.ProductName).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.LocationCode).HasMaxLength(96).IsRequired();
+            entity.Property(item => item.LocationDescription).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.Operation).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.UserName).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.UserRole).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.RemoteIp).HasMaxLength(80);
+            entity.Property(item => item.UserAgent).HasMaxLength(512);
+            entity.Property(item => item.Source).HasMaxLength(32).IsRequired();
         });
 
         modelBuilder.Entity<AmazonMarketingProduct>(entity =>

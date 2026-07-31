@@ -1,5 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$deployment = Get-Content -LiteralPath (Join-Path $repoRoot 'config\deployment.json') -Raw | ConvertFrom-Json
+$httpsPort = [int]$deployment.ports.https
+$inventoryUrl = if ($httpsPort -eq 443) {
+    "https://$($deployment.lanHost)"
+}
+else {
+    "https://$($deployment.lanHost):$httpsPort"
+}
 $taskName = 'LocalProductManager Aspire AppHost'
 $oldTaskName = 'LocalProductManager Monitor'
 $iisData = 'C:\inetpub\LocalProductManager\LocalProductManager.Api\Data'
@@ -7,7 +15,7 @@ $sourceData = Join-Path $repoRoot 'LocalProductManager.Api\Data'
 $sourceDatabase = Join-Path $sourceData 'local-product-manager.db'
 $backupRoot = Join-Path $repoRoot '_backups'
 $backupData = Join-Path $backupRoot ("pre-aspire-data-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$manager = Join-Path $PSScriptRoot 'aspire-manager.ps1'
+$manager = Join-Path $repoRoot 'manage_aspire.bat'
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -71,8 +79,8 @@ Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue |
 Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue |
     Unregister-ScheduledTask -Confirm:$false
 
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$manager`"" `
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' `
+    -Argument "/c `"`"$manager`"`"" `
     -WorkingDirectory $repoRoot
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
@@ -83,22 +91,22 @@ $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name `
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $taskPrincipal -Force | Out-Null
 
-Write-Host 'Allowing LocalProductManager HTTPS on port 443...' -ForegroundColor Cyan
-$httpsRuleName = 'LocalProductManager HTTPS 443'
+Write-Host "Allowing LocalProductManager HTTPS on port $httpsPort..." -ForegroundColor Cyan
+$httpsRuleName = "LocalProductManager HTTPS $httpsPort"
 if (Get-NetFirewallRule -DisplayName $httpsRuleName -ErrorAction SilentlyContinue) {
     Set-NetFirewallRule -DisplayName $httpsRuleName -Enabled True `
         -Direction Inbound -Action Allow -Profile Private
 }
 else {
     New-NetFirewallRule -DisplayName $httpsRuleName -Direction Inbound `
-        -Action Allow -Protocol TCP -LocalPort 443 -Profile Private | Out-Null
+        -Action Allow -Protocol TCP -LocalPort $httpsPort -Profile Private | Out-Null
 }
 
 Start-ScheduledTask -TaskName $taskName
 
 Write-Host ''
 Write-Host 'Aspire Manager installation completed.' -ForegroundColor Green
-Write-Host 'Aspire is stopped by default. Use the manager window to start it.'
+Write-Host 'Aspire is stopped by default. Use the manager terminal to start it.'
 Write-Host "Data backup: $backupData"
-Write-Host 'Dashboard: http://127.0.0.1:18889/'
-Write-Host 'Inventory: https://192.168.1.154/'
+Write-Host "Dashboard: http://127.0.0.1:$($deployment.ports.dashboard)/"
+Write-Host "Inventory: $inventoryUrl/"

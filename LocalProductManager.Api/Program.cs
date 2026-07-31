@@ -19,20 +19,29 @@ builder.Logging.AddOpenTelemetry(options =>
     options.AddOtlpExporter();
 });
 
+var databaseProvider = builder.Configuration["DatabaseProvider"] ?? "Sqlite";
+var usePostgres = databaseProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase)
+    || databaseProvider.Equals("Postgres", StringComparison.OrdinalIgnoreCase);
 var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Data Source=Data/local-product-manager.db";
-var connectionString = ResolveSqliteConnectionString(
-    configuredConnectionString,
-    builder.Environment.ContentRootPath);
-connectionString = AddSqliteWriteSettings(connectionString);
-var dbPath = GetSqlitePath(connectionString);
-if (dbPath is not null)
+var connectionString = usePostgres
+    ? configuredConnectionString
+    : AddSqliteWriteSettings(ResolveSqliteConnectionString(
+        configuredConnectionString,
+        builder.Environment.ContentRootPath));
+var dbPath = usePostgres ? null : GetSqlitePath(connectionString);
+if (!usePostgres && dbPath is not null)
 {
     Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 }
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+{
+    if (usePostgres)
+        options.UseNpgsql(connectionString, postgres => postgres.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+    else
+        options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+});
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("inventory-api"))
@@ -100,9 +109,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
-    DatabaseSchemaService.Upgrade(db);
-    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
-    db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
+    if (db.Database.IsSqlite())
+    {
+        DatabaseSchemaService.Upgrade(db);
+        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
+        db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
+    }
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
 }
 

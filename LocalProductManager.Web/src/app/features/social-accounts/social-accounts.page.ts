@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { CurrentUser, FacebookContentSnapshot, InstagramContentSnapshot, MetaAuthStatus, PinterestAuthStatus, PinterestContentSnapshot, SocialAccount, SocialAiAnalysisReport, SocialAiAnalysisStatus, SocialDebugSnapshot, SocialFetchLogEntry, SocialMetricKey, SocialPlatform, YouTubeAuthStatus, YouTubeDebugSnapshot } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { SocialApiService } from '../../core/social-api.service';
+import { deploymentConfig } from '../../core/deployment.generated';
 
 @Component({
   selector: 'app-social-accounts',
@@ -540,7 +541,7 @@ export class SocialAccountsPage {
       return this.showNotice(status.message || 'Set YouTube OAuth ClientId and ClientSecret first.');
     }
     if (this.runningOnLanHost) {
-      return this.showNotice('Open http://localhost:5077/social-accounts on the server computer to connect YouTube.');
+      return this.showNotice(`Open http://localhost:${deploymentConfig.ports.api}/social-accounts on the server computer to connect YouTube.`);
     }
 
     await this.perform(async () => {
@@ -613,7 +614,7 @@ export class SocialAccountsPage {
       return this.showNotice(status.message || 'Set Pinterest OAuth ClientId and ClientSecret first.');
     }
     if (this.runningOnLanHost) {
-      return this.showNotice('Open http://localhost:5077/social-accounts on the server computer to connect Pinterest.');
+      return this.showNotice(`Open http://localhost:${deploymentConfig.ports.api}/social-accounts on the server computer to connect Pinterest.`);
     }
 
     await this.perform(async () => {
@@ -659,7 +660,7 @@ export class SocialAccountsPage {
       return this.showNotice(status.message || 'Set Meta OAuth ClientId and ClientSecret first.');
     }
     if (this.runningOnLanHost) {
-      return this.showNotice('Open http://localhost:5077/social-accounts on the server computer to connect Meta.');
+      return this.showNotice(`Open http://localhost:${deploymentConfig.ports.api}/social-accounts on the server computer to connect Meta.`);
     }
 
     await this.perform(async () => {

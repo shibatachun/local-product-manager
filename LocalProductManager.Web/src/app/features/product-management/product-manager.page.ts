@@ -21,136 +21,29 @@ import {
 import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService } from '../../core/product-api.service';
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
-import { FileStoragePanelComponent } from './file-storage-panel.component';
-import { VideoTrendPanelComponent } from './video-trend-panel.component';
-import { UnitConverterPanelComponent } from './unit-converter-panel.component';
-import { ApiDocsPanelComponent } from './api-docs-panel.component';
-import { Product3dSceneEditorPanelComponent } from './product-3d-scene-editor-panel.component';
-import { InventoryManagerPanelComponent } from './inventory-manager-panel.component';
+import { FileStoragePanelComponent } from '../file-storage/file-storage-panel.component';
+import { VideoTrendPanelComponent } from '../video-trend/video-trend-panel.component';
+import { UnitConverterPanelComponent } from '../unit-converter/unit-converter-panel.component';
+import { ApiDocsPanelComponent } from '../api-documentation/api-docs-panel.component';
+import { Product3dSceneEditorPanelComponent } from '../product-3d-scene-editor/product-3d-scene-editor-panel.component';
+import { InventoryManagerPanelComponent } from '../inventory-manager/inventory-manager-panel.component';
 import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
 import { LabelMakerPage } from '../label-maker/label-maker.page';
-
-type ViewMode = 'products' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
-type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
-type PricingPlatform = Exclude<Platform, 'shopify'>;
-type ProductCostCurrency = 'rmb' | 'usd';
-type PricingWeightUnit = 'lb' | 'oz' | 'g' | 'kg';
-type TauriInternals = {
-  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
-};
-type AsinRelationshipRow = {
-  parentAsin: string;
-  childAsin: string;
-  sku: string;
-  amazonAttributeDone: boolean;
-  source: 'current' | 'child';
-};
-
-interface PricingStep {
-  label: string;
-  value: string;
-  note: string;
-}
-
-interface PricingEstimate {
-  platform: PricingPlatform;
-  logistics: string;
-  category: string;
-  categoryRate: number;
-  quantity: number;
-  unitCost: number;
-  productCostCurrency: ProductCostCurrency;
-  unitProductCostRmb: number;
-  unitProductCostUsd: number;
-  unitFirstMileRmb: number;
-  unitFirstMileUsd: number;
-  unitLandedCostRmb: number;
-  totalLandedCostRmb: number;
-  firstMileRate: number;
-  unitWeightInput: number;
-  unitWeightUnit: PricingWeightUnit;
-  packagingWeightInput: number;
-  packagingWeightUnit: PricingWeightUnit;
-  unitWeightGrams: number;
-  unitProductWeight: number;
-  packagingWeight: number;
-  totalProductWeight: number;
-  totalPackageWeight: number;
-  rmbToUsdRate: number;
-  exchangeRateDate: string;
-  exchangeRateSource: string;
-  totalCost: number;
-  cubicInches: number;
-  dimensionalWeight: number;
-  billableWeight: number;
-  shippingCost: number;
-  breakEvenPrice: number;
-  suggestedPrice: number;
-  estimatedProfit: number;
-  targetProfit: number;
-  targetProfitEnabled: boolean;
-  steps: PricingStep[];
-}
-
-interface LogisticsOption {
-  value: string;
-  label: string;
-  note: string;
-  dimDivisor: number;
-  tiers: { max: number; cost: number; baseAbove?: number; perLb?: number }[];
-  overflowPerLb: number;
-  weightPaddingLb?: number;
-  includePackagingReserve?: boolean;
-}
-
-interface PricingPlatformConfig {
-  label: string;
-  defaultLogistics: string;
-  defaultCategory: string;
-  processingRate: number;
-  fixedFee: number;
-  listingFee: number;
-  marginPercent: number;
-  bufferPercent: number;
-  note: string;
-  categories: PricingCategory[];
-  logistics: LogisticsOption[];
-}
-
-interface PricingCategory {
-  value: string;
-  label: string;
-  feeRate: number;
-  note: string;
-}
-
-interface PricingInput {
-  platform: PricingPlatform;
-  category: string;
-  logistics: string;
-  quantity: number;
-  unitCost: number | null;
-  productCostCurrency: ProductCostCurrency;
-  unitWeight: number | null;
-  unitWeightUnit: PricingWeightUnit;
-  packagingWeight: number | null;
-  packagingWeightUnit: PricingWeightUnit;
-  firstMileRate: number | null;
-  length: number | null;
-  width: number | null;
-  height: number | null;
-  packagingCost: number | null;
-  targetProfit: number | null;
-  targetMarginPercent: number | null;
-  bufferPercent: number | null;
-}
-
-interface PlatformChoice {
-  platform: Platform;
-  label: string;
-  selected: boolean;
-  url: string;
-}
+import {
+  AsinRelationshipRow,
+  LogisticsOption,
+  MarketingProductFilter,
+  PlatformChoice,
+  PricingCategory,
+  PricingEstimate,
+  PricingInput,
+  PricingPlatform,
+  PricingPlatformConfig,
+  PricingWeightUnit,
+  ProductCostCurrency,
+  TauriInternals,
+  ViewMode,
+} from './product-management.models';
 
 @Component({
   selector: 'app-product-manager',
@@ -1894,6 +1787,12 @@ export class ProductManagerPage {
 
   hideBrokenImage(event: Event): void {
     (event.target as HTMLImageElement).style.display = 'none';
+  }
+
+  showBrokenDetailImage(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    image.style.display = 'none';
+    image.parentElement?.classList.add('image-load-failed');
   }
 
   async copyImageLink(productId: number): Promise<void> {

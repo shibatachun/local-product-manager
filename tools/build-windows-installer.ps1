@@ -10,6 +10,14 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+$deployment = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\deployment.json') -Raw | ConvertFrom-Json
+$httpsPort = [int]$deployment.ports.https
+$inventoryBaseUrl = if ($httpsPort -eq 443) {
+    "https://$($deployment.lanHost)"
+}
+else {
+    "https://$($deployment.lanHost):$httpsPort"
+}
 $webRoot = Join-Path $repositoryRoot 'LocalProductManager.Web'
 $tauriConfigPath = Join-Path $webRoot 'src-tauri\tauri.conf.json'
 $cargoTomlPath = Join-Path $webRoot 'src-tauri\Cargo.toml'
@@ -168,7 +176,7 @@ if (-not (Test-Path -LiteralPath $signaturePath)) {
 }
 
 New-Item -ItemType Directory -Path $updatesDirectory -Force | Out-Null
-$publishedInstallerPath = Join-Path $updatesDirectory 'LocalProductManager-setup.exe'
+$publishedInstallerPath = Join-Path $updatesDirectory ([string]$deployment.updates.installerFileName)
 $publishedSignaturePath = "$publishedInstallerPath.sig"
 $temporaryInstallerPath = "$publishedInstallerPath.tmp"
 $temporarySignaturePath = "$publishedSignaturePath.tmp"
@@ -185,7 +193,7 @@ $manifest = [ordered]@{
     platforms = [ordered]@{
         'windows-x86_64' = [ordered]@{
             signature = $signature
-            url = 'https://192.168.1.154/updates/LocalProductManager-setup.exe'
+            url = "$inventoryBaseUrl$($deployment.updates.path)/$($deployment.updates.installerFileName)"
         }
     }
 }

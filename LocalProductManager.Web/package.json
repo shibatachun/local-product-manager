@@ -3,9 +3,9 @@
   "version": "0.1.4",
   "scripts": {
     "ng": "ng",
-    "prestart": "node scripts/sync-project-documentation.mjs",
-    "start": "ng serve --host 0.0.0.0 --port 4200",
-    "prebuild": "node scripts/sync-project-documentation.mjs",
+    "prestart": "node scripts/sync-deployment.mjs",
+    "start": "node scripts/start-development.mjs",
+    "prebuild": "node scripts/sync-deployment.mjs",
     "build": "ng build",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",

@@ -19,5 +19,5 @@ if errorlevel 1 (
 
 echo.
 echo Internal certificate installed successfully.
-echo Open: https://192.168.1.154
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\show-deployment-addresses.ps1"
 pause

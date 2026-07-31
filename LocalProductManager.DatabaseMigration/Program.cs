@@ -17,6 +17,18 @@ if (args.Length == 2 && args[0] == "--cleanup-tests")
     return 0;
 }
 
+if (args.Length == 2 && args[0] == "--verify")
+{
+    var verifyConnection = Environment.GetEnvironmentVariable("LPM_PG_MIGRATION_CONNECTION");
+    if (string.IsNullOrWhiteSpace(verifyConnection))
+    {
+        Console.Error.WriteLine("LPM_PG_MIGRATION_CONNECTION is required.");
+        return 2;
+    }
+
+    return await VerifyMigrationAsync(Path.GetFullPath(args[1]), verifyConnection) ? 0 : 1;
+}
+
 if (args.Length != 1)
 {
     Console.Error.WriteLine("Usage: migration <sqlite-database-path>");
@@ -160,6 +172,53 @@ static object ConvertValue(object value, string dataType)
         "date" => DateOnly.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture),
         _ => value
     };
+}
+
+static async Task<bool> VerifyMigrationAsync(string sqlitePath, string postgresConnection)
+{
+    await using var sqlite = new SqliteConnection($"Data Source={sqlitePath};Mode=ReadOnly");
+    await using var postgres = new NpgsqlConnection(postgresConnection);
+    await sqlite.OpenAsync();
+    await postgres.OpenAsync();
+
+    var tables = new List<string>();
+    await using (var tableCommand = sqlite.CreateCommand())
+    {
+        tableCommand.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
+        await using var reader = await tableCommand.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) tables.Add(reader.GetString(0));
+    }
+
+    var valid = true;
+    long totalRows = 0;
+    foreach (var table in tables)
+    {
+        await using var existsCommand = new NpgsqlCommand(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=@table)",
+            postgres);
+        existsCommand.Parameters.AddWithValue("table", table);
+        if (await existsCommand.ExecuteScalarAsync() is not true)
+        {
+            Console.WriteLine($"SKIPPED {table}: no matching PostgreSQL table");
+            continue;
+        }
+
+        await using var sqliteCountCommand = sqlite.CreateCommand();
+        sqliteCountCommand.CommandText = $"SELECT COUNT(*) FROM {Quote(table)}";
+        var sqliteCount = Convert.ToInt64(await sqliteCountCommand.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+        var postgresCount = Convert.ToInt64(
+            await new NpgsqlCommand($"SELECT COUNT(*) FROM {Quote(table)}", postgres).ExecuteScalarAsync(),
+            CultureInfo.InvariantCulture);
+        var matches = sqliteCount == postgresCount;
+        valid &= matches;
+        totalRows += sqliteCount;
+        Console.WriteLine($"{(matches ? "OK" : "MISMATCH")} {table}: SQLite={sqliteCount}, PostgreSQL={postgresCount}");
+    }
+
+    Console.WriteLine(valid
+        ? $"Verification passed: {tables.Count} source tables, {totalRows} rows."
+        : "Verification failed. The application must not switch databases.");
+    return valid;
 }
 
 static async Task CleanupTestDataAsync(string sqlitePath, string postgresConnection)

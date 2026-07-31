@@ -11,6 +11,28 @@ export interface ProductScannerLocation {
   description: string;
   qty: number;
 }
+
+export interface InventoryHistoryEntry {
+  id: number;
+  productId: number;
+  localInventoryId: string | null;
+  sku: string;
+  productName: string;
+  shelfLevelId: number;
+  binNumber: number;
+  locationCode: string;
+  locationDescription: string;
+  operation: 'stock_in' | 'stock_out';
+  beforeQty: number;
+  afterQty: number;
+  delta: number;
+  userName: string;
+  userRole: string;
+  remoteIp: string | null;
+  userAgent: string | null;
+  source: 'set' | 'adjust';
+  createdAt: string;
+}
 import { apiBaseUrl } from './api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -73,6 +95,12 @@ export class InventoryApiService {
   adjustInventory(levelId: number, productId: number, delta: number, binNumber = 1): Promise<ShelfLevel> {
     return firstValueFrom(this.http.patch<ShelfLevel>(
       `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, delta, binNumber }));
+  }
+
+  history(search = '', operation = '', limit = 250): Promise<InventoryHistoryEntry[]> {
+    return firstValueFrom(this.http.get<InventoryHistoryEntry[]>(`${this.baseUrl}/inventory/history`, {
+      params: { search, operation, limit },
+    }));
   }
 
   products(): Promise<ProductListItem[]> {

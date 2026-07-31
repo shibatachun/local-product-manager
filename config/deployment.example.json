@@ -1,0 +1,28 @@
+{
+  "lanHost": "192.168.1.100",
+  "ports": {
+    "https": 443,
+    "legacyHttps": 7265,
+    "api": 5077,
+    "dashboard": 18889,
+    "dashboardOtlp": 4317,
+    "resourceService": 18890,
+    "frontendDevelopment": 4200
+  },
+  "certificate": {
+    "path": "certificates/local-product-manager.pfx",
+    "password": "replace-me"
+  },
+  "database": {
+    "provider": "PostgreSQL",
+    "host": "127.0.0.1",
+    "port": 5432,
+    "name": "local_product_manager_production",
+    "username": "postgres",
+    "password": "replace-me"
+  },
+  "updates": {
+    "path": "/updates",
+    "installerFileName": "LocalProductManager-setup.exe"
+  }
+}

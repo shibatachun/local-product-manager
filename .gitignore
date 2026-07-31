@@ -17,7 +17,10 @@
 *.user
 *.suo
 certificates/
+/config/deployment.json
+/数据库凭据.txt
 _backups/
+/backups/
 _tools/
 updates/*
 !updates/.gitkeep

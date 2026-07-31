@@ -15,7 +15,7 @@
           <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
         </select>
       </label>
-      <button type="button" title="Swap units" (click)="swapLengthUnits()">⇄</button>
+      <button class="swap-button" type="button" title="Swap units" aria-label="Swap length units" (click)="swapLengthUnits()">⇄</button>
       <label>To
         <select [(ngModel)]="lengthConverter.to">
           <option *ngFor="let option of lengthUnits" [value]="option.value">{{ option.label }}</option>
@@ -44,7 +44,7 @@
           <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
         </select>
       </label>
-      <button type="button" title="Swap units" (click)="swapWeightUnits()">⇄</button>
+      <button class="swap-button" type="button" title="Swap units" aria-label="Swap weight units" (click)="swapWeightUnits()">⇄</button>
       <label>To
         <select [(ngModel)]="weightConverter.to">
           <option *ngFor="let option of weightUnits" [value]="option.value">{{ option.label }}</option>
@@ -74,7 +74,7 @@
           <option value="usd">USD</option>
         </select>
       </label>
-      <button type="button" title="Swap currencies" (click)="swapCurrencyUnits()">⇄</button>
+      <button class="swap-button" type="button" title="Swap currencies" aria-label="Swap currencies" (click)="swapCurrencyUnits()">⇄</button>
       <label>To
         <select [(ngModel)]="currencyConverter.to">
           <option value="usd">USD</option>

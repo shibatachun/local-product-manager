@@ -14,3 +14,10 @@ public sealed record ShelfLevelDto(int Id, string Code, int LevelNumber, int Tot
 public sealed record ShelfInventoryItemDto(int ProductId, string Sku, string ProductName, int Qty, int BinNumber);
 public sealed record ScannerLocationDto(
     int LevelId, int BinNumber, string Key, string Code, string Description, int Qty);
+
+public sealed record InventoryHistoryDto(
+    long Id, int ProductId, string? LocalInventoryId, string Sku, string ProductName,
+    int ShelfLevelId, int BinNumber, string LocationCode, string LocationDescription,
+    string Operation, int BeforeQty, int AfterQty, int Delta,
+    string UserName, string UserRole, string? RemoteIp, string? UserAgent,
+    string Source, DateTimeOffset CreatedAt);

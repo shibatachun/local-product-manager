@@ -66,6 +66,45 @@ public sealed class InventoryController(
         }).ToArray());
     }
 
+    [HttpGet("history")]
+    public async Task<ActionResult<IReadOnlyList<InventoryHistoryDto>>> GetHistory(
+        [FromQuery] string? search,
+        [FromQuery] string? operation,
+        [FromQuery] int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await auth.IsAdminAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Only administrators can view inventory history.");
+
+        var query = db.InventoryHistory.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim();
+            query = query.Where(item =>
+                item.Sku.Contains(value)
+                || item.ProductName.Contains(value)
+                || (item.LocalInventoryId != null && item.LocalInventoryId.Contains(value))
+                || item.LocationCode.Contains(value)
+                || item.UserName.Contains(value));
+        }
+        if (operation is "stock_in" or "stock_out")
+            query = query.Where(item => item.Operation == operation);
+
+        var rows = await query
+            // SQLite cannot translate ordering by DateTimeOffset. IDs are generated
+            // in the same transaction as the event, so descending ID is chronological.
+            .OrderByDescending(item => item.Id)
+            .Take(Math.Clamp(limit, 1, 1000))
+            .Select(item => new InventoryHistoryDto(
+                item.Id, item.ProductId, item.LocalInventoryId, item.Sku, item.ProductName,
+                item.ShelfLevelId, item.BinNumber, item.LocationCode, item.LocationDescription,
+                item.Operation, item.BeforeQty, item.AfterQty, item.Delta,
+                item.UserName, item.UserRole, item.RemoteIp, item.UserAgent,
+                item.Source, item.CreatedAt))
+            .ToArrayAsync(cancellationToken);
+        return Ok(rows);
+    }
+
     [HttpPost("warehouses")]
     public async Task<ActionResult<WarehouseDto>> CreateWarehouse(
         CreateWarehouseRequest request, CancellationToken cancellationToken)
@@ -228,8 +267,9 @@ public sealed class InventoryController(
             return BadRequest("Bin number must be 1 or 2.");
 
         var qty = Math.Max(0, request.Qty);
+        var actor = await InventoryActorAsync(cancellationToken);
         await inventoryWrites.SetAsync(
-            levelId, request.BinNumber, request.ProductId, qty, cancellationToken);
+            levelId, request.BinNumber, request.ProductId, qty, actor, cancellationToken);
 
         var updated = await db.ShelfLevels.AsNoTracking()
             .Include(item => item.Inventory).ThenInclude(item => item.Product)
@@ -253,8 +293,9 @@ public sealed class InventoryController(
             || !await db.Products.AnyAsync(item => item.Id == request.ProductId, cancellationToken))
             return NotFound();
 
+        var actor = await InventoryActorAsync(cancellationToken);
         var adjusted = await inventoryWrites.AdjustAsync(
-            levelId, request.BinNumber, request.ProductId, request.Delta, cancellationToken);
+            levelId, request.BinNumber, request.ProductId, request.Delta, actor, cancellationToken);
         if (!adjusted)
         {
             return Conflict(new
@@ -270,6 +311,16 @@ public sealed class InventoryController(
             .Include(item => item.Inventory).ThenInclude(item => item.Product)
             .FirstAsync(item => item.Id == levelId, cancellationToken);
         return Ok(ToDto(updated));
+    }
+
+    private async Task<InventoryAuditActor> InventoryActorAsync(CancellationToken cancellationToken)
+    {
+        var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
+        return new InventoryAuditActor(
+            user.UserName,
+            user.Role,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString());
     }
 
     private static WarehouseDto ToDto(Warehouse warehouse) => new(
