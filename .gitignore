@@ -21,3 +21,4 @@ _backups/
 _tools/
 updates/*
 !updates/.gitkeep
+LocalProductManager.Web/public/PROJECT_DOCUMENTATION.md
