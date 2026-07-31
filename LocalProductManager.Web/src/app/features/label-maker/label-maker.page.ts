@@ -10,6 +10,13 @@ import { ProductListItem } from '../../core/models';
 
 type LabelPreset = { name: string; width: number; height: number; columns: 1 | 2 };
 type BinLabel = { code: string; description: string };
+type LabelSettings = {
+  labelMode: 'product' | 'bin'; widthMm: number; heightMm: number; columns: 1 | 2;
+  columnGapMm: number; rowGapMm: number; sideMarginMm: number; fontSize: number;
+  barcodeHeight: number; showInv: boolean; showCategoryId: boolean; showSku: boolean;
+  showName: boolean; showQuantity: boolean; binDescription: string;
+};
+type SavedLabelPreset = { name: string; settings: LabelSettings | null };
 
 @Component({
   selector: 'app-label-maker',
@@ -23,6 +30,7 @@ export class LabelMakerPage implements AfterViewChecked {
   @ViewChildren('barcode') barcodeElements?: QueryList<ElementRef<HTMLElement>>;
   private readonly api = inject(ProductApiService);
   private readonly inventoryApi = inject(InventoryApiService);
+  private readonly customPresetStorageKey = 'lpm-label-maker-custom-presets-v1';
 
   readonly products = signal<ProductListItem[]>([]);
   readonly loading = signal(true);
@@ -51,11 +59,18 @@ export class LabelMakerPage implements AfterViewChecked {
   fontSize = 11;
   barcodeHeight = 48;
   showInv = true;
+  showCategoryId = true;
   showSku = true;
   showName = true;
   showQuantity = false;
+  customPresets: SavedLabelPreset[] = [
+    { name: 'Preset 1', settings: null },
+    { name: 'Preset 2', settings: null },
+    { name: 'Preset 3', settings: null },
+  ];
 
   constructor() {
+    this.loadCustomPresets();
     void this.loadProducts();
     void this.loadBins();
   }
@@ -69,9 +84,20 @@ export class LabelMakerPage implements AfterViewChecked {
         svg.replaceChildren();
         const hints = new Map<EncodeHintType, unknown>([
           [EncodeHintType.ERROR_CORRECTION, 'M'],
-          [EncodeHintType.MARGIN, 2],
+          [EncodeHintType.MARGIN, 0],
         ]);
-        svg.appendChild(new BrowserQRCodeSvgWriter().write(value, this.barcodeHeight, this.barcodeHeight, hints));
+        // Render at the QR matrix's intrinsic size, then let CSS scale the SVG.
+        // Passing an arbitrary pixel size makes ZXing center whole-pixel modules
+        // inside a larger canvas, which looks like an excessive quiet zone.
+        const qr = new BrowserQRCodeSvgWriter().write(value, 1, 1, hints);
+        const intrinsicWidth = qr.getAttribute('width') || '1';
+        const intrinsicHeight = qr.getAttribute('height') || intrinsicWidth;
+        if (!qr.getAttribute('viewBox')) qr.setAttribute('viewBox', `0 0 ${intrinsicWidth} ${intrinsicHeight}`);
+        qr.setAttribute('width', '100%');
+        qr.setAttribute('height', '100%');
+        qr.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        qr.style.display = 'block';
+        svg.appendChild(qr);
         svg.dataset['rendered'] = value;
       } catch {
         svg.replaceChildren();
@@ -84,6 +110,7 @@ export class LabelMakerPage implements AfterViewChecked {
     return this.products().filter(product => !keyword ||
       product.productName.toLocaleLowerCase().includes(keyword) ||
       product.sku.toLocaleLowerCase().includes(keyword) ||
+      this.categoryInventoryNumber(product).toLocaleLowerCase().includes(keyword) ||
       this.inventoryNumber(product).toLocaleLowerCase().includes(keyword));
   }
 
@@ -139,6 +166,57 @@ export class LabelMakerPage implements AfterViewChecked {
     this.sideMarginMm = 0;
   }
 
+  saveCustomPreset(index: number): void {
+    const slot = this.customPresets[index];
+    if (!slot) return;
+    slot.settings = {
+      labelMode: this.labelMode,
+      widthMm: this.widthMm,
+      heightMm: this.heightMm,
+      columns: this.columns,
+      columnGapMm: this.columnGapMm,
+      rowGapMm: this.rowGapMm,
+      sideMarginMm: this.sideMarginMm,
+      fontSize: this.fontSize,
+      barcodeHeight: this.barcodeHeight,
+      showInv: this.showInv,
+      showCategoryId: this.showCategoryId,
+      showSku: this.showSku,
+      showName: this.showName,
+      showQuantity: this.showQuantity,
+      binDescription: this.binDescription,
+    };
+    this.persistCustomPresets();
+  }
+
+  applyCustomPreset(index: number): void {
+    const settings = this.customPresets[index]?.settings;
+    if (!settings) return;
+    this.labelMode = settings.labelMode;
+    this.widthMm = settings.widthMm;
+    this.heightMm = settings.heightMm;
+    this.columns = settings.columns;
+    this.columnGapMm = settings.columnGapMm;
+    this.rowGapMm = settings.rowGapMm;
+    this.sideMarginMm = settings.sideMarginMm;
+    this.fontSize = settings.fontSize;
+    this.barcodeHeight = settings.barcodeHeight;
+    this.showInv = settings.showInv;
+    this.showCategoryId = settings.showCategoryId;
+    this.showSku = settings.showSku;
+    this.showName = settings.showName;
+    this.showQuantity = settings.showQuantity;
+    this.binDescription = settings.binDescription;
+    this.rerenderBarcodes();
+  }
+
+  clearCustomPreset(index: number): void {
+    const slot = this.customPresets[index];
+    if (!slot) return;
+    slot.settings = null;
+    this.persistCustomPresets();
+  }
+
   toggleProduct(id: number): void {
     const next = new Set(this.selectedIds());
     next.has(id) ? next.delete(id) : next.add(id);
@@ -171,12 +249,42 @@ export class LabelMakerPage implements AfterViewChecked {
     return product.localInventoryId || `INV-${product.id}`;
   }
 
+  categoryInventoryNumber(product: ProductListItem): string {
+    return product.categoryInventoryId || 'UNKNOWN';
+  }
+
   barcodeValue(product: ProductListItem): string {
     return `LPM|${this.inventoryNumber(product)}`;
   }
 
   rerenderBarcodes(): void {
     this.barcodeElements?.forEach(item => delete item.nativeElement.dataset['rendered']);
+  }
+
+  private loadCustomPresets(): void {
+    try {
+      const saved = JSON.parse(localStorage.getItem(this.customPresetStorageKey) || 'null');
+      if (!Array.isArray(saved)) return;
+      this.customPresets = this.customPresets.map((fallback, index) => {
+        const entry = saved[index];
+        return entry && typeof entry === 'object'
+          ? {
+              name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.slice(0, 32) : fallback.name,
+              settings: entry.settings && typeof entry.settings === 'object' ? entry.settings as LabelSettings : null,
+            }
+          : fallback;
+      });
+    } catch {
+      // Ignore damaged or unavailable browser storage and keep the empty slots.
+    }
+  }
+
+  persistCustomPresets(): void {
+    try {
+      localStorage.setItem(this.customPresetStorageKey, JSON.stringify(this.customPresets));
+    } catch {
+      // The label maker remains usable when browser storage is unavailable.
+    }
   }
 
   printLabels(): void {
@@ -222,10 +330,11 @@ export class LabelMakerPage implements AfterViewChecked {
         }
         .blank-label { visibility: hidden; }
         .product-name { display: block; width: 100%; margin-bottom: 1mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .barcode { display: grid; place-items: center; flex: 0 0 auto; width: 15mm; height: 15mm; max-width: 100%; max-height: 60%; }
+        .barcode { display: grid; place-items: center; flex: 0 0 auto; width: ${this.barcodeHeight}px; height: ${this.barcodeHeight}px; max-width: 100%; max-height: 60%; padding: 1px; background: #fff; }
         .barcode svg { display: block; width: 100%; height: 100%; }
-        .inv { margin-top: .8mm; font-family: Consolas, monospace; letter-spacing: .04em; }
-        .meta { display: flex; justify-content: center; gap: 3mm; width: 100%; margin-top: .7mm; font-size: .82em; }
+        .inv { margin-top: .3mm; font-family: Consolas, monospace; letter-spacing: .04em; }
+        .category-id { font-family: Consolas, monospace; font-size: .95em; letter-spacing: .04em; }
+        .meta { display: flex; justify-content: center; gap: 3mm; width: 100%; margin-top: .3mm; font-size: .92em; }
       </style></head><body>${rows.map(row => row.outerHTML).join('')}</body></html>`);
     frameDocument.close();
 

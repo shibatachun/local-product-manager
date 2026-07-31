@@ -115,6 +115,7 @@ using (var scope = app.Services.CreateScope())
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
         db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
     }
+    await ProductInventoryCategorySchema.UpgradeAsync(db);
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
 }
 

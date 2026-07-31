@@ -18,6 +18,15 @@ public sealed class ProductImagesController(
 {
     private static readonly HashSet<string> AllowedUploadExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp" };
+    private static readonly Dictionary<string, string> UploadExtensionsByContentType =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/jpeg"] = ".jpg",
+            ["image/png"] = ".png",
+            ["image/webp"] = ".webp",
+            ["image/gif"] = ".gif",
+            ["image/bmp"] = ".bmp"
+        };
 
     [HttpGet]
     public async Task<IActionResult> Get(
@@ -139,6 +148,11 @@ public sealed class ProductImagesController(
             return BadRequest("Choose an image no larger than 15 MB.");
 
         var extension = Path.GetExtension(file.FileName);
+        if (!AllowedUploadExtensions.Contains(extension) &&
+            UploadExtensionsByContentType.TryGetValue(file.ContentType, out var contentTypeExtension))
+        {
+            extension = contentTypeExtension;
+        }
         if (!AllowedUploadExtensions.Contains(extension) ||
             !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Choose a JPG, PNG, WebP, GIF, or BMP image.");

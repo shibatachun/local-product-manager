@@ -7,6 +7,8 @@ public sealed class Product
     public required string Sku { get; set; }
     public required string ProductName { get; set; }
     public string? Category { get; set; }
+    public string InventoryCategory { get; set; } = "UNKNOWN";
+    public string? CategoryInventoryId { get; set; }
     public decimal? Cost { get; set; }
     public decimal? OriginalCost { get; set; }
     public decimal? SalePrice { get; set; }

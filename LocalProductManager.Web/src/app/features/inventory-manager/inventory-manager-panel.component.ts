@@ -32,6 +32,7 @@ export class InventoryManagerPanelComponent {
   readonly warehouseName = signal('Main Warehouse');
   readonly shelfForm = { zoneCode: 'A', rowNumber: 1, levelCount: 5 };
   readonly inventoryForm = { productId: null as number | null, qty: 0 };
+  readonly adjustmentForm = { qty: 1 };
   readonly totalQty = computed(() => this.warehouse()?.shelves.reduce((sum, shelf) => sum + shelf.totalQty, 0) ?? 0);
   readonly selectedBinItems = computed(() =>
     this.selectedLevel()?.items.filter(item => item.binNumber === this.selectedBin()) ?? []);
@@ -236,6 +237,11 @@ export class InventoryManagerPanelComponent {
     this.inventoryForm.qty = row?.qty ?? 0;
   }
 
+  selectInventoryItem(item: ShelfInventoryItem): void {
+    this.inventoryForm.productId = item.productId;
+    this.inventoryForm.qty = item.qty;
+  }
+
   async saveInventory(): Promise<void> {
     const level = this.selectedLevel();
     const productId = Number(this.inventoryForm.productId);
@@ -253,6 +259,30 @@ export class InventoryManagerPanelComponent {
     }
     await this.load();
     this.showNotice(`${level.code}-B${this.selectedBin().toString().padStart(2, '0')} inventory updated.`);
+  }
+
+  async adjustSelectedInventory(direction: 'in' | 'out'): Promise<void> {
+    const level = this.selectedLevel();
+    const productId = Number(this.inventoryForm.productId);
+    const quantity = Math.max(0, Math.trunc(Number(this.adjustmentForm.qty) || 0));
+    if (!level || !productId || quantity < 1) {
+      this.showNotice('Choose a product and enter a quantity greater than 0.');
+      return;
+    }
+
+    const delta = direction === 'in' ? quantity : -quantity;
+    const updated = await this.run(() =>
+      this.api.adjustInventory(level.id, productId, delta, this.selectedBin()));
+    if (!updated) return;
+
+    this.applyUpdatedLevel(updated);
+    const selectedItem = updated.items.find(item =>
+      item.binNumber === this.selectedBin() && item.productId === productId);
+    this.inventoryForm.qty = selectedItem?.qty ?? 0;
+    this.products.set(await this.api.products());
+    await this.refreshWarehouse();
+    const action = direction === 'in' ? 'Stocked in' : 'Stocked out';
+    this.showNotice(`${action} ${quantity} unit${quantity === 1 ? '' : 's'} at ${level.code}-B${this.selectedBin().toString().padStart(2, '0')}.`);
   }
 
   requestAddProduct(): void {

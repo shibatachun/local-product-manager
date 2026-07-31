@@ -18,6 +18,7 @@ import {
   ProductListing,
   RmbToUsdRate,
   StoreLink,
+  InventoryCategory,
 } from './models';
 import { apiBaseUrl } from './api-base';
 
@@ -74,6 +75,7 @@ export class ProductApiService {
     sku: string;
     productName: string;
     category?: string | null;
+    inventoryCategory?: InventoryCategory | null;
     cost: number | null;
     originalCost?: number | null;
     salePrice?: number | null;
@@ -93,6 +95,7 @@ export class ProductApiService {
     sku: string;
     productName: string;
     category?: string | null;
+    inventoryCategory?: InventoryCategory | null;
     cost: number | null;
     originalCost?: number | null;
     salePrice?: number | null;

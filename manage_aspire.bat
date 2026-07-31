@@ -12,8 +12,8 @@ if errorlevel 1 (
 for /f "tokens=1,* delims==" %%A in ('node tools\deployment-env.mjs') do set "%%A=%%B"
 set "APPHOST=LocalProductManager.AppHost\LocalProductManager.AppHost.csproj"
 set "LOGROOT=%LOCALAPPDATA%\LocalProductManager\Aspire"
-set "LOGFILE=%LOGROOT%\apphost.log"
 if not exist "%LOGROOT%" mkdir "%LOGROOT%"
+set "LOGFILE=%LOGROOT%\apphost-%RANDOM%-%RANDOM%.log"
 
 goto menu
 
@@ -72,6 +72,7 @@ if defined ASPIRE_PID (
   exit /b
 )
 echo Starting Aspire...
+echo Session log: %LOGFILE%
 set "DOTNET_ENVIRONMENT=Development"
 set "ASPNETCORE_URLS=http://127.0.0.1:%DASHBOARD_PORT%"
 set "ASPIRE_ALLOW_UNSECURED_TRANSPORT=true"

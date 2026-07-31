@@ -2,6 +2,7 @@ using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Dtos;
 using LocalProductManager.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace LocalProductManager.Api.Services;
 
@@ -85,7 +86,9 @@ public sealed class ProductService(AppDbContext db)
             .Include(item => item.ChildProducts)
                 .ThenInclude(child => child.AmazonAsins)
             .FirstOrDefaultAsync(
-                item => item.LocalInventoryId == normalized || item.Sku == normalized,
+                item => item.LocalInventoryId == normalized ||
+                        item.CategoryInventoryId == normalized ||
+                        item.Sku == normalized,
                 cancellationToken);
 
         return product is null ? null : ProductMapper.ToListItemDto(product);
@@ -143,13 +146,21 @@ public sealed class ProductService(AppDbContext db)
             throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
         }
 
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var localInventoryId = NormalizeOptional(request.LocalInventoryId);
+        var inventoryCategory = ProductInventoryCategories.Normalize(request.InventoryCategory);
+        var categoryNumber = await ProductInventoryCategorySchema.NextNumberAsync(
+            db,
+            inventoryCategory,
+            cancellationToken);
         var product = new Product
         {
             LocalInventoryId = localInventoryId,
             Sku = NormalizeSku(request.Sku),
             ProductName = request.ProductName.Trim(),
             Category = NormalizeOptional(request.Category),
+            InventoryCategory = inventoryCategory,
+            CategoryInventoryId = ProductInventoryCategories.BuildId(inventoryCategory, categoryNumber),
             Cost = request.Cost,
             OriginalCost = request.OriginalCost,
             SalePrice = request.SalePrice,
@@ -172,6 +183,8 @@ public sealed class ProductService(AppDbContext db)
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        await transaction.CommitAsync(cancellationToken);
+
         var created = await GetProductGraph(product.Id).FirstAsync(cancellationToken);
         return ProductMapper.ToDetailDto(created);
     }
@@ -190,10 +203,20 @@ public sealed class ProductService(AppDbContext db)
             throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
         }
 
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         product.LocalInventoryId = NormalizeOptional(request.LocalInventoryId) ?? product.LocalInventoryId ?? BuildLocalInventoryId(product.Id);
         product.Sku = NormalizeSku(request.Sku);
         product.ProductName = request.ProductName.Trim();
         product.Category = NormalizeOptional(request.Category);
+        var inventoryCategory = ProductInventoryCategories.Normalize(request.InventoryCategory);
+        if (!string.Equals(product.InventoryCategory, inventoryCategory, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(product.CategoryInventoryId))
+        {
+            product.InventoryCategory = inventoryCategory;
+            product.CategoryInventoryId = ProductInventoryCategories.BuildId(
+                inventoryCategory,
+                await ProductInventoryCategorySchema.NextNumberAsync(db, inventoryCategory, cancellationToken));
+        }
         product.Cost = request.Cost;
         product.OriginalCost = request.OriginalCost;
         product.SalePrice = request.SalePrice;
@@ -208,6 +231,7 @@ public sealed class ProductService(AppDbContext db)
         product.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var updated = await GetProductGraph(product.Id).AsNoTracking().FirstAsync(cancellationToken);
         return ProductMapper.ToDetailDto(updated);
@@ -245,6 +269,7 @@ public sealed class ProductService(AppDbContext db)
             product.LocalInventoryId,
             product.Sku,
             product.ProductName,
+            product.CategoryInventoryId,
             product.SkuBase,
             product.AmazonParentAsin
         };
@@ -254,6 +279,7 @@ public sealed class ProductService(AppDbContext db)
             values.Add(child.LocalInventoryId);
             values.Add(child.Sku);
             values.Add(child.ProductName);
+            values.Add(child.CategoryInventoryId);
             values.Add(child.SkuBase);
             values.Add(child.AmazonParentAsin);
             values.AddRange(child.AmazonAsins.Select(asin => asin.Asin));

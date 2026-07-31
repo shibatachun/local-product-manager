@@ -16,6 +16,7 @@ import {
   ImageHostBrowseResult,
   ImageHostEntry,
   ImageStorageRoot,
+  InventoryCategory,
   StoreLink,
 } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
@@ -125,6 +126,18 @@ export class ProductManagerPage {
     { value: 'etsy', label: 'Etsy' },
     { value: 'shopify', label: 'Shopify' },
   ];
+  readonly inventoryCategoryOptions: { value: InventoryCategory; label: string }[] = [
+    { value: 'KEYCHAIN', label: 'KEYCHAIN' },
+    { value: 'POM', label: 'POM' },
+    { value: 'CHARM', label: 'CHARM' },
+    { value: 'EYE', label: 'EYE' },
+    { value: 'KIT', label: 'KIT' },
+    { value: 'BEAD', label: 'BEAD' },
+    { value: 'BROOCH', label: 'BROOCH' },
+    { value: 'UNKNOWN', label: 'UNKNOWN' },
+    { value: 'BAG', label: 'BAG' },
+    { value: 'PACKAGE', label: 'PACKAGE' },
+  ];
   readonly attributionPlatforms: AttributionPlatform[] = ['pinterest', 'facebook', 'instagram', 'tiktok', 'youtube', 'shopify'];
   readonly marketingProductFilters: { value: MarketingProductFilter; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -136,6 +149,7 @@ export class ProductManagerPage {
     sku: '',
     productName: '',
     category: '',
+    inventoryCategory: 'UNKNOWN' as InventoryCategory,
     cost: null as number | null,
     costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
@@ -167,6 +181,7 @@ export class ProductManagerPage {
     sku: '',
     productName: '',
     category: '',
+    inventoryCategory: 'UNKNOWN' as InventoryCategory,
     cost: null as number | null,
     costCurrency: 'rmb' as ProductCostCurrency,
     originalCost: null as number | null,
@@ -950,13 +965,16 @@ export class ProductManagerPage {
     this.createForm.imagePath = path;
   }
 
-  selectCreateImage(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+  async selectCreateImage(event: Event, cameraPhoto = false): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    let file = input.files?.[0] ?? null;
     if (!file) return;
+    if (cameraPhoto) file = await this.prepareCameraImage(file);
     if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
     this.pendingCreateImage = file;
     this.createImagePreviewUrl = URL.createObjectURL(file);
     this.createForm.imagePath = '';
+    input.value = '';
   }
 
   useCreateRemoteImage(url: string): void {
@@ -966,10 +984,12 @@ export class ProductManagerPage {
     this.createImagePreviewUrl = this.createForm.imagePath;
   }
 
-  async selectDetailImage(event: Event): Promise<void> {
-    const file = (event.target as HTMLInputElement).files?.[0];
+  async selectDetailImage(event: Event, cameraPhoto = false): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    let file = input.files?.[0];
     const product = this.selectedProduct();
     if (!file || !product) return;
+    if (cameraPhoto) file = await this.prepareCameraImage(file);
     await this.perform(async () => {
       const result = await this.api.uploadProductImage(product.id, file);
       this.editForm.imagePath = result.imagePath;
@@ -977,7 +997,7 @@ export class ProductManagerPage {
       this.bumpProductImageVersion(product.id);
       this.showNotice('Product image uploaded.');
     });
-    (event.target as HTMLInputElement).value = '';
+    input.value = '';
   }
 
   async finishCreate(): Promise<void> {
@@ -988,6 +1008,7 @@ export class ProductManagerPage {
         sku: this.createForm.sku,
         productName: this.createForm.productName,
         category: this.createForm.category || null,
+        inventoryCategory: this.createForm.inventoryCategory,
         cost: this.costInputToRmb(this.createForm.cost, this.createForm.costCurrency),
         originalCost: this.createForm.originalCost,
         salePrice: this.createForm.salePrice,
@@ -999,8 +1020,13 @@ export class ProductManagerPage {
         imagePath: this.createForm.imagePath || null,
         imageSource: this.imageSourceFor(this.createForm.imagePath),
       });
+      let imageUploadWarning = '';
       if (this.pendingCreateImage) {
-        await this.api.uploadProductImage(product.id, this.pendingCreateImage);
+        try {
+          await this.api.uploadProductImage(product.id, this.pendingCreateImage);
+        } catch (error) {
+          imageUploadWarning = this.formatError(error);
+        }
       }
 
       for (const choice of this.platformChoices.filter((item) => item.selected)) {
@@ -1033,13 +1059,16 @@ export class ProductManagerPage {
         this.createdBinLocation.set(binTarget.locationCode);
         this.createdBinQuantity.set(quantity);
         setTimeout(() => this.renderCreatedBarcode());
+        if (imageUploadWarning) this.showNotice(`Product created, but image upload failed: ${imageUploadWarning}`);
         return;
       }
 
       this.wizardOpen.set(false);
       await this.loadProducts();
       await this.openDetail(product.id);
-      this.showNotice('Product created.');
+      this.showNotice(imageUploadWarning
+        ? `Product created, but image upload failed: ${imageUploadWarning}`
+        : 'Product created.');
     });
   }
 
@@ -1047,8 +1076,9 @@ export class ProductManagerPage {
     return `LPM|${product.localInventoryId || `INV-${product.id}`}`;
   }
 
-  closeCreatedBinProduct(): void {
+  async closeCreatedBinProduct(): Promise<void> {
     this.createdBinProduct.set(null);
+    await this.loadProducts();
   }
 
   printCreatedProductLabel(): void {
@@ -1073,7 +1103,7 @@ export class ProductManagerPage {
       strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
       svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
     </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
-      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)}</code>
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(product.categoryInventoryId || 'UNKNOWN')}</code>
       <small>${this.escapeHtml(product.sku)} · ${this.escapeHtml(this.createdBinLocation())}</small></div></body></html>`);
     doc.close();
     setTimeout(() => {
@@ -1121,7 +1151,7 @@ export class ProductManagerPage {
       strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
       svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
     </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
-      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)}</code>
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(product.categoryInventoryId || 'UNKNOWN')}</code>
       <small>${this.escapeHtml(product.sku)}</small></div></body></html>`);
     doc.close();
     setTimeout(() => {
@@ -1165,6 +1195,7 @@ export class ProductManagerPage {
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
       this.editForm.category = product.category ?? '';
+      this.editForm.inventoryCategory = product.inventoryCategory || 'UNKNOWN';
       this.editForm.cost = product.cost;
       this.editForm.costCurrency = 'rmb';
       this.editForm.originalCost = product.originalCost;
@@ -1204,6 +1235,7 @@ export class ProductManagerPage {
         sku: this.editForm.sku,
         productName: this.editForm.productName,
         category: this.editForm.category || null,
+        inventoryCategory: this.editForm.inventoryCategory,
         cost: this.costInputToRmb(this.editForm.cost, this.editForm.costCurrency),
         originalCost: this.editForm.originalCost,
         salePrice: this.editForm.salePrice,
@@ -1932,6 +1964,7 @@ export class ProductManagerPage {
       sku: '',
       productName: '',
       category: '',
+      inventoryCategory: 'UNKNOWN',
       cost: null,
       costCurrency: 'rmb',
       originalCost: null,
@@ -1985,6 +2018,43 @@ export class ProductManagerPage {
 
   private imageSourceFor(path: string): 'local' | 'remote' {
     return this.isRemotePath(path) ? 'remote' : 'local';
+  }
+
+  private async prepareCameraImage(file: File): Promise<File> {
+    const sourceUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = sourceUrl;
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('The captured image could not be decoded.'));
+      });
+
+      const maximumDimension = 2048;
+      const scale = Math.min(1, maximumDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Image conversion is unavailable on this device.');
+      context.drawImage(image, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
+      if (!blob) throw new Error('The captured image could not be converted.');
+      const baseName = file.name.replace(/\.[^.]+$/, '') || `camera-${Date.now()}`;
+      return new File([blob], `${baseName}.jpg`, {
+        type: 'image/jpeg',
+        lastModified: Date.now(),
+      });
+    } catch {
+      this.showNotice('Photo conversion was unavailable; uploading the original image.');
+      return file;
+    } finally {
+      URL.revokeObjectURL(sourceUrl);
+    }
   }
 
   private async perform(action: () => Promise<void>, showErrors = true): Promise<void> {

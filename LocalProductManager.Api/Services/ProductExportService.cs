@@ -14,6 +14,8 @@ public sealed class ProductExportService(AppDbContext db)
     [
         "Product ID",
         "Local Inventory ID",
+        "Category Inventory ID",
+        "Inventory Category",
         "SKU",
         "Product Name",
         "Product Type",
@@ -135,6 +137,8 @@ public sealed class ProductExportService(AppDbContext db)
         [
             product.Id,
             product.LocalInventoryId,
+            product.CategoryInventoryId,
+            product.InventoryCategory,
             product.Sku,
             product.ProductName,
             product.ProductType,

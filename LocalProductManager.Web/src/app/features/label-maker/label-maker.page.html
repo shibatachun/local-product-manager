@@ -35,6 +35,22 @@
           <label>Height (mm)<input type="number" min="15" max="150" [(ngModel)]="heightMm" /></label>
         </div>
       </section>
+      <section class="custom-preset-section">
+        <h2>Saved presets</h2>
+        <p>Save the current size, layout and label content to this device.</p>
+        <div class="custom-preset-list">
+          <div class="custom-preset" *ngFor="let item of customPresets; let index = index">
+            <input type="text" maxlength="32" [(ngModel)]="item.name" (change)="persistCustomPresets()" [attr.aria-label]="'Preset ' + (index + 1) + ' name'" />
+            <div>
+              <button type="button" (click)="saveCustomPreset(index)">{{ item.settings ? 'Update' : 'Save' }}</button>
+              <button type="button" class="apply-preset" (click)="applyCustomPreset(index)" [disabled]="!item.settings">Apply</button>
+              <button type="button" class="clear-preset" title="Clear preset" (click)="clearCustomPreset(index)" [disabled]="!item.settings">×</button>
+            </div>
+            <small *ngIf="item.settings as settings">{{ settings.widthMm }} × {{ settings.heightMm }} mm · {{ settings.columns === 1 ? 'Single' : 'Double' }}</small>
+            <small *ngIf="!item.settings">Empty slot</small>
+          </div>
+        </div>
+      </section>
       <section>
         <h2>Roll layout</h2>
         <div class="column-choice">
@@ -51,6 +67,7 @@
       <section *ngIf="labelMode === 'product'">
         <h2>Label content</h2>
         <label class="check"><input type="checkbox" [(ngModel)]="showInv" /> INV number</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="showCategoryId" /> Category number</label>
         <label class="check"><input type="checkbox" [(ngModel)]="showSku" /> SKU</label>
         <label class="check"><input type="checkbox" [(ngModel)]="showName" /> Product name</label>
         <label class="check"><input type="checkbox" [(ngModel)]="showQuantity" /> Quantity</label>
@@ -79,12 +96,12 @@
       </div>
       <div class="product-picker" *ngIf="labelMode === 'product'">
         <div><h2>Inventory labels</h2><p>One label per selected INV number.</p></div>
-        <input [(ngModel)]="search" placeholder="Search INV, SKU or product" />
+        <input [(ngModel)]="search" placeholder="Search INV, category ID, SKU or product" />
         <div class="selection-actions"><button type="button" (click)="selectVisible()">Select visible</button><button type="button" (click)="clearSelection()">Clear</button></div>
         <div class="product-list">
           <label *ngFor="let product of filteredProducts">
             <input type="checkbox" [checked]="selectedIds().has(product.id)" (change)="toggleProduct(product.id)" />
-            <span><strong>{{ inventoryNumber(product) }}</strong><small>{{ product.sku }} · {{ product.productName }}</small></span>
+            <span><strong>{{ inventoryNumber(product) }} · {{ categoryInventoryNumber(product) }}</strong><small>{{ product.sku }} · {{ product.productName }}</small></span>
           </label>
           <p *ngIf="loading()">Loading products…</p><p class="error" *ngIf="error()">{{ error() }}</p>
         </div>
@@ -109,8 +126,9 @@
           <div class="label-row" *ngFor="let row of labelRows">
             <article class="product-label" *ngFor="let product of row">
               <strong class="product-name" *ngIf="showName">{{ product.productName }}</strong>
-              <div #barcode class="barcode" [attr.data-value]="barcodeValue(product)"></div>
+              <div #barcode class="barcode" [style.width.px]="barcodeHeight" [style.height.px]="barcodeHeight" [attr.data-value]="barcodeValue(product)"></div>
               <strong class="inv" *ngIf="showInv">{{ inventoryNumber(product) }}</strong>
+              <strong class="category-id" *ngIf="showCategoryId">{{ categoryInventoryNumber(product) }}</strong>
               <div class="meta"><span *ngIf="showSku">SKU: {{ product.sku }}</span><span *ngIf="showQuantity">QTY: {{ product.qty }}</span></div>
             </article>
             <article class="product-label blank-label" *ngIf="columns === 2 && row.length === 1" aria-hidden="true"></article>

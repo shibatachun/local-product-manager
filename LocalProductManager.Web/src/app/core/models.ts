@@ -56,6 +56,8 @@ export interface ProductListItem {
   sku: string;
   productName: string;
   category: string | null;
+  inventoryCategory: InventoryCategory;
+  categoryInventoryId: string | null;
   cost: number | null;
   originalCost: number | null;
   salePrice: number | null;
@@ -128,6 +130,18 @@ export interface ShelfInventoryItem {
   qty: number;
   binNumber: number;
 }
+
+export type InventoryCategory =
+  | 'KEYCHAIN'
+  | 'POM'
+  | 'CHARM'
+  | 'EYE'
+  | 'KIT'
+  | 'BEAD'
+  | 'BROOCH'
+  | 'UNKNOWN'
+  | 'BAG'
+  | 'PACKAGE';
 
 export interface ProductDuplicateCheck {
   sku: string;
