@@ -101,4 +101,4 @@ Write-Host 'Aspire Manager installation completed.' -ForegroundColor Green
 Write-Host 'Aspire is stopped by default. Use the manager window to start it.'
 Write-Host "Data backup: $backupData"
 Write-Host 'Dashboard: http://127.0.0.1:18889/'
-Write-Host 'Inventory: https://192.168.0.160/'
+Write-Host 'Inventory: https://192.168.1.154/'

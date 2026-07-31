@@ -19,5 +19,5 @@ if errorlevel 1 (
 
 echo.
 echo Internal certificate installed successfully.
-echo Open: https://192.168.0.160
+echo Open: https://192.168.1.154
 pause

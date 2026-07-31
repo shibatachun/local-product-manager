@@ -6,8 +6,14 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $runner = Join-Path $PSScriptRoot 'run-apphost.ps1'
 $logRoot = Join-Path $env:LOCALAPPDATA 'LocalProductManager\Aspire'
 $logPath = Join-Path $logRoot 'apphost.log'
+$buildLogPath = Join-Path $logRoot 'build.log'
 $pidPath = Join-Path $logRoot 'apphost.pid'
 $dashboardUrl = 'http://127.0.0.1:18889/'
+$frontendProject = Join-Path $repoRoot 'LocalProductManager.Web'
+$frontendDistRoot = Join-Path $frontendProject 'dist\LocalProductManager.Web'
+$frontendDist = Join-Path $frontendDistRoot 'browser'
+$appHostProject = Join-Path $repoRoot 'LocalProductManager.AppHost\LocalProductManager.AppHost.csproj'
+$building = $false
 
 $createdNew = $false
 $mutex = [Threading.Mutex]::new($true, 'LocalProductManager.AspireManager', [ref]$createdNew)
@@ -71,9 +77,87 @@ function Stop-AppHost {
     Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
 }
 
+function Build-Production {
+    $stagingRoot = Join-Path $env:TEMP "LocalProductManager-build-$([Guid]::NewGuid().ToString('N'))"
+    $stagedFrontendRoot = Join-Path $stagingRoot 'frontend'
+    $stagedFrontend = Join-Path $stagedFrontendRoot 'browser'
+    $stagedBackend = Join-Path $stagingRoot 'backend'
+    $frontendBackup = Join-Path $stagingRoot 'frontend-previous'
+    $wasRunning = $null -ne (Get-AppHostProcess)
+    $frontendPromoted = $false
+
+    New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+    Set-Content -LiteralPath $buildLogPath `
+        -Value "Production build started at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" `
+        -Encoding UTF8
+
+    try {
+        Push-Location $frontendProject
+        try {
+            & npm.cmd run build -- --output-path $stagedFrontendRoot *>> $buildLogPath
+            if ($LASTEXITCODE -ne 0) {
+                throw "Angular production build failed. The running service was not changed.`n`nSee: $buildLogPath"
+            }
+        }
+        finally {
+            Pop-Location
+        }
+
+        if (-not (Test-Path -LiteralPath (Join-Path $stagedFrontend 'index.html'))) {
+            throw "Angular build completed without creating browser\index.html.`n`nSee: $buildLogPath"
+        }
+
+        & dotnet.exe build $appHostProject --configuration Release --no-restore `
+            --output $stagedBackend *>> $buildLogPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Backend validation build failed. The running service was not changed.`n`nSee: $buildLogPath"
+        }
+
+        if ($wasRunning) {
+            Stop-AppHost
+        }
+
+        New-Item -ItemType Directory -Path $frontendDistRoot -Force | Out-Null
+        if (Test-Path -LiteralPath $frontendDist) {
+            Move-Item -LiteralPath $frontendDist -Destination $frontendBackup
+        }
+        Move-Item -LiteralPath $stagedFrontend -Destination $frontendDist
+        $frontendPromoted = $true
+
+        & dotnet.exe build $appHostProject --configuration Release --no-restore *>> $buildLogPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Final backend build failed. The previous frontend will be restored.`n`nSee: $buildLogPath"
+        }
+
+        Start-AppHost
+        Add-Content -LiteralPath $buildLogPath `
+            -Value "Production build completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    }
+    catch {
+        if ($frontendPromoted -and (Test-Path -LiteralPath $frontendBackup)) {
+            if (Test-Path -LiteralPath $frontendDist) {
+                Remove-Item -LiteralPath $frontendDist -Recurse -Force
+            }
+            Move-Item -LiteralPath $frontendBackup -Destination $frontendDist
+        }
+        if ($wasRunning -and $null -eq (Get-AppHostProcess)) {
+            Start-AppHost
+        }
+        throw
+    }
+    finally {
+        $resolvedTemp = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+        $resolvedStaging = [IO.Path]::GetFullPath($stagingRoot)
+        if ($resolvedStaging.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $resolvedStaging -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 $form = [Windows.Forms.Form]::new()
 $form.Text = 'Local Product Manager - Aspire'
-$form.ClientSize = [Drawing.Size]::new(520, 225)
+$form.ClientSize = [Drawing.Size]::new(660, 245)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -111,8 +195,9 @@ function Add-Button([string]$text, [int]$x, [int]$width) {
 $startButton = Add-Button 'Start Aspire' 28 105
 $stopButton = Add-Button 'Stop Aspire' 142 105
 $restartButton = Add-Button 'Restart' 256 84
-$dashboardButton = Add-Button 'Dashboard' 349 105
-$logButton = Add-Button 'Log' 463 48
+$buildButton = Add-Button 'Build && Restart' 349 125
+$dashboardButton = Add-Button 'Dashboard' 483 105
+$logButton = Add-Button 'Log' 597 48
 
 function Update-Status {
     $process = Get-AppHostProcess
@@ -129,6 +214,7 @@ function Update-Status {
     $stopButton.Enabled = $running
     $restartButton.Enabled = $running
     $dashboardButton.Enabled = $running
+    $buildButton.Enabled = -not $building
 }
 
 $startButton.Add_Click({
@@ -163,6 +249,31 @@ $restartButton.Add_Click({
         [Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Aspire restart failed', 'OK', 'Error') | Out-Null
     }
     Update-Status
+})
+$buildButton.Add_Click({
+    $building = $true
+    $status.Text = 'Status: Building production version...'
+    $status.ForeColor = [Drawing.Color]::DarkOrange
+    $form.Refresh()
+    try {
+        Build-Production
+        [Windows.Forms.MessageBox]::Show(
+            "Production build succeeded and Aspire was restarted.`n`nBuild log: $buildLogPath",
+            'Build complete',
+            'OK',
+            'Information') | Out-Null
+    }
+    catch {
+        [Windows.Forms.MessageBox]::Show(
+            $_.Exception.Message,
+            'Build failed',
+            'OK',
+            'Error') | Out-Null
+    }
+    finally {
+        $building = $false
+        Update-Status
+    }
 })
 $dashboardButton.Add_Click({
     Start-Process $dashboardUrl

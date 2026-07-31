@@ -4,7 +4,7 @@
   "description": "Default permissions for the LocalProductManager desktop window",
   "windows": ["main"],
   "remote": {
-    "urls": ["https://192.168.0.160/*"]
+    "urls": ["https://192.168.1.154/*"]
   },
   "permissions": ["core:default", "allow-check-for-updates"]
 }

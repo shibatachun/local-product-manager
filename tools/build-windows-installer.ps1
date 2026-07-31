@@ -185,7 +185,7 @@ $manifest = [ordered]@{
     platforms = [ordered]@{
         'windows-x86_64' = [ordered]@{
             signature = $signature
-            url = 'https://192.168.0.160/updates/LocalProductManager-setup.exe'
+            url = 'https://192.168.1.154/updates/LocalProductManager-setup.exe'
         }
     }
 }

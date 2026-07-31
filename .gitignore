@@ -9,6 +9,7 @@
 **/Data/youtube-oauth-token.json
 **/Data/youtube-client-secret.json
 **/Data/product-images/
+**/Data/image-thumbnails/
 **/ai-reports/
 **/logging/*.jsonl
 .codex/

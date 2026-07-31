@@ -83,14 +83,14 @@
         <table>
           <thead><tr><th>Product</th><th>Inventory ID</th><th>SKU</th><th>Qty</th><th>Cost (RMB)</th><th>Sale price</th><th>Weight (lb)</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
           <tbody>
-            <ng-container *ngFor="let product of products()">
+            <ng-container *ngFor="let product of products(); let productIndex = index">
             <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
               <td>
                 <button class="product-cell" type="button" (click)="openDetail(product.id)">
                   <span class="tree-toggle" role="button" tabindex="0" *ngIf="product.children.length" [title]="isExpanded(product.id) ? 'Collapse variations' : 'Expand variations'" (click)="toggleParent(product.id, $event)">
                     {{ isExpanded(product.id) ? '−' : '+' }}
                   </span>
-                  <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" loading="lazy" decoding="async" (error)="hideBrokenImage($event)" /></span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id, false, 96)" [alt]="product.productName" [attr.loading]="productIndex < 8 ? 'eager' : 'lazy'" [attr.fetchpriority]="productIndex < 4 ? 'high' : 'auto'" decoding="async" (error)="hideBrokenImage($event)" /></span>
                   <span><strong>{{ product.productName }}</strong><small *ngIf="product.children.length">{{ product.children.length }} child variations</small><small *ngIf="!product.children.length">{{ product.imagePath || 'No image path' }}</small></span>
                 </button>
               </td>
@@ -108,7 +108,7 @@
               <td>
                 <button class="product-cell child-product-cell" type="button" (click)="openDetail(child.id)">
                   <span class="tree-branch"></span>
-                  <span class="thumb image-thumb"><span>{{ productInitial(child) }}</span><img *ngIf="child.imagePath" [src]="productImageUrl(child.id)" [alt]="child.productName" loading="lazy" decoding="async" (error)="hideBrokenImage($event)" /></span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(child) }}</span><img *ngIf="child.imagePath" [src]="productImageUrl(child.id, false, 96)" [alt]="child.productName" loading="lazy" decoding="async" (error)="hideBrokenImage($event)" /></span>
                   <span><strong>{{ child.productName }}</strong><small>Child variation</small></span>
                 </button>
               </td>
@@ -154,8 +154,8 @@
             <small *ngIf="amazonProducts().length !== marketingBaseProducts().length">of {{ marketingBaseProducts().length | number }}</small>
           </div>
           <div class="marketing-list-scroll">
-        <button *ngFor="let product of amazonProducts()" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
-            <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id)" [alt]="product.productName" loading="lazy" decoding="async" (error)="hideBrokenImage($event)" /></span>
+        <button *ngFor="let product of amazonProducts(); let marketingIndex = index" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
+            <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id, false, 96)" [alt]="product.productName" [attr.loading]="marketingIndex < 8 ? 'eager' : 'lazy'" [attr.fetchpriority]="marketingIndex < 4 ? 'high' : 'auto'" decoding="async" (error)="hideBrokenImage($event)" /></span>
             <span><strong>{{ product.productName }}</strong><small>{{ product.sku }}<ng-container *ngIf="product.amazonAsinValues.length"> · {{ product.amazonAsinValues[0] }}</ng-container></small></span>
             <em>{{ product.asinCount }} ASIN</em>
           </button>

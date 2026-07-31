@@ -11,6 +11,7 @@ namespace LocalProductManager.Api.Controllers;
 public sealed class ProductImagesController(
     AppDbContext db,
     ImageFileService imageFiles,
+    ImageThumbnailService thumbnails,
     RemoteImageProxyService remoteImages,
     AmazonImageLookupService amazonImages,
     IWebHostEnvironment environment) : ControllerBase
@@ -22,6 +23,7 @@ public sealed class ProductImagesController(
     public async Task<IActionResult> Get(
         int productId,
         [FromQuery] bool download,
+        [FromQuery] int? thumbnail,
         CancellationToken cancellationToken)
     {
         var product = await db.Products
@@ -42,6 +44,47 @@ public sealed class ProductImagesController(
 
         try
         {
+            if (!download && thumbnail is not null)
+            {
+                var size = Math.Clamp(thumbnail.Value, 48, 512);
+                ImageThumbnailResult result;
+                if (product.ImageSource == "remote")
+                {
+                    result = await thumbnails.GetOrCreateAsync(
+                        $"remote:{product.ImagePath}",
+                        size,
+                        async token =>
+                        {
+                            var remoteImage = await remoteImages.GetImageAsync(product.ImagePath, token);
+                            return remoteImage.Stream;
+                        },
+                        cancellationToken);
+                }
+                else
+                {
+                    var localImage = imageFiles.GetImage(product.ImagePath);
+                    var file = new FileInfo(localImage.FullPath);
+                    result = await thumbnails.GetOrCreateAsync(
+                        $"local:{localImage.FullPath}|{file.Length}|{file.LastWriteTimeUtc.Ticks}",
+                        size,
+                        _ => Task.FromResult<Stream>(new FileStream(
+                            localImage.FullPath,
+                            FileMode.Open,
+                            FileAccess.Read,
+                            FileShare.ReadWrite | FileShare.Delete,
+                            bufferSize: 64 * 1024,
+                            useAsync: true)),
+                        cancellationToken);
+                }
+
+                Response.Headers.CacheControl = "private, max-age=3600";
+                Response.Headers.LastModified = result.LastModified.ToString("R");
+                return PhysicalFile(
+                    result.FullPath,
+                    result.ContentType,
+                    enableRangeProcessing: false);
+            }
+
             if (product.ImageSource == "remote")
             {
                 var remoteImage = await remoteImages.GetImageAsync(product.ImagePath, cancellationToken);

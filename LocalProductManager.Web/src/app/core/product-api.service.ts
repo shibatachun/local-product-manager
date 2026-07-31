@@ -226,8 +226,15 @@ export class ProductApiService {
     }));
   }
 
-  productImageUrl(productId: number, download = false): string {
-    return `${this.baseUrl}/products/${productId}/image${download ? '?download=true' : ''}`;
+  productImageUrl(productId: number, download = false, thumbnailSize?: number): string {
+    const params = new URLSearchParams();
+    if (download) params.set('download', 'true');
+    if (thumbnailSize) {
+      params.set('thumbnail', String(thumbnailSize));
+      params.set('thumbnailVersion', '1');
+    }
+    const query = params.toString();
+    return `${this.baseUrl}/products/${productId}/image${query ? `?${query}` : ''}`;
   }
 
   useAmazonImage(productId: number, listingUrl: string | null = null): Promise<{ imageUrl: string }> {

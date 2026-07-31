@@ -70,6 +70,7 @@ builder.Services.AddHttpClient<AmazonImageLookupService>();
 builder.Services.AddHttpClient<RemoteImageProxyService>();
 builder.Services.AddSingleton<ImageMatcherService>();
 builder.Services.AddSingleton<ImageFileService>();
+builder.Services.AddSingleton<ImageThumbnailService>();
 builder.Services.AddSingleton<SocialFetchLogService>();
 builder.Services.AddSingleton<StoreLinkService>();
 builder.Services.AddSingleton<VideoTrendLinkParser>();

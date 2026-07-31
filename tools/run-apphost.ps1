@@ -10,7 +10,7 @@ Set-Location $repoRoot
 
 Set-Content -LiteralPath $pidPath -Value $PID -Encoding Ascii
 try {
-    dotnet run --project $project --configuration Release --launch-profile http *>> $logPath
+    dotnet run --no-build --project $project --configuration Release --launch-profile http *>> $logPath
 }
 finally {
     Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue

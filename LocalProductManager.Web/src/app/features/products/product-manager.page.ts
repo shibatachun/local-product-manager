@@ -1873,8 +1873,8 @@ export class ProductManagerPage {
     return product.amazonAsins.find((asin) => asin.asinType === 'parent')?.asin ?? null;
   }
 
-  productImageUrl(productId: number, download = false): string {
-    const url = this.api.productImageUrl(productId, download);
+  productImageUrl(productId: number, download = false, thumbnailSize?: number): string {
+    const url = this.api.productImageUrl(productId, download, thumbnailSize);
     const version = this.imageVersion()[productId];
     if (!version || download) return url;
     return `${url}${url.includes('?') ? '&' : '?'}v=${version}`;

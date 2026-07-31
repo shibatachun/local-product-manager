@@ -8,7 +8,7 @@ LocalProductManager 是公司内部使用的商品、库存和营销管理系统
 https://inventory.jjgqaz.com:7265/
 ```
 
-域名指向公司局域网服务器 `192.168.0.160`。系统具有公开可信的 HTTPS 证书，但没有配置公网入口，只供公司内网使用。
+域名指向公司局域网服务器 `192.168.1.154`。系统具有公开可信的 HTTPS 证书，但没有配置公网入口，只供公司内网使用。
 
 ## 主要功能
 
@@ -43,7 +43,7 @@ https://inventory.jjgqaz.com:7265/
 https://inventory.jjgqaz.com:7265/
 ```
 
-不要把 `https://192.168.0.160:7265/` 作为日常入口。证书签发给域名而不是 IP，使用 IP 可能引起证书、摄像头或 API 请求异常。
+不要把 `https://192.168.1.154:7265/` 作为日常入口。日常可使用内部 HTTPS 地址 `https://192.168.1.154/`，或使用已配置的 Tailscale HTTPS 域名。
 
 - Android Chrome：选择“安装应用”或“添加到主屏幕”。
 - iPhone Safari：点击“分享”并选择“添加到主屏幕”。
@@ -162,7 +162,7 @@ $env:GEMINI_API_KEY = "由管理员保存的密钥"
 公司路由器必须设置：
 
 ```text
-inventory.jjgqaz.com → 192.168.0.160
+inventory.jjgqaz.com → 192.168.1.154
 ```
 
 Verizon Internet Gateway 通常位于：
@@ -192,7 +192,7 @@ certificates/inventory-jjgqaz-com.pfx
 允许 TCP `7265` 入站，但范围应限制为公司专用网络或公司网段。不要面向公共网络无限制开放。
 
 ```powershell
-Test-NetConnection 192.168.0.160 -Port 7265
+Test-NetConnection 192.168.1.154 -Port 7265
 ```
 
 ### 7. 启动生产服务
@@ -381,4 +381,3 @@ Chrome 可能保留旧 DNS、缓存或 Service Worker。先用无痕窗口验证
 - 使用独立账号并遵循最小权限原则。
 - 不要在截图、聊天、提交记录或文档中保存密码和 API Key。
 - 定期检查用户、会话、证书到期时间和备份可恢复性。
-

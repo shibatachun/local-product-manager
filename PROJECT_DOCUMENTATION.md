@@ -47,7 +47,7 @@ The API base is the backend server address used by the Angular frontend.
 Examples:
 
 - On the host computer: `http://localhost:5000/api`
-- From another LAN computer: `http://192.168.0.161:5000/api`
+- From another LAN computer: `https://192.168.1.154/api`
 
 When the ASP.NET Core app serves the Angular build, browser routes and API routes are on the same host. The frontend API service points requests to the configured API base.
 
