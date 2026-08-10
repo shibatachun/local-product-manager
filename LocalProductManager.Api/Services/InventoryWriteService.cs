@@ -1,4 +1,5 @@
 using LocalProductManager.Api.Data;
+using LocalProductManager.Api.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,47 @@ public sealed record InventoryAuditActor(
 public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWriteService> logger)
 {
     private const int MaxAttempts = 3;
+
+    public Task<LiveStreamBidProduct?> MoveToBidAsync(
+        int levelId,
+        int binNumber,
+        int productId,
+        int quantity,
+        InventoryAuditActor actor,
+        CancellationToken cancellationToken) =>
+        ExecuteWithRetryAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
+            if (product is null) return null;
+            var beforeQty = await CurrentQuantityAsync(levelId, binNumber, productId, cancellationToken);
+            if (quantity < 1 || beforeQty < quantity) return null;
+            var now = DateTimeOffset.UtcNow;
+            var affected = await AdjustLocationQuantityAsync(levelId, binNumber, productId, -quantity, now, cancellationToken);
+            if (affected == 0) return null;
+            await DeleteZeroQuantityAsync(levelId, binNumber, productId, cancellationToken);
+            await UpdateProductTotalAsync(productId, now, cancellationToken);
+            await WriteHistoryAsync(levelId, binNumber, productId, beforeQty, beforeQty - quantity, actor, "bid_transfer", now, cancellationToken);
+            var bidProduct = new LiveStreamBidProduct
+            {
+                SourceProductId = product.Id,
+                Uuid = Guid.NewGuid().ToString().ToUpperInvariant(),
+                Title = product.ProductName,
+                Quantity = 1,
+                Inventory = quantity,
+                UnitPrice = product.Cost ?? 0,
+                WeightOunces = product.Weight,
+                WeightGrams = product.Weight.HasValue ? decimal.Round(product.Weight.Value * 28.349523125m, 4) : null,
+                TotalCost = product.Cost.HasValue ? decimal.Round(product.Cost.Value, 2) : null,
+                ImportedFileName = "Local inventory transfer",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.LiveStreamBidProducts.Add(bidProduct);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return bidProduct;
+        }, cancellationToken);
 
     public Task SetAsync(
         int levelId,

@@ -27,7 +27,7 @@ public sealed class ProductExportService(AppDbContext db)
         "First-mile Cost",
         "Sale Price",
         "Qty",
-        "Weight",
+        "Weight (oz)",
         "Length",
         "Width",
         "Height",

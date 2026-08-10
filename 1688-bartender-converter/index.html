@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1688 → BarTender CSV</title>
+  <link rel="stylesheet" href="./styles.css?v=6">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">LOCAL CONVERSION TOOL <span class="version-badge">v1.2.0</span></p>
+        <h1>1688 → BarTender CSV</h1>
+        <p class="hero-copy">展开订单中的合并单元格，补充二维码唯一码、重量和成本，然后导出可供 BarTender 使用的 CSV。</p>
+      </div>
+      <div class="privacy-badge">
+        <span class="privacy-dot"></span>
+        文件仅在本机处理
+      </div>
+    </header>
+
+    <section class="upload-panel" aria-labelledby="upload-title">
+      <div class="step-number">1</div>
+      <div class="upload-content">
+        <div>
+          <h2 id="upload-title">选择1688订单原表</h2>
+          <p>支持 `.xlsx`。也可以直接把文件拖到下方区域。</p>
+        </div>
+        <label class="drop-zone" id="drop-zone" for="file-input">
+          <input id="file-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <span class="drop-icon" aria-hidden="true">⇧</span>
+          <strong id="drop-title">选择或拖入 Excel 文件</strong>
+          <span id="drop-subtitle">原始文件不会被修改或上传</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="workspace hidden" id="workspace" aria-live="polite">
+      <div class="summary-grid">
+        <article class="summary-card">
+          <span>商品记录</span>
+          <strong id="row-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>展开合并区域</span>
+          <strong id="merge-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>已识别重量</span>
+          <strong id="weight-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>待填写重量</span>
+          <strong id="missing-count">0</strong>
+        </article>
+      </div>
+
+      <section class="editor-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="step-heading"><span class="step-number small">2</span><h2>检查重量与成本</h2></div>
+            <p>标题中的克重会自动识别。修改“重量(g)”后，盎司和总成本会即时更新。</p>
+          </div>
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="search-input" type="search" placeholder="搜索标题、材质或 BID code">
+          </label>
+        </div>
+
+        <div class="formula-note">
+          <span>计算规则</span>
+          <code>重量(oz) = 重量(g) ÷ 28.349523125</code>
+          <code>总成本 = 0.05 × 重量(g) + 单价 × 数量</code>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="row-number">#</th>
+                <th>BID Code</th>
+                <th class="editable-heading">货品标题</th>
+                <th class="numeric">数量</th>
+                <th class="numeric editable-heading">Inventory</th>
+                <th class="numeric">单价(元)</th>
+                <th class="numeric editable-heading">重量(g)</th>
+                <th class="numeric">重量(oz)</th>
+                <th>材质</th>
+                <th class="numeric">总成本</th>
+              </tr>
+            </thead>
+            <tbody id="record-body"></tbody>
+          </table>
+          <div class="empty-filter hidden" id="empty-filter">没有符合搜索条件的记录。</div>
+        </div>
+      </section>
+
+      <section class="export-panel">
+        <div class="step-heading">
+          <span class="step-number small">3</span>
+          <div>
+            <h2>导出 BarTender CSV</h2>
+            <p>CSV 使用 UTF-8 BOM 编码，仅输出9个必要字段，第一列为二维码使用的稳定 BID|UUID code。</p>
+          </div>
+        </div>
+        <button class="primary-button" id="export-button" type="button">下载 CSV</button>
+      </section>
+    </section>
+
+    <section class="message hidden" id="message" role="alert"></section>
+  </main>
+
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script src="./converter-core.js?v=6"></script>
+  <script src="./app.js?v=6"></script>
+</body>
+</html>

@@ -7,16 +7,10 @@ import { EncodeHintType } from '@zxing/library';
 import { ProductApiService } from '../../core/product-api.service';
 import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
+import { emptyLabelPresetSlots, LabelSettings, loadSavedLabelPresets, SavedLabelPreset, saveLabelPresets } from '../../core/label-preset-storage';
 
 type LabelPreset = { name: string; width: number; height: number; columns: 1 | 2 };
 type BinLabel = { code: string; description: string };
-type LabelSettings = {
-  labelMode: 'product' | 'bin'; widthMm: number; heightMm: number; columns: 1 | 2;
-  columnGapMm: number; rowGapMm: number; sideMarginMm: number; fontSize: number;
-  barcodeHeight: number; showInv: boolean; showCategoryId: boolean; showSku: boolean;
-  showName: boolean; showQuantity: boolean; binDescription: string;
-};
-type SavedLabelPreset = { name: string; settings: LabelSettings | null };
 
 @Component({
   selector: 'app-label-maker',
@@ -30,7 +24,6 @@ export class LabelMakerPage implements AfterViewChecked {
   @ViewChildren('barcode') barcodeElements?: QueryList<ElementRef<HTMLElement>>;
   private readonly api = inject(ProductApiService);
   private readonly inventoryApi = inject(InventoryApiService);
-  private readonly customPresetStorageKey = 'lpm-label-maker-custom-presets-v1';
 
   readonly products = signal<ProductListItem[]>([]);
   readonly loading = signal(true);
@@ -63,11 +56,7 @@ export class LabelMakerPage implements AfterViewChecked {
   showSku = true;
   showName = true;
   showQuantity = false;
-  customPresets: SavedLabelPreset[] = [
-    { name: 'Preset 1', settings: null },
-    { name: 'Preset 2', settings: null },
-    { name: 'Preset 3', settings: null },
-  ];
+  customPresets: SavedLabelPreset[] = emptyLabelPresetSlots();
 
   constructor() {
     this.loadCustomPresets();
@@ -262,29 +251,11 @@ export class LabelMakerPage implements AfterViewChecked {
   }
 
   private loadCustomPresets(): void {
-    try {
-      const saved = JSON.parse(localStorage.getItem(this.customPresetStorageKey) || 'null');
-      if (!Array.isArray(saved)) return;
-      this.customPresets = this.customPresets.map((fallback, index) => {
-        const entry = saved[index];
-        return entry && typeof entry === 'object'
-          ? {
-              name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.slice(0, 32) : fallback.name,
-              settings: entry.settings && typeof entry.settings === 'object' ? entry.settings as LabelSettings : null,
-            }
-          : fallback;
-      });
-    } catch {
-      // Ignore damaged or unavailable browser storage and keep the empty slots.
-    }
+    this.customPresets = loadSavedLabelPresets();
   }
 
   persistCustomPresets(): void {
-    try {
-      localStorage.setItem(this.customPresetStorageKey, JSON.stringify(this.customPresets));
-    } catch {
-      // The label maker remains usable when browser storage is unavailable.
-    }
+    saveLabelPresets(this.customPresets);
   }
 
   printLabels(): void {

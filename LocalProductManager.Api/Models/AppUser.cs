@@ -11,6 +11,7 @@ public sealed class AppUser
     public bool CanEditAttribution { get; set; }
     public bool CanManageSocial { get; set; }
     public bool CanImportData { get; set; }
+    public bool CanEditProductDetails { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

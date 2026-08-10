@@ -13,6 +13,7 @@
 
     <nav aria-label="Main navigation" [class.mobile-open]="mobileMenuOpen()">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'bidProducts'" (click)="changeView('bidProducts')"><span>BP</span> Live Stream Bid Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
       <button [class.active]="view() === 'barcodeScanner'" (click)="changeView('barcodeScanner')"><span>▣</span> Barcode Scanner</button>
       <button [class.active]="view() === 'labelMaker'" (click)="changeView('labelMaker')"><span>LB</span> Label Maker</button>
@@ -42,7 +43,7 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'sceneEditor' && view() !== 'apiDocs'">
+      <div class="header-actions" *ngIf="view() !== 'bidProducts' && view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'sceneEditor' && view() !== 'apiDocs'">
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -50,7 +51,7 @@
       </div>
     </header>
 
-    <ng-container *ngIf="view() === 'products'; else marketingView">
+    <ng-container *ngIf="view() === 'products'; else bidProductsView">
       <section class="store-band">
         <div class="store-card" *ngFor="let option of listingOptions">
           <a [class.disabled]="!storeLink(option.value)?.url" [href]="storeLink(option.value)?.url || '#'" target="_blank" rel="noreferrer">{{ option.label }}</a>
@@ -80,17 +81,37 @@
       </section>
 
       <section class="table-wrap">
-        <table>
-          <thead><tr><th>Product</th><th>Inventory ID</th><th>Category ID</th><th>SKU</th><th>Qty</th><th>Cost (RMB)</th><th>Sale price</th><th>Weight (lb)</th><th>Platforms</th><th>Updated</th><th></th></tr></thead>
+        <table class="products-table" [style.width.px]="productTableWidth()">
+          <colgroup><col *ngFor="let column of productTableColumns" [style.width.px]="column.width" /></colgroup>
+          <thead><tr><th *ngFor="let column of productTableColumns; let columnIndex = index" [attr.aria-sort]="column.sortKey && productSortKey() === column.sortKey ? (productSortDirection() === 'asc' ? 'ascending' : 'descending') : null">
+            <button
+              *ngIf="column.sortKey; else plainColumnLabel"
+              class="product-sort-button"
+              type="button"
+              [attr.aria-label]="productSortAriaLabel(column)"
+              (click)="toggleProductSort(column.sortKey)">
+              <span>{{ column.label }}</span>
+              <span class="product-sort-indicator" [class.active]="productSortKey() === column.sortKey" aria-hidden="true">{{ productSortIndicator(column.sortKey) }}</span>
+            </button>
+            <ng-template #plainColumnLabel><span>{{ column.label }}</span></ng-template>
+            <button
+              *ngIf="columnIndex < productTableColumns.length - 1"
+              class="column-resize-handle"
+              type="button"
+              title="Drag to resize; double-click to reset"
+              [attr.aria-label]="'Resize ' + column.label + ' column'"
+              (pointerdown)="startColumnResize($event, columnIndex)"
+              (dblclick)="resetProductColumnWidth($event, columnIndex)"></button>
+          </th></tr></thead>
           <tbody>
-            <ng-container *ngFor="let product of products(); let productIndex = index">
+            <ng-container *ngFor="let product of sortedProducts(); let productIndex = index">
             <tr class="product-row" [class.parent-row]="product.productType === 'parent'" (dblclick)="openDetail(product.id)">
               <td>
                 <button class="product-cell" type="button" (click)="openDetail(product.id)">
                   <span class="tree-toggle" role="button" tabindex="0" *ngIf="product.children.length" [title]="isExpanded(product.id) ? 'Collapse variations' : 'Expand variations'" (click)="toggleParent(product.id, $event)">
                     {{ isExpanded(product.id) ? '−' : '+' }}
                   </span>
-                  <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id, false, 96)" [alt]="product.productName" [attr.loading]="productIndex < 8 ? 'eager' : 'lazy'" [attr.fetchpriority]="productIndex < 4 ? 'high' : 'auto'" decoding="async" (error)="hideBrokenImage($event)" /></span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [lpmProgressiveSrc]="productImageUrl(product.id, false, 96)" [lpmImagePriority]="productIndex < 4" [alt]="product.productName" decoding="async" (error)="hideBrokenImage($event)" /></span>
                   <span><strong>{{ product.productName }}</strong><small *ngIf="product.children.length">{{ product.children.length }} child variations</small><small *ngIf="!product.children.length">{{ product.imagePath || 'No image path' }}</small></span>
                 </button>
               </td>
@@ -103,13 +124,13 @@
               <td>{{ product.weight === null ? '—' : (product.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of product.platforms">{{ platformLabel(platform) }}</span><span class="muted" *ngIf="!product.platforms.length">Not listed</span></td>
               <td>{{ product.updatedAt | date:'MMM d, y' }}</td>
-              <td><button class="icon-button" title="Open details" (click)="openDetail(product.id)">›</button></td>
+              <td><a class="icon-button" title="Open full product record" [routerLink]="['/products', product.id]" (click)="$event.stopPropagation()">›</a></td>
             </tr>
             <tr class="child-row" *ngFor="let child of (isExpanded(product.id) ? product.children : [])" (dblclick)="openDetail(child.id)">
               <td>
                 <button class="product-cell child-product-cell" type="button" (click)="openDetail(child.id)">
                   <span class="tree-branch"></span>
-                  <span class="thumb image-thumb"><span>{{ productInitial(child) }}</span><img *ngIf="child.imagePath" [src]="productImageUrl(child.id, false, 96)" [alt]="child.productName" loading="lazy" decoding="async" (error)="hideBrokenImage($event)" /></span>
+                  <span class="thumb image-thumb"><span>{{ productInitial(child) }}</span><img *ngIf="child.imagePath" [lpmProgressiveSrc]="productImageUrl(child.id, false, 96)" [alt]="child.productName" decoding="async" (error)="hideBrokenImage($event)" /></span>
                   <span><strong>{{ child.productName }}</strong><small>Child variation</small></span>
                 </button>
               </td>
@@ -122,7 +143,7 @@
               <td>{{ child.weight === null ? '—' : (child.weight | number:'1.0-2') }}</td>
               <td><span class="platform-pill" *ngFor="let platform of child.platforms">{{ platformLabel(platform) }}</span></td>
               <td>{{ child.updatedAt | date:'MMM d, y' }}</td>
-              <td><button class="icon-button" title="Open child details" (click)="openDetail(child.id)">›</button></td>
+              <td><a class="icon-button" title="Open full product record" [routerLink]="['/products', child.id]" (click)="$event.stopPropagation()">›</a></td>
             </tr>
             </ng-container>
           </tbody>
@@ -133,6 +154,11 @@
       </section>
     </ng-container>
 
+    <ng-template #bidProductsView>
+      <ng-container *ngIf="view() === 'bidProducts'; else marketingView">
+        <app-live-stream-bid-products-panel [canImport]="canImportData()" [canMove]="!!currentUser()?.canManageStorage" [isAdmin]="!!currentUser()?.isAdmin"></app-live-stream-bid-products-panel>
+      </ng-container>
+    </ng-template>
     <ng-template #marketingView>
       <ng-container *ngIf="view() === 'marketing'; else pricingView">
       <section class="marketing-layout">
@@ -157,7 +183,7 @@
           </div>
           <div class="marketing-list-scroll">
         <button *ngFor="let product of amazonProducts(); let marketingIndex = index" [class.active]="selectedProduct()?.id === product.id" (click)="selectMarketingProduct(product.id)">
-            <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [src]="productImageUrl(product.id, false, 96)" [alt]="product.productName" [attr.loading]="marketingIndex < 8 ? 'eager' : 'lazy'" [attr.fetchpriority]="marketingIndex < 4 ? 'high' : 'auto'" decoding="async" (error)="hideBrokenImage($event)" /></span>
+            <span class="thumb image-thumb"><span>{{ productInitial(product) }}</span><img *ngIf="product.imagePath" [lpmProgressiveSrc]="productImageUrl(product.id, false, 96)" [lpmImagePriority]="marketingIndex < 4" [alt]="product.productName" decoding="async" (error)="hideBrokenImage($event)" /></span>
             <span><strong>{{ product.productName }}</strong><small>{{ product.sku }}<ng-container *ngIf="product.amazonAsinValues.length"> · {{ product.amazonAsinValues[0] }}</ng-container></small></span>
             <em>{{ product.asinCount }} ASIN</em>
           </button>
@@ -385,12 +411,12 @@
     </ng-template>
     <ng-template #apiDocsView>
       <ng-container *ngIf="view() === 'inventory'; else actualApiDocsView">
-        <app-inventory-manager-panel #inventoryPanel [isAdmin]="currentUser()?.isAdmin ?? false" (addProductToBin)="openWizardForBin($event)" (openProductDetail)="openDetail($event)"></app-inventory-manager-panel>
+        <app-inventory-manager-panel #inventoryPanel [isAdmin]="currentUser()?.isAdmin ?? false" (addProductToBin)="openWizardForBin($event)" (openProductDetail)="openInventoryProductDetail($event)"></app-inventory-manager-panel>
       </ng-container>
     </ng-template>
     <ng-template #actualApiDocsView>
       <ng-container *ngIf="view() === 'barcodeScanner'; else labelMakerView">
-        <app-barcode-scanner [embedded]="true"></app-barcode-scanner>
+        <app-barcode-scanner [embedded]="true" (openProductDetail)="openDetail($event)"></app-barcode-scanner>
       </ng-container>
     </ng-template>
     <ng-template #labelMakerView>
@@ -469,15 +495,30 @@
   <footer class="modal-footer"><button (click)="closeCreatedBinProduct()">Done</button><button class="primary" (click)="printCreatedProductLabel()">Print QR label</button></footer>
 </section>
 
+<div class="backdrop print-preset-backdrop" *ngIf="printPresetTarget()" (click)="closePrintPresetSelector()"></div>
+<section class="modal print-preset-modal" *ngIf="printPresetTarget()" role="dialog" aria-modal="true" aria-labelledby="print-preset-title">
+  <header><div><p class="eyebrow">Print QR label</p><h2 id="print-preset-title">Choose a saved label preset</h2></div><button class="icon-button" title="Close" (click)="closePrintPresetSelector()">×</button></header>
+  <div class="print-preset-body">
+    <p>Select the paper size and layout before opening the system print dialog.</p>
+    <div class="print-preset-list" *ngIf="savedPrintPresets().length; else noSavedPrintPresets">
+      <button type="button" *ngFor="let preset of savedPrintPresets()" (click)="selectPrintPreset(preset)">
+        <span><strong>{{ preset.name }}</strong><small *ngIf="preset.settings as settings">{{ settings.widthMm }} × {{ settings.heightMm }} mm · {{ settings.columns === 2 ? 'Double column' : 'Single column' }}</small></span><b>Print</b>
+      </button>
+    </div>
+    <ng-template #noSavedPrintPresets><div class="no-print-presets"><strong>No product label presets saved</strong><span>Open Label Maker, configure a product label, and save it in a preset slot first.</span></div></ng-template>
+  </div>
+  <footer class="modal-footer"><button type="button" (click)="closePrintPresetSelector()">Cancel</button></footer>
+</section>
+
 <div class="backdrop foreground-backdrop" *ngIf="wizardOpen()" (click)="closeWizard()"></div>
-<section class="modal foreground-modal wizard" *ngIf="wizardOpen()" role="dialog" aria-modal="true">
+<section class="modal foreground-modal wizard" *ngIf="wizardOpen()" role="dialog" aria-modal="true" (input)="saveWizardDraft()" (change)="saveWizardDraft()">
   <header><div><p class="eyebrow">New product</p><h2>Add product</h2></div><button class="icon-button" title="Close" (click)="closeWizard()">×</button></header>
   <ol class="steps"><li [class.active]="wizardStep() === 1" [class.done]="wizardStep() > 1"><span>1</span>Basic info</li><li [class.active]="wizardStep() === 2" [class.done]="wizardStep() > 2"><span>2</span>Platforms</li><li [class.active]="wizardStep() === 3"><span>3</span>Amazon ASIN</li></ol>
 
   <div class="modal-body" *ngIf="wizardStep() === 1">
     <div class="form-grid">
       <label>Inventory ID<input [(ngModel)]="createForm.localInventoryId" placeholder="Auto: INV-{id}" /></label>
-      <label>SKU number<input [(ngModel)]="createForm.sku" placeholder="e.g. 123456-BLACK" /></label>
+      <label>SKU number (optional)<input [(ngModel)]="createForm.sku" placeholder="Auto: LPM-000001" /></label>
       <label>Product name<input [(ngModel)]="createForm.productName" placeholder="Product display name" /></label>
       <label>Inventory category
         <select [(ngModel)]="createForm.inventoryCategory">
@@ -495,13 +536,13 @@
       <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
       <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="createForm.salePrice" placeholder="0.00" /></label>
       <label>Qty<input type="number" min="0" step="1" [(ngModel)]="createForm.qty" placeholder="0" /></label>
-      <label>Weight (lb)<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
+      <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
       <label>Height<input type="number" step="0.01" [(ngModel)]="createForm.height" placeholder="0.00" /></label>
       <label class="wide">Network image URL<input [ngModel]="createForm.imagePath" (ngModelChange)="useCreateRemoteImage($event)" placeholder="https://example.com/product.jpg" /></label>
       <label>Choose local image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectCreateImage($event)" /></label>
-      <label>Take photo<input type="file" accept="image/*" capture="environment" (change)="selectCreateImage($event, true)" /></label>
+      <label>Take one photo<input type="file" accept="image/*" capture="environment" (change)="selectCreateImage($event, true)" /></label>
     </div>
     <div class="image-results" *ngIf="createImagePreviewUrl">
       <span class="match-preview"><img [src]="createImagePreviewUrl" [alt]="createForm.productName || createForm.sku" (error)="hideBrokenImage($event)" /></span>
@@ -531,7 +572,7 @@
   <footer class="modal-footer"><button (click)="previousWizardStep()" [disabled]="wizardStep() === 1">Back</button><div><button (click)="closeWizard()">Cancel</button><button class="primary" (click)="wizardStep() === 3 ? finishCreate() : nextWizardStep()" [disabled]="loading()">{{ wizardStep() === 3 ? 'Create product' : wizardStep() === 2 && !platformChoices[0].selected ? 'Create product' : 'Continue' }}</button></div></footer>
 </section>
 
-<div class="backdrop" *ngIf="detailOpen()" (click)="closeDetail()"></div>
+<div class="backdrop detail-backdrop" *ngIf="detailOpen()" (click)="closeDetail()"></div>
 <aside class="drawer" *ngIf="detailOpen() && selectedProduct() as product">
   <div class="drawer-asin-banner" *ngIf="product.amazonAsins.length">ASIN: {{ product.amazonAsins[0].asin }}</div>
   <header><div><p class="eyebrow">Product details</p><h2>{{ product.productName }}</h2><code>{{ product.sku }}</code></div><button class="icon-button" title="Close" (click)="closeDetail()">×</button></header>
@@ -569,6 +610,10 @@
       <div class="detail-image-panel">
         <div class="detail-image-toolbar">
           <span><strong>Product image</strong><small>Choose a local image, enter a network URL, or take a photo.</small></span>
+          <button
+            type="button"
+            *ngIf="currentUser()?.isAdmin && currentUser()?.isHost"
+            (click)="openDetailImageFolder()">Open local folder</button>
         </div>
         <div class="detail-image-preview" *ngIf="editForm.imagePath; else noDetailImage">
           <img
@@ -589,8 +634,17 @@
         </ng-template>
         <div class="form-grid">
           <label class="wide">Network image URL<input [(ngModel)]="editForm.imagePath" placeholder="https://example.com/product.jpg" /></label>
-          <label>Choose local image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectDetailImage($event)" /></label>
-          <label>Take photo<input type="file" accept="image/*" capture="environment" (change)="selectDetailImage($event, true)" /></label>
+          <label>Upload photos<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectDetailImages($event)" /></label>
+          <label>Take photos<input type="file" multiple accept="image/*" capture="environment" (change)="selectDetailImages($event, true)" /></label>
+        </div>
+        <div class="product-image-library" *ngIf="detailProductImages().length">
+          <p>Product photo folder <small>Select any photo below to use it as the main image.</small></p>
+          <div>
+            <button type="button" *ngFor="let image of detailProductImages()" [class.primary-image]="image.isPrimary" (click)="makeDetailImagePrimary(image)">
+              <img [src]="detailProductImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy" />
+              <span>{{ image.isPrimary ? 'Main image' : 'Set as main' }}</span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="form-grid">
@@ -614,7 +668,7 @@
         <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
         <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="editForm.salePrice" /></label>
         <label>Qty<input type="number" min="0" step="1" [(ngModel)]="editForm.qty" /></label>
-        <label>Weight (lb)<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
+        <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>
         <label>Height<input type="number" step="0.01" [(ngModel)]="editForm.height" /></label>

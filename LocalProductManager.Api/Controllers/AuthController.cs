@@ -51,6 +51,7 @@ public sealed class AuthController(
                 user.CanEditAttribution,
                 user.CanManageSocial,
                 user.CanImportData,
+                user.CanEditProductDetails,
                 user.UpdatedAt))
             .ToListAsync(cancellationToken);
 
@@ -92,6 +93,7 @@ public sealed class AuthController(
         user.CanEditAttribution = request.CanEditAttribution;
         user.CanManageSocial = request.CanManageSocial;
         user.CanImportData = request.CanImportData;
+        user.CanEditProductDetails = request.CanEditProductDetails;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -104,6 +106,7 @@ public sealed class AuthController(
             user.CanEditAttribution,
             user.CanManageSocial,
             user.CanImportData,
+            user.CanEditProductDetails,
             user.UpdatedAt));
     }
 

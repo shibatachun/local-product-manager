@@ -9,7 +9,8 @@ public sealed record CurrentUserDto(
     bool CanManageStorage,
     bool CanEditAttribution,
     bool CanManageSocial,
-    bool CanImportData);
+    bool CanImportData,
+    bool CanEditProductDetails);
 
 public sealed record LoginRequest(string UserName, string Password);
 
@@ -22,6 +23,7 @@ public sealed record AppUserAdminDto(
     bool CanEditAttribution,
     bool CanManageSocial,
     bool CanImportData,
+    bool CanEditProductDetails,
     DateTimeOffset UpdatedAt);
 
 public sealed record UpdateUserPermissionsRequest(
@@ -30,7 +32,8 @@ public sealed record UpdateUserPermissionsRequest(
     bool CanManageStorage,
     bool CanEditAttribution,
     bool CanManageSocial,
-    bool CanImportData);
+    bool CanImportData,
+    bool CanEditProductDetails);
 
 public sealed record UserSessionAdminDto(
     string Id,

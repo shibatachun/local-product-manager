@@ -50,12 +50,18 @@ public sealed class ImageFileService
 
     public IReadOnlyList<ImageStorageRoot> GetRoots()
     {
+        string[] roots;
         lock (sync)
         {
-            return allowedRoots
-                .Select(path => new ImageStorageRoot(path, Directory.Exists(path)))
-                .ToArray();
+            roots = allowedRoots.ToArray();
         }
+
+        // Directory.Exists can take tens of seconds for an offline UNC share.
+        // Never hold the roots lock during network I/O because product image
+        // requests only need a quick snapshot of the allowed paths.
+        return roots
+            .Select(path => new ImageStorageRoot(path, Directory.Exists(path)))
+            .ToArray();
     }
 
     public ImageStorageRoot AddRoot(string path)

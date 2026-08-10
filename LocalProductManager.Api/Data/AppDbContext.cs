@@ -24,6 +24,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ShelfLevel> ShelfLevels => Set<ShelfLevel>();
     public DbSet<ShelfLevelInventory> ShelfLevelInventories => Set<ShelfLevelInventory>();
     public DbSet<InventoryHistoryEntry> InventoryHistory => Set<InventoryHistoryEntry>();
+    public DbSet<ProductDetailProfile> ProductDetails => Set<ProductDetailProfile>();
+    public DbSet<ProductIdentifier> ProductIdentifiers => Set<ProductIdentifier>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<ProductSupplier> ProductSuppliers => Set<ProductSupplier>();
+    public DbSet<ProcurementLink> ProcurementLinks => Set<ProcurementLink>();
+    public DbSet<ProductCompliance> ProductCompliance => Set<ProductCompliance>();
+    public DbSet<ProductPackaging> ProductPackaging => Set<ProductPackaging>();
+    public DbSet<ProductPrice> ProductPrices => Set<ProductPrice>();
+    public DbSet<LiveStreamBidProduct> LiveStreamBidProducts => Set<LiveStreamBidProduct>();
+    public DbSet<LiveStreamBidSale> LiveStreamBidSales => Set<LiveStreamBidSale>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,6 +145,93 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(asin => asin.AttributionLinks)
                 .HasForeignKey(link => link.AmazonAsinId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<LiveStreamBidProduct>(entity =>
+        {
+            entity.ToTable("live_stream_bid_products");
+            entity.HasIndex(item => item.Uuid).IsUnique();
+            entity.HasIndex(item => item.SourceProductId);
+            entity.HasOne(item => item.SourceProduct).WithMany().HasForeignKey(item => item.SourceProductId).OnDelete(DeleteBehavior.SetNull);
+            entity.Property(item => item.Uuid).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.Title).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.UnitPrice).HasPrecision(12, 2);
+            entity.Property(item => item.WeightGrams).HasPrecision(12, 4);
+            entity.Property(item => item.WeightOunces).HasPrecision(12, 4);
+            entity.Property(item => item.Material).HasMaxLength(300);
+            entity.Property(item => item.TotalCost).HasPrecision(12, 2);
+            entity.Property(item => item.ImportedFileName).HasMaxLength(260);
+        });
+
+        modelBuilder.Entity<LiveStreamBidSale>(entity =>
+        {
+            entity.ToTable("live_stream_bid_sales");
+            entity.HasIndex(item => item.BidProductId);
+            entity.HasIndex(item => item.SaleDate);
+            entity.Property(item => item.ProductUuid).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.ProductTitle).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.Cost).HasPrecision(12, 2);
+            entity.Property(item => item.ActualSalePrice).HasPrecision(12, 2);
+            entity.Property(item => item.SalePriceRmb).HasPrecision(12, 2);
+            entity.Property(item => item.ExchangeRateRmbToUsd).HasPrecision(12, 6);
+            entity.Property(item => item.Profit).HasPrecision(12, 2);
+            entity.Property(item => item.ProfitUsd).HasPrecision(12, 2);
+            entity.Property(item => item.SoldBy).HasMaxLength(80).IsRequired();
+            entity.HasOne(item => item.BidProduct).WithMany().HasForeignKey(item => item.BidProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProductDetailProfile>(entity =>
+        {
+            entity.ToTable("product_details");
+            entity.HasKey(item => item.ProductId);
+            entity.Property(item => item.Description).HasMaxLength(4000);
+            entity.HasOne(item => item.Product).WithOne()
+                .HasForeignKey<ProductDetailProfile>(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProductIdentifier>(entity =>
+        {
+            entity.ToTable("product_identifiers");
+            entity.HasIndex(item => new { item.ProductId, item.IdentifierType, item.Value }).IsUnique();
+            entity.HasOne(item => item.Product).WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.ToTable("suppliers");
+            entity.HasIndex(item => item.Name).IsUnique();
+        });
+        modelBuilder.Entity<ProductSupplier>(entity =>
+        {
+            entity.ToTable("product_suppliers");
+            entity.HasIndex(item => new { item.ProductId, item.SupplierId }).IsUnique();
+            entity.Property(item => item.MinimumPurchasePrice).HasPrecision(12, 2);
+            entity.HasOne(item => item.Product).WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Supplier).WithMany().HasForeignKey(item => item.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<ProcurementLink>(entity =>
+        {
+            entity.ToTable("procurement_links");
+            entity.Property(item => item.Url).HasMaxLength(4096);
+            entity.HasOne(item => item.ProductSupplier).WithMany(item => item.ProcurementLinks)
+                .HasForeignKey(item => item.ProductSupplierId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProductCompliance>(entity =>
+        {
+            entity.ToTable("product_compliance");
+            entity.HasKey(item => item.ProductId);
+            entity.Property(item => item.DeclaredValue).HasPrecision(12, 2);
+            entity.HasOne(item => item.Product).WithOne().HasForeignKey<ProductCompliance>(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProductPackaging>(entity =>
+        {
+            entity.ToTable("product_packaging");
+            entity.HasKey(item => item.ProductId);
+            entity.HasOne(item => item.Product).WithOne().HasForeignKey<ProductPackaging>(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProductPrice>(entity =>
+        {
+            entity.ToTable("product_prices");
+            entity.Property(item => item.Amount).HasPrecision(12, 2);
+            entity.HasOne(item => item.Product).WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InventoryHistoryEntry>(entity =>

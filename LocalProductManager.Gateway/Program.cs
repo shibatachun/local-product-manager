@@ -152,6 +152,12 @@ app.MapWhen(context => IsApiRequest(context.Request.Path), api =>
         request.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
         request.Headers.Remove("X-Forwarded-Host");
         request.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
+        request.Headers.Remove("X-Forwarded-For");
+        var clientAddress = context.Connection.RemoteIpAddress;
+        if (clientAddress is not null)
+        {
+            request.Headers.TryAddWithoutValidation("X-Forwarded-For", clientAddress.ToString());
+        }
 
         try
         {

@@ -102,6 +102,31 @@ export class InventoryManagerPanelComponent {
     });
   }
 
+  async refreshOpenShelf(): Promise<void> {
+    const shelfId = this.selectedShelf()?.id;
+    const levelId = this.selectedLevel()?.id;
+    const productId = this.inventoryForm.productId;
+    const binNumber = this.selectedBin();
+    if (!shelfId) return;
+
+    await this.run(async () => {
+      const [products, shelf] = await Promise.all([
+        this.api.products(),
+        this.api.getShelf(shelfId),
+      ]);
+      this.products.set(products);
+      this.selectedShelf.set(shelf);
+      const level = shelf.levels.find(item => item.id === levelId) ?? null;
+      this.selectedLevel.set(level);
+      this.selectedBin.set(binNumber);
+      if (productId && level?.items.some(item => item.productId === productId && item.binNumber === binNumber)) {
+        this.inventoryForm.productId = productId;
+        this.onProductChanged(productId);
+      }
+      await this.refreshWarehouse();
+    });
+  }
+
   async createShelf(): Promise<void> {
     if (!this.isAdmin()) {
       this.showNotice('Only administrators can add shelves.');
@@ -309,7 +334,8 @@ export class InventoryManagerPanelComponent {
   }
 
   showProductDetail(productId: number): void {
-    this.shelfOpen.set(false);
+    this.inventoryForm.productId = productId;
+    this.onProductChanged(productId);
     this.openProductDetail.emit(productId);
   }
 

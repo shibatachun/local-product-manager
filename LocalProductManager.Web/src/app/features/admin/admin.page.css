@@ -21,7 +21,7 @@ input, select { border: 1px solid #cfd9e0; border-radius: 8px; padding: 10px 12p
 .reset-box input { min-width: 210px; }
 .danger-note { color: #8a3b34; font-size: 13px; line-height: 1.45; }
 .user-table, .session-table { display: grid; border: 1px solid #edf2f5; border-radius: 8px; overflow: auto; }
-.user-row { display: grid; grid-template-columns: 170px 120px 84px 84px 104px 84px 84px 90px; gap: 10px; align-items: center; min-width: 840px; padding: 10px 12px; border-bottom: 1px solid #edf2f5; }
+.user-row { display: grid; grid-template-columns: 170px 120px 84px 84px 112px 104px 84px 84px 90px; gap: 10px; align-items: center; min-width: 970px; padding: 10px 12px; border-bottom: 1px solid #edf2f5; }
 .session-row { display: grid; grid-template-columns: 170px 110px 180px 80px 220px; gap: 10px; align-items: center; min-width: 760px; padding: 10px 12px; border-bottom: 1px solid #edf2f5; }
 .header { background: #f8fbfc; color: #5d6b76; font-size: 12px; font-weight: 900; text-transform: uppercase; }
 .user-row:last-child, .session-row:last-child { border-bottom: 0; }

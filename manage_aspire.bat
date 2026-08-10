@@ -48,7 +48,9 @@ echo  [6] Show Log
 echo  [7] Refresh
 echo  [0] Exit
 echo.
+set "CHOICE="
 set /p "CHOICE=Select: "
+if not defined CHOICE goto menu
 if "%CHOICE%"=="1" call :start
 if "%CHOICE%"=="2" call :stop
 if "%CHOICE%"=="3" call :restart
@@ -115,6 +117,13 @@ call :start
 exit /b
 
 :build
+echo Checking for Local Product Manager processes that may lock source or build files...
+call :stopprojectprocesses
+if errorlevel 1 (
+  echo Unable to clear every project process. Re-run this manager as administrator.
+  pause
+  exit /b 1
+)
 echo Building Angular production files...
 pushd LocalProductManager.Web
 call npm.cmd run build
@@ -126,8 +135,48 @@ if errorlevel 1 (echo .NET build failed. & pause & exit /b 1)
 call :findpid
 if defined ASPIRE_PID taskkill /PID !ASPIRE_PID! /T /F >nul 2>&1
 timeout /t 2 /nobreak >nul
+call :findpid
+if defined ASPIRE_PID (
+  echo Aspire did not stop cleanly. Refusing to start a duplicate instance.
+  pause
+  exit /b 1
+)
 call :start
 exit /b
+
+:stopprojectprocesses
+call :findpid
+if defined ASPIRE_PID (
+  echo Stopping Aspire process tree ^(PID !ASPIRE_PID!^)...
+  taskkill /PID !ASPIRE_PID! /T /F >nul 2>&1
+)
+
+rem Aspire children can survive after the dashboard process exits. Only select
+rem .NET/Node processes whose command line points inside this repository; this
+rem deliberately leaves PostgreSQL and unrelated developer tools untouched.
+set "PROJECTROOT=%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$root=[IO.Path]::GetFullPath($env:PROJECTROOT).TrimEnd([char]92);" ^
+  "$targets=Get-CimInstance Win32_Process | Where-Object {" ^
+  "  $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like ('*'+$root+'*') -and" ^
+  "  ($_.Name -in @('dotnet.exe','node.exe','npm.exe','npm.cmd') -or $_.Name -like 'LocalProductManager*')" ^
+  "};" ^
+  "$targets | Sort-Object ProcessId -Descending | ForEach-Object {" ^
+  "  Write-Host ('Stopping file-locking process {0} ({1})' -f $_.Name,$_.ProcessId);" ^
+  "  & taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null" ^
+  "};" ^
+  "Start-Sleep -Milliseconds 750;" ^
+  "$remaining=Get-CimInstance Win32_Process | Where-Object {" ^
+  "  $_.CommandLine -and $_.CommandLine -like ('*'+$root+'*') -and" ^
+  "  ($_.Name -in @('dotnet.exe','node.exe','npm.exe','npm.cmd') -or $_.Name -like 'LocalProductManager*')" ^
+  "};" ^
+  "if($remaining){$remaining | ForEach-Object { Write-Host ('Still running: {0} ({1})' -f $_.Name,$_.ProcessId) }; exit 1}"
+if errorlevel 1 exit /b 1
+
+rem Give Windows a short moment to release DLL and generated-file handles.
+timeout /t 1 /nobreak >nul
+echo Project process check passed. Build files are clear.
+exit /b 0
 
 :log
 if exist "%LOGFILE%" (

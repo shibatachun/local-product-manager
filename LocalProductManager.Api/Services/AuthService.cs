@@ -27,7 +27,8 @@ public sealed class AuthService(AppDbContext db)
                 CanManageStorage = true,
                 CanEditAttribution = true,
                 CanManageSocial = true,
-                CanImportData = true
+                CanImportData = true,
+                CanEditProductDetails = true
             });
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -83,7 +84,7 @@ public sealed class AuthService(AppDbContext db)
         session.UserName = user.UserName;
         session.Role = user.Role;
         session.RemoteIp = RemoteIp(context);
-        session.IsHost = true;
+        session.IsHost = IsHost(context);
         session.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         SetSessionCookie(context, session.Id);
@@ -115,6 +116,9 @@ public sealed class AuthService(AppDbContext db)
 
     public async Task<bool> CanImportDataAsync(HttpContext context, CancellationToken cancellationToken = default) =>
         (await GetOrCreateCurrentUserAsync(context, cancellationToken)).CanImportData;
+
+    public async Task<bool> CanEditProductDetailsAsync(HttpContext context, CancellationToken cancellationToken = default) =>
+        (await GetOrCreateCurrentUserAsync(context, cancellationToken)).CanEditProductDetails;
 
     public static string HashPassword(string password)
     {
@@ -158,7 +162,8 @@ public sealed class AuthService(AppDbContext db)
             isAdmin || (isEnabledUser && user?.CanManageStorage == true),
             isAdmin || (isEnabledUser && user?.CanEditAttribution == true),
             isAdmin || (isEnabledUser && user?.CanManageSocial == true),
-            isAdmin || (isEnabledUser && user?.CanImportData == true));
+            isAdmin || (isEnabledUser && user?.CanImportData == true),
+            isAdmin || (isEnabledUser && user?.CanEditProductDetails == true));
     }
 
     private static void SetSessionCookie(HttpContext context, string sessionId) =>

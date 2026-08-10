@@ -1,6 +1,6 @@
 import { Platform } from '../../core/models';
 
-export type ViewMode = 'products' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
+export type ViewMode = 'products' | 'bidProducts' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 export type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 export type PricingPlatform = Exclude<Platform, 'shopify'>;
 export type ProductCostCurrency = 'rmb' | 'usd';

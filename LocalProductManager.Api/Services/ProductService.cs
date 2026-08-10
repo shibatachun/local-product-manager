@@ -140,10 +140,14 @@ public sealed class ProductService(AppDbContext db)
 
     public async Task<ProductDetailDto> CreateAsync(CreateProductRequest request, CancellationToken cancellationToken)
     {
-        var duplicate = await CheckDuplicateAsync(request.Sku, null, cancellationToken);
-        if (duplicate.ExactSkuExists)
+        var requestedSku = NormalizeSku(request.Sku);
+        if (requestedSku.Length > 0)
         {
-            throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
+            var duplicate = await CheckDuplicateAsync(requestedSku, null, cancellationToken);
+            if (duplicate.ExactSkuExists)
+            {
+                throw new DuplicateSkuException(duplicate.Sku, duplicate.ExactProductId);
+            }
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -156,7 +160,9 @@ public sealed class ProductService(AppDbContext db)
         var product = new Product
         {
             LocalInventoryId = localInventoryId,
-            Sku = NormalizeSku(request.Sku),
+            // A temporary unique value allows the database to assign the product ID first.
+            // The final generated SKU is derived from that ID below.
+            Sku = requestedSku.Length == 0 ? $"PENDING-{Guid.NewGuid():N}" : requestedSku,
             ProductName = request.ProductName.Trim(),
             Category = NormalizeOptional(request.Category),
             InventoryCategory = inventoryCategory,
@@ -171,14 +177,27 @@ public sealed class ProductService(AppDbContext db)
             Height = request.Height,
             ImagePath = NormalizeOptional(request.ImagePath),
             ImageSource = NormalizeImageSource(request.ImageSource, request.ImagePath),
-            SkuBase = GetSkuBase(request.Sku)
+            SkuBase = requestedSku.Length == 0 ? null : GetSkuBase(requestedSku)
         };
 
         db.Products.Add(product);
         await db.SaveChangesAsync(cancellationToken);
+        var productChanged = false;
+        if (requestedSku.Length == 0)
+        {
+            product.Sku = BuildGeneratedSku(product.Id);
+            product.SkuBase = GetSkuBase(product.Sku);
+            productChanged = true;
+        }
+
         if (string.IsNullOrWhiteSpace(product.LocalInventoryId))
         {
             product.LocalInventoryId = BuildLocalInventoryId(product.Id);
+            productChanged = true;
+        }
+
+        if (productChanged)
+        {
             product.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -260,7 +279,9 @@ public sealed class ProductService(AppDbContext db)
             .ThenInclude(child => child.AmazonAsins)
         .Where(product => product.Id == productId);
 
-    private static string NormalizeSku(string sku) => sku.Trim();
+    private static string NormalizeSku(string? sku) => sku?.Trim() ?? string.Empty;
+
+    private static string BuildGeneratedSku(int productId) => $"LPM-{productId:D6}";
 
     private static bool ProductMatches(Product product, string keyword)
     {

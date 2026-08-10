@@ -52,7 +52,7 @@
         </div>
       </div>
       <div class="user-table">
-        <div class="user-row header"><span>User</span><span>Role</span><span>Enabled</span><span>Storage</span><span>Attribution</span><span>Social</span><span>Import</span><span></span></div>
+        <div class="user-row header"><span>User</span><span>Role</span><span>Enabled</span><span>Storage</span><span>Product details</span><span>Attribution</span><span>Social</span><span>Import</span><span></span></div>
         <div class="user-row" *ngFor="let user of users()">
           <strong>{{ user.userName }}</strong>
           <select [(ngModel)]="user.role">
@@ -61,6 +61,7 @@
           </select>
           <label><input type="checkbox" [(ngModel)]="user.isEnabled" /></label>
           <label><input type="checkbox" [(ngModel)]="user.canManageStorage" /></label>
+          <label><input type="checkbox" [(ngModel)]="user.canEditProductDetails" /></label>
           <label><input type="checkbox" [(ngModel)]="user.canEditAttribution" /></label>
           <label><input type="checkbox" [(ngModel)]="user.canManageSocial" /></label>
           <label><input type="checkbox" [(ngModel)]="user.canImportData" /></label>

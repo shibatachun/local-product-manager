@@ -15,6 +15,7 @@ import {
   ProductDetail,
   ProductDuplicateCheck,
   ProductListItem,
+  ProductExtendedData,
   ProductListing,
   RmbToUsdRate,
   StoreLink,
@@ -50,6 +51,14 @@ export class ProductApiService {
 
   getProduct(id: number): Promise<ProductDetail> {
     return firstValueFrom(this.http.get<ProductDetail>(`${this.baseUrl}/products/${id}`));
+  }
+
+  getExtendedData(id: number): Promise<ProductExtendedData> {
+    return firstValueFrom(this.http.get<ProductExtendedData>(`${this.baseUrl}/products/${id}/extended-data`));
+  }
+
+  saveExtendedData(id: number, data: ProductExtendedData): Promise<ProductExtendedData> {
+    return firstValueFrom(this.http.put<ProductExtendedData>(`${this.baseUrl}/products/${id}/extended-data`, data));
   }
 
   amazonMarketingProducts(): Promise<ProductListItem[]> {
@@ -116,6 +125,37 @@ export class ProductApiService {
     return firstValueFrom(this.http.post<{ imagePath: string }>(
       `${this.baseUrl}/products/${productId}/image/upload`,
       data,
+    ));
+  }
+
+  uploadProductImages(productId: number, files: File[]): Promise<{ imagePath: string; imagePaths: string[]; count: number }> {
+    const data = new FormData();
+    for (const file of files) data.append('files', file, file.name);
+    return firstValueFrom(this.http.post<{ imagePath: string; imagePaths: string[]; count: number }>(
+      `${this.baseUrl}/products/${productId}/image/upload-many`,
+      data,
+    ));
+  }
+
+  productImageFiles(productId: number): Promise<ProductImageFile[]> {
+    return firstValueFrom(this.http.get<ProductImageFile[]>(`${this.baseUrl}/products/${productId}/image/files`));
+  }
+
+  productImageFileUrl(productId: number, fileName: string): string {
+    return `${this.baseUrl}/products/${productId}/image/files/${encodeURIComponent(fileName)}`;
+  }
+
+  setPrimaryProductImage(productId: number, fileName: string): Promise<{ imagePath: string }> {
+    return firstValueFrom(this.http.post<{ imagePath: string }>(
+      `${this.baseUrl}/products/${productId}/image/primary`,
+      { fileName },
+    ));
+  }
+
+  openProductImageFolder(productId: number): Promise<{ folder: string }> {
+    return firstValueFrom(this.http.post<{ folder: string }>(
+      `${this.baseUrl}/products/${productId}/image/open-folder`,
+      {},
     ));
   }
 
@@ -231,6 +271,10 @@ export class ProductApiService {
 
   productImageUrl(productId: number, download = false, thumbnailSize?: number): string {
     const params = new URLSearchParams();
+    // Product images are API responses with their own HTTP cache headers. Sending
+    // them through Angular's service worker adds an unnecessary fetch proxy and
+    // can leave a group of first-load images queued in installed PWA mode.
+    params.set('ngsw-bypass', 'true');
     if (download) params.set('download', 'true');
     if (thumbnailSize) {
       params.set('thumbnail', String(thumbnailSize));
@@ -265,4 +309,10 @@ export class ProductApiService {
   rmbToUsdRate(): Promise<RmbToUsdRate> {
     return firstValueFrom(this.http.get<RmbToUsdRate>(`${this.baseUrl}/exchange-rates/rmb-to-usd`));
   }
+}
+
+export interface ProductImageFile {
+  fileName: string;
+  isPrimary: boolean;
+  updatedAt: string;
 }

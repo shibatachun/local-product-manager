@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, ElementRef, inject, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BrowserQRCodeSvgWriter } from '@zxing/browser';
@@ -20,8 +20,10 @@ import {
   StoreLink,
 } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
-import { ProductApiService } from '../../core/product-api.service';
+import { ProductApiService, ProductImageFile } from '../../core/product-api.service';
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
+import { ProgressiveImageDirective } from '../../core/progressive-image.directive';
+import { defaultProductLabelPresets, LabelSettings, loadSavedLabelPresets, SavedLabelPreset } from '../../core/label-preset-storage';
 import { FileStoragePanelComponent } from '../file-storage/file-storage-panel.component';
 import { VideoTrendPanelComponent } from '../video-trend/video-trend-panel.component';
 import { UnitConverterPanelComponent } from '../unit-converter/unit-converter-panel.component';
@@ -30,6 +32,7 @@ import { Product3dSceneEditorPanelComponent } from '../product-3d-scene-editor/p
 import { InventoryManagerPanelComponent } from '../inventory-manager/inventory-manager-panel.component';
 import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
 import { LabelMakerPage } from '../label-maker/label-maker.page';
+import { LiveStreamBidProductsPanelComponent } from '../live-stream-bid-products/live-stream-bid-products-panel.component';
 import {
   AsinRelationshipRow,
   LogisticsOption,
@@ -46,9 +49,19 @@ import {
   ViewMode,
 } from './product-management.models';
 
+type ProductSortKey = 'inventoryId' | 'categoryId' | 'sku';
+type ProductSortDirection = 'asc' | 'desc';
+
+interface ProductTableColumn {
+  label: string;
+  width: number;
+  minWidth: number;
+  sortKey?: ProductSortKey;
+}
+
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage],
+  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -65,9 +78,29 @@ export class ProductManagerPage {
   readonly api = inject(ProductApiService);
   readonly authApi = inject(AuthApiService);
   private readonly inventoryApi = inject(InventoryApiService);
+  private readonly productColumnStorageKey = 'lpm-product-table-column-widths-v1';
+  private readonly productDraftStorageKey = 'lpm-add-product-draft-v1';
+  private readonly productDraftDbName = 'lpm-product-drafts';
+
+  productTableColumns: ProductTableColumn[] = [
+    { label: 'Product', width: 430, minWidth: 220 },
+    { label: 'Inventory ID', width: 145, minWidth: 105, sortKey: 'inventoryId' },
+    { label: 'Category ID', width: 155, minWidth: 110, sortKey: 'categoryId' },
+    { label: 'SKU', width: 190, minWidth: 120, sortKey: 'sku' },
+    { label: 'Qty', width: 80, minWidth: 60 },
+    { label: 'Cost (RMB)', width: 120, minWidth: 90 },
+    { label: 'Sale price', width: 120, minWidth: 90 },
+    { label: 'Weight (oz)', width: 115, minWidth: 90 },
+    { label: 'Platforms', width: 130, minWidth: 100 },
+    { label: 'Updated', width: 120, minWidth: 95 },
+    { label: '', width: 54, minWidth: 48 },
+  ];
+  private columnResize: { index: number; startX: number; startWidth: number } | null = null;
 
   readonly currentUser = signal<CurrentUser | null>(null);
   readonly products = signal<ProductListItem[]>([]);
+  readonly productSortKey = signal<ProductSortKey | null>(null);
+  readonly productSortDirection = signal<ProductSortDirection>('asc');
   readonly marketingProducts = signal<ProductListItem[]>([]);
   readonly selectedProduct = signal<ProductDetail | null>(null);
   readonly detailLocations = signal<ProductScannerLocation[]>([]);
@@ -83,9 +116,12 @@ export class ProductManagerPage {
   readonly createdBinProduct = signal<ProductListItem | null>(null);
   readonly createdBinLocation = signal('');
   readonly createdBinQuantity = signal(0);
+  readonly printPresetTarget = signal<'created' | 'detail' | null>(null);
+  readonly savedPrintPresets = signal<SavedLabelPreset[]>([]);
   readonly importOpen = signal(false);
   readonly unitConverterOpen = signal(false);
   readonly detailOpen = signal(false);
+  private detailReturnsToInventory = false;
   readonly wizardStep = signal(1);
   readonly notice = signal('');
   readonly checkingForUpdates = signal(false);
@@ -94,6 +130,7 @@ export class ProductManagerPage {
   );
   readonly matchedImages = signal<string[]>([]);
   readonly detailMatchedImages = signal<string[]>([]);
+  readonly detailProductImages = signal<ProductImageFile[]>([]);
   pendingCreateImage: File | null = null;
   createImagePreviewUrl = '';
   readonly importFile = signal<File | null>(null);
@@ -208,7 +245,7 @@ export class ProductManagerPage {
     productCost: 0,
     productCostCurrency: 'rmb' as ProductCostCurrency,
     weight: 1,
-    weightUnit: 'lb' as PricingWeightUnit,
+    weightUnit: 'oz' as PricingWeightUnit,
     packagingWeight: 0.25,
     packagingWeightUnit: 'lb' as PricingWeightUnit,
     firstMileRate: 0.05,
@@ -385,6 +422,20 @@ export class ProductManagerPage {
       channels: new Set(allProducts.flatMap((item) => item.platforms)).size,
     };
   });
+  readonly sortedProducts = computed(() => {
+    const sortKey = this.productSortKey();
+    if (!sortKey) return this.products();
+
+    const direction = this.productSortDirection() === 'asc' ? 1 : -1;
+    const sortItems = (items: ProductListItem[]): ProductListItem[] => [...items]
+      .sort((left, right) => direction * this.compareProducts(left, right, sortKey))
+      .map((product) => ({
+        ...product,
+        children: product.children.length ? sortItems(product.children) : product.children,
+      }));
+
+    return sortItems(this.products());
+  });
   readonly inventoryProducts = computed(() =>
     this.flattenProducts(this.products()).sort((left, right) =>
       (left.localInventoryId ?? '').localeCompare(right.localInventoryId ?? '') ||
@@ -407,10 +458,85 @@ export class ProductManagerPage {
   );
 
   async ngOnInit(): Promise<void> {
+    this.loadProductColumnWidths();
     const requestedView = this.route.snapshot.queryParamMap.get('view') as ViewMode | null;
-    const validViews: ViewMode[] = ['products', 'inventory', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
+    const validViews: ViewMode[] = ['products', 'bidProducts', 'inventory', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
     if (requestedView && validViews.includes(requestedView)) this.view.set(requestedView);
     await Promise.all([this.loadCurrentUser(), this.ensureViewData(this.view())]);
+  }
+
+  productTableWidth(): number {
+    return this.productTableColumns.reduce((total, column) => total + column.width, 0);
+  }
+
+  toggleProductSort(sortKey: ProductSortKey): void {
+    if (this.productSortKey() === sortKey) {
+      this.productSortDirection.update((direction) => direction === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+
+    this.productSortKey.set(sortKey);
+    this.productSortDirection.set('asc');
+  }
+
+  productSortAriaLabel(column: ProductTableColumn): string {
+    if (!column.sortKey) return column.label;
+    if (this.productSortKey() !== column.sortKey) return `Sort ${column.label} ascending`;
+    const nextDirection = this.productSortDirection() === 'asc' ? 'descending' : 'ascending';
+    return `Sort ${column.label} ${nextDirection}`;
+  }
+
+  productSortIndicator(sortKey: ProductSortKey): string {
+    if (this.productSortKey() !== sortKey) return '↕';
+    return this.productSortDirection() === 'asc' ? '↑' : '↓';
+  }
+
+  private compareProducts(left: ProductListItem, right: ProductListItem, sortKey: ProductSortKey): number {
+    const value = (product: ProductListItem): string => {
+      switch (sortKey) {
+        case 'inventoryId': return product.localInventoryId || `INV-${product.id}`;
+        case 'categoryId': return product.categoryInventoryId || 'UNKNOWN';
+        case 'sku': return product.sku || '';
+      }
+    };
+
+    return value(left).localeCompare(value(right), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  startColumnResize(event: PointerEvent, index: number): void {
+    const column = this.productTableColumns[index];
+    if (!column) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.columnResize = { index, startX: event.clientX, startWidth: column.width };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  @HostListener('document:pointermove', ['$event'])
+  resizeProductColumn(event: PointerEvent): void {
+    if (!this.columnResize) return;
+    const column = this.productTableColumns[this.columnResize.index];
+    if (!column) return;
+    column.width = Math.max(column.minWidth, Math.round(this.columnResize.startWidth + event.clientX - this.columnResize.startX));
+  }
+
+  @HostListener('document:pointerup')
+  finishColumnResize(): void {
+    if (!this.columnResize) return;
+    this.columnResize = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    this.persistProductColumnWidths();
+  }
+
+  resetProductColumnWidth(event: MouseEvent, index: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const defaults = [430, 145, 155, 190, 80, 120, 120, 115, 130, 120, 54];
+    if (this.productTableColumns[index]) this.productTableColumns[index].width = defaults[index];
+    this.persistProductColumnWidths();
   }
 
   async loadCurrentUser(): Promise<void> {
@@ -549,7 +675,6 @@ export class ProductManagerPage {
     if (view === 'products') {
       await Promise.all([
         this.productsLoaded ? Promise.resolve() : this.loadProducts(),
-        this.imageStorageRootsLoaded ? Promise.resolve() : this.loadImageStorageRoots(),
         this.storeLinksLoaded ? Promise.resolve() : this.loadStoreLinks(),
       ]);
       return;
@@ -571,6 +696,7 @@ export class ProductManagerPage {
   pageEyebrow(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
+      bidProducts: 'Live commerce',
       inventory: 'Warehouse operations',
       barcodeScanner: 'Inventory tools',
       labelMaker: 'Inventory tools',
@@ -588,6 +714,7 @@ export class ProductManagerPage {
   pageTitle(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
+      bidProducts: 'Live Stream Bid Products',
       inventory: 'Inventory Manager',
       barcodeScanner: 'Barcode Scanner',
       labelMaker: 'Label Maker',
@@ -644,7 +771,7 @@ export class ProductManagerPage {
     this.pricingForm.productCost = product.cost ?? 0;
     this.pricingForm.productCostCurrency = 'rmb';
     this.pricingForm.weight = product.weight ?? 1;
-    this.pricingForm.weightUnit = 'lb';
+    this.pricingForm.weightUnit = 'oz';
     this.pricingForm.length = product.length ?? this.pricingForm.length;
     this.pricingForm.width = product.width ?? this.pricingForm.width;
     this.pricingForm.height = product.height ?? this.pricingForm.height;
@@ -689,7 +816,7 @@ export class ProductManagerPage {
         originalCost: estimate.unitFirstMileRmb,
         salePrice: estimate.suggestedPrice,
         qty: product.qty,
-        weight: estimate.unitProductWeight,
+        weight: estimate.unitProductWeight * 16,
         length: product.length ?? this.pricingForm.length,
         width: product.width ?? this.pricingForm.width,
         height: product.height ?? this.pricingForm.height,
@@ -785,15 +912,15 @@ export class ProductManagerPage {
     });
   }
 
-  openWizard(): void {
+  async openWizard(): Promise<void> {
     this.pendingBinTarget.set(null);
-    this.resetWizard();
+    await this.restoreWizardDraft();
     this.wizardOpen.set(true);
   }
 
-  openWizardForBin(target: { levelId: number; binNumber: number; locationCode: string }): void {
-    this.resetWizard();
-    this.createForm.qty = 1;
+  async openWizardForBin(target: { levelId: number; binNumber: number; locationCode: string }): Promise<void> {
+    const restored = await this.restoreWizardDraft();
+    if (!restored) this.createForm.qty = 1;
     this.pendingBinTarget.set(target);
     this.wizardOpen.set(true);
   }
@@ -901,13 +1028,28 @@ export class ProductManagerPage {
   }
 
   closeWizard(): void {
+    this.saveWizardDraft();
     this.wizardOpen.set(false);
     this.pendingBinTarget.set(null);
   }
 
+  saveWizardDraft(): void {
+    const draft = {
+      createForm: { ...this.createForm },
+      platformChoices: this.platformChoices.map(item => ({ platform: item.platform, selected: item.selected, url: item.url })),
+      createAsin: { ...this.createAsin },
+      wizardStep: this.wizardStep(),
+    };
+    try {
+      localStorage.setItem(this.productDraftStorageKey, JSON.stringify(draft));
+    } catch {
+      // The in-memory draft remains available when browser storage is unavailable.
+    }
+  }
+
   async nextWizardStep(): Promise<void> {
-    if (this.wizardStep() === 1 && (!this.createForm.sku.trim() || !this.createForm.productName.trim())) {
-      return this.showNotice('SKU and product name are required.');
+    if (this.wizardStep() === 1 && !this.createForm.productName.trim()) {
+      return this.showNotice('Product name is required.');
     }
 
     if (this.wizardStep() === 1 && !await this.checkCreateSkuDuplicate()) {
@@ -916,6 +1058,7 @@ export class ProductManagerPage {
 
     if (this.wizardStep() === 2 && this.platformChoices.some((item) => item.platform === 'amazon' && item.selected)) {
       this.wizardStep.set(3);
+      this.saveWizardDraft();
       return;
     }
 
@@ -925,10 +1068,12 @@ export class ProductManagerPage {
     }
 
     this.wizardStep.update((step) => Math.min(3, step + 1));
+    this.saveWizardDraft();
   }
 
   previousWizardStep(): void {
     this.wizardStep.update((step) => Math.max(1, step - 1));
+    this.saveWizardDraft();
   }
 
   async loadCreateLocalImage(): Promise<void> {
@@ -974,6 +1119,8 @@ export class ProductManagerPage {
     this.pendingCreateImage = file;
     this.createImagePreviewUrl = URL.createObjectURL(file);
     this.createForm.imagePath = '';
+    await this.writeDraftImage(file);
+    this.saveWizardDraft();
     input.value = '';
   }
 
@@ -982,6 +1129,8 @@ export class ProductManagerPage {
     this.pendingCreateImage = null;
     if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
     this.createImagePreviewUrl = this.createForm.imagePath;
+    void this.writeDraftImage(null);
+    this.saveWizardDraft();
   }
 
   async selectDetailImage(event: Event, cameraPhoto = false): Promise<void> {
@@ -998,6 +1147,57 @@ export class ProductManagerPage {
       this.showNotice('Product image uploaded.');
     });
     input.value = '';
+  }
+
+  async selectDetailImages(event: Event, cameraPhoto = false): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const product = this.selectedProduct();
+    let files = Array.from(input.files ?? []);
+    if (!product || files.length === 0) return;
+    if (cameraPhoto) {
+      files = await Promise.all(files.map(file => this.prepareCameraImage(file)));
+    }
+
+    await this.perform(async () => {
+      const result = await this.api.uploadProductImages(product.id, files);
+      this.editForm.imagePath = result.imagePath;
+      this.detailMatchedImages.set(result.imagePaths);
+      await this.loadDetailProductImages(product.id);
+      this.bumpProductImageVersion(product.id);
+      this.showNotice(`${result.count} product photo${result.count === 1 ? '' : 's'} uploaded.`);
+    });
+    input.value = '';
+  }
+
+  detailProductImageUrl(productId: number, fileName: string): string {
+    return this.api.productImageFileUrl(productId, fileName);
+  }
+
+  async makeDetailImagePrimary(image: ProductImageFile): Promise<void> {
+    const product = this.selectedProduct();
+    if (!product || image.isPrimary) return;
+    await this.perform(async () => {
+      const result = await this.api.setPrimaryProductImage(product.id, image.fileName);
+      this.editForm.imagePath = result.imagePath;
+      product.imagePath = result.imagePath;
+      product.imageSource = 'local';
+      await this.loadDetailProductImages(product.id);
+      this.bumpProductImageVersion(product.id);
+      this.showNotice('Main product image updated.');
+    });
+  }
+
+  private async loadDetailProductImages(productId: number): Promise<void> {
+    this.detailProductImages.set(await this.api.productImageFiles(productId));
+  }
+
+  async openDetailImageFolder(): Promise<void> {
+    const product = this.selectedProduct();
+    if (!product) return;
+    await this.perform(async () => {
+      await this.api.openProductImageFolder(product.id);
+      this.showNotice('Product image folder opened on the host computer.');
+    });
   }
 
   async finishCreate(): Promise<void> {
@@ -1058,12 +1258,14 @@ export class ProductManagerPage {
         this.createdBinProduct.set(product);
         this.createdBinLocation.set(binTarget.locationCode);
         this.createdBinQuantity.set(quantity);
+        await this.clearWizardDraft();
         setTimeout(() => this.renderCreatedBarcode());
         if (imageUploadWarning) this.showNotice(`Product created, but image upload failed: ${imageUploadWarning}`);
         return;
       }
 
       this.wizardOpen.set(false);
+      await this.clearWizardDraft();
       await this.loadProducts();
       await this.openDetail(product.id);
       this.showNotice(imageUploadWarning
@@ -1081,7 +1283,66 @@ export class ProductManagerPage {
     await this.loadProducts();
   }
 
-  printCreatedProductLabel(): void {
+  printCreatedProductLabel(): void { this.openPrintPresetSelector('created'); }
+
+  printDetailProductLabel(): void { this.openPrintPresetSelector('detail'); }
+
+  openPrintPresetSelector(target: 'created' | 'detail'): void {
+    this.savedPrintPresets.set([
+      ...defaultProductLabelPresets(),
+      ...loadSavedLabelPresets().filter(item => !!item.settings),
+    ]);
+    this.printPresetTarget.set(target);
+  }
+
+  closePrintPresetSelector(): void { this.printPresetTarget.set(null); }
+
+  selectPrintPreset(preset: SavedLabelPreset): void {
+    const settings = preset.settings;
+    const target = this.printPresetTarget();
+    if (!settings || !target) return;
+    this.printPresetTarget.set(null);
+    setTimeout(() => this.printProductLabelWithSettings(target, settings));
+  }
+
+  private printProductLabelWithSettings(target: 'created' | 'detail', settings: LabelSettings): void {
+    const product = target === 'created' ? this.createdBinProduct() : this.selectedProduct();
+    const svg = target === 'created' ? this.createdBarcode?.nativeElement : this.detailBarcode?.nativeElement;
+    if (!product || !svg) return;
+    const qrMarkup = svg.firstElementChild?.outerHTML || svg.outerHTML;
+    // Quick print always emits one physical label. Roll columns and feed gaps
+    // belong to Label Maker batch printing and must not change this page size.
+    const pageWidth = settings.widthMm;
+    const pageHeight = settings.heightMm;
+    const inventoryId = product.localInventoryId || `INV-${product.id}`;
+    const categoryId = product.categoryInventoryId || 'UNKNOWN';
+    const content = [
+      settings.showName ? `<strong class="product-name">${this.escapeHtml(product.productName)}</strong>` : '',
+      `<div class="barcode">${qrMarkup}</div>`,
+      settings.showInv ? `<strong class="inv">${this.escapeHtml(inventoryId)}</strong>` : '',
+      settings.showCategoryId ? `<strong class="category-id">${this.escapeHtml(categoryId)}</strong>` : '',
+      settings.showSku || settings.showQuantity
+        ? `<div class="meta">${settings.showSku ? `<span>SKU: ${this.escapeHtml(product.sku)}</span>` : ''}${settings.showQuantity ? `<span>QTY: ${product.qty}</span>` : ''}</div>`
+        : '',
+    ].join('');
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0';
+    frame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc) { frame.remove(); return; }
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>LPM label</title><style>
+      @page{size:${pageWidth}mm ${pageHeight}mm;margin:0}*{box-sizing:border-box}html,body{width:${pageWidth}mm;height:${pageHeight}mm;margin:0;padding:0;background:#fff}
+      body{font-family:Arial,sans-serif}.label{display:flex;width:${settings.widthMm}mm;height:${settings.heightMm}mm;margin:0;flex-direction:column;align-items:center;justify-content:center;padding:2.5mm;overflow:hidden;text-align:center;font-size:${settings.fontSize}px}
+      .product-name{display:block;width:100%;margin-bottom:1mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.barcode{display:grid;place-items:center;flex:0 0 auto;width:${settings.barcodeHeight}px;height:${settings.barcodeHeight}px;max-width:100%;max-height:60%;padding:1px;background:#fff}.barcode svg{display:block;width:100%;height:100%}
+      .inv{margin-top:.3mm;font-family:Consolas,monospace;letter-spacing:.04em}.category-id{font-family:Consolas,monospace;font-size:.95em;letter-spacing:.04em}.meta{display:flex;justify-content:center;gap:3mm;width:100%;margin-top:.3mm;font-size:.92em}
+    </style></head><body><div class="label">${content}</div></body></html>`);
+    doc.close();
+    setTimeout(() => { frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); }, 300);
+  }
+
+  private printCreatedProductLabelLegacy(): void {
     const product = this.createdBinProduct();
     const svg = this.createdBarcode?.nativeElement;
     if (!product || !svg) return;
@@ -1129,7 +1390,7 @@ export class ProductManagerPage {
     svg.appendChild(qr);
   }
 
-  printDetailProductLabel(): void {
+  private printDetailProductLabelLegacy(): void {
     const product = this.selectedProduct();
     const svg = this.detailBarcode?.nativeElement;
     if (!product || !svg) return;
@@ -1210,14 +1471,25 @@ export class ProductManagerPage {
       this.syncDetailImageForm(product);
       this.detailOpen.set(true);
       this.detailMatchedImages.set(product.imagePath ? [product.imagePath] : []);
+      await this.loadDetailProductImages(product.id);
       this.syncDetailPricing(product);
       setTimeout(() => this.renderDetailBarcode());
     }, false);
   }
 
-  closeDetail(): void {
+  async openInventoryProductDetail(productId: number): Promise<void> {
+    this.detailReturnsToInventory = true;
+    await this.openDetail(productId);
+  }
+
+  async closeDetail(): Promise<void> {
     this.detailOpen.set(false);
     this.detailLocations.set([]);
+    this.detailProductImages.set([]);
+    if (this.detailReturnsToInventory) {
+      this.detailReturnsToInventory = false;
+      await this.inventoryPanel?.refreshOpenShelf();
+    }
   }
 
   async updateProduct(): Promise<void> {
@@ -1256,7 +1528,7 @@ export class ProductManagerPage {
 
   private async checkCreateSkuDuplicate(): Promise<boolean> {
     const sku = this.createForm.sku.trim();
-    if (!sku) return false;
+    if (!sku) return true;
     const duplicate = await this.api.checkDuplicateSku(sku);
     if (duplicate.exactSkuExists) {
       this.showNotice(`SKU "${duplicate.sku}" already exists on ${duplicate.exactProductName || 'another product'}.`);
@@ -1441,7 +1713,7 @@ export class ProductManagerPage {
       unitCost: product.cost,
       productCostCurrency: this.detailPricingForm.productCostCurrency,
       unitWeight: product.weight,
-      unitWeightUnit: 'lb',
+      unitWeightUnit: 'oz',
       packagingWeight: this.detailPricingForm.packagingWeight,
       packagingWeightUnit: this.detailPricingForm.packagingWeightUnit,
       firstMileRate: this.detailPricingForm.firstMileRate,
@@ -1987,6 +2259,97 @@ export class ProductManagerPage {
     this.wizardStep.set(1);
   }
 
+  private async restoreWizardDraft(): Promise<boolean> {
+    let restored = false;
+    try {
+      const raw = localStorage.getItem(this.productDraftStorageKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          createForm?: Record<string, unknown>;
+          platformChoices?: Array<{ platform: Platform; selected: boolean; url: string }>;
+          createAsin?: Record<string, unknown>;
+          wizardStep?: number;
+        };
+        if (draft.createForm) Object.assign(this.createForm, draft.createForm);
+        for (const saved of draft.platformChoices ?? []) {
+          const choice = this.platformChoices.find(item => item.platform === saved.platform);
+          if (choice) Object.assign(choice, { selected: Boolean(saved.selected), url: saved.url ?? '' });
+        }
+        if (draft.createAsin) Object.assign(this.createAsin, draft.createAsin);
+        this.wizardStep.set(Math.max(1, Math.min(3, Number(draft.wizardStep) || 1)));
+        restored = true;
+      } else {
+        this.resetWizard();
+      }
+    } catch {
+      this.resetWizard();
+    }
+
+    const image = await this.readDraftImage();
+    if (image) {
+      if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
+      this.pendingCreateImage = image;
+      this.createImagePreviewUrl = URL.createObjectURL(image);
+      restored = true;
+    } else if (this.createForm.imagePath) {
+      this.createImagePreviewUrl = this.createForm.imagePath;
+    }
+    return restored;
+  }
+
+  private async clearWizardDraft(): Promise<void> {
+    try {
+      localStorage.removeItem(this.productDraftStorageKey);
+    } catch {
+      // Nothing else is required when browser storage is unavailable.
+    }
+    await this.writeDraftImage(null);
+    this.resetWizard();
+  }
+
+  private openDraftDatabase(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.productDraftDbName, 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('drafts')) request.result.createObjectStore('drafts');
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  private async writeDraftImage(file: File | null): Promise<void> {
+    try {
+      const database = await this.openDraftDatabase();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction('drafts', 'readwrite');
+        const request = file
+          ? transaction.objectStore('drafts').put(file, 'create-image')
+          : transaction.objectStore('drafts').delete('create-image');
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+      database.close();
+    } catch {
+      // File persistence is best-effort; the current in-memory photo is retained.
+    }
+  }
+
+  private async readDraftImage(): Promise<File | null> {
+    try {
+      const database = await this.openDraftDatabase();
+      const file = await new Promise<File | null>((resolve, reject) => {
+        const request = database.transaction('drafts', 'readonly').objectStore('drafts').get('create-image');
+        request.onsuccess = () => resolve(request.result instanceof File ? request.result : null);
+        request.onerror = () => reject(request.error);
+      });
+      database.close();
+      return file;
+    } catch {
+      return null;
+    }
+  }
+
   async checkForUpdates(): Promise<void> {
     const tauri = (globalThis as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
     if (!tauri || this.checkingForUpdates()) return;
@@ -2018,6 +2381,30 @@ export class ProductManagerPage {
 
   private imageSourceFor(path: string): 'local' | 'remote' {
     return this.isRemotePath(path) ? 'remote' : 'local';
+  }
+
+  private loadProductColumnWidths(): void {
+    try {
+      const saved = JSON.parse(localStorage.getItem(this.productColumnStorageKey) || 'null');
+      if (!Array.isArray(saved)) return;
+      this.productTableColumns.forEach((column, index) => {
+        const width = Number(saved[index]);
+        if (Number.isFinite(width)) column.width = Math.max(column.minWidth, Math.round(width));
+      });
+    } catch {
+      // Keep the default widths when browser storage is unavailable or damaged.
+    }
+  }
+
+  private persistProductColumnWidths(): void {
+    try {
+      localStorage.setItem(
+        this.productColumnStorageKey,
+        JSON.stringify(this.productTableColumns.map(column => column.width)),
+      );
+    } catch {
+      // Column resizing still works for the current session without storage.
+    }
   }
 
   private async prepareCameraImage(file: File): Promise<File> {

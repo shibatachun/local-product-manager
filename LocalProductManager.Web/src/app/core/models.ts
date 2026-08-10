@@ -11,6 +11,7 @@ export interface CurrentUser {
   canEditAttribution: boolean;
   canManageSocial: boolean;
   canImportData: boolean;
+  canEditProductDetails: boolean;
 }
 
 export interface AuthAdminSnapshot {
@@ -36,6 +37,7 @@ export interface AppUserAdmin {
   canEditAttribution: boolean;
   canManageSocial: boolean;
   canImportData: boolean;
+  canEditProductDetails: boolean;
   updatedAt: string;
 }
 
@@ -129,6 +131,15 @@ export interface ShelfInventoryItem {
   productName: string;
   qty: number;
   binNumber: number;
+}
+
+export interface ProductExtendedData {
+  details: { externalProductCode: string | null; variantName: string | null; material: string | null; specification: string | null; unit: string | null; style: string | null; description: string | null; developmentDate: string | null };
+  identifiers: { identifierType: string; value: string; isPrimary: boolean; notes: string | null }[];
+  suppliers: { name: string; contactName: string | null; contactDetails: string | null; procurementChannel: string | null; buyer: string | null; minimumPurchasePrice: number | null; minimumOrderQuantity: number | null; currency: string; isPreferred: boolean; provenance: string | null; procurementLinks: { url: string; sortOrder: number; source: string | null }[] }[];
+  compliance: { declarationName: string | null; countryOfOrigin: string | null; hsCode: string | null; declaredValue: number | null; declaredValueCurrency: string | null; containsBattery: boolean | null; containsPowder: boolean | null; containsLiquid: boolean | null; containsMagnet: boolean | null; shippingMethod: string | null; expirationDate: string | null };
+  packaging: { packQuantity: number | null; packageLength: number | null; packageWidth: number | null; packageHeight: number | null; dimensionUnit: string; packageWeight: number | null; cartonWeight: number | null; billableWeight: number | null; weightUnit: string; packagingCost: number | null; packagingCostCurrency: string | null; packagingDifficulty: string | null; labelRequirements: string | null };
+  prices: { priceType: string; currency: string; amount: number; quantityThreshold: number | null; effectiveFrom: string | null; effectiveTo: string | null; source: string | null }[];
 }
 
 export type InventoryCategory =

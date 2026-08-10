@@ -33,6 +33,7 @@ export class AuthApiService {
       canEditAttribution: user.canEditAttribution,
       canManageSocial: user.canManageSocial,
       canImportData: user.canImportData,
+      canEditProductDetails: user.canEditProductDetails,
     }));
   }
 

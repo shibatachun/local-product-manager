@@ -41,7 +41,152 @@
   .modal-footer>button,.modal-footer>div{width:100%}
 }
 .created-product-modal{width:min(560px,calc(100vw - 32px))}
+.print-preset-backdrop{z-index:140}.print-preset-modal{z-index:141;width:min(520px,calc(100vw - 32px))}.print-preset-body{display:grid;gap:14px;padding:18px}.print-preset-body>p{margin:0;color:#6f7f89;font-size:13px}.print-preset-list{display:grid;gap:9px}.print-preset-list>button{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:66px;padding:11px 14px;border:1px solid #ced9de;border-radius:9px;color:#243b46;background:#fff;text-align:left;cursor:pointer}.print-preset-list>button:hover{border-color:#26809c;background:#f2fafc}.print-preset-list span{display:grid;gap:5px}.print-preset-list small{color:#71818b;font-weight:500}.print-preset-list b{padding:7px 11px;border-radius:6px;color:#fff;background:#176b87;font-size:12px}.no-print-presets{display:grid;gap:6px;padding:22px;border:1px dashed #bdcbd1;border-radius:9px;color:#657680;text-align:center}.no-print-presets strong{color:#263d48}.no-print-presets span{font-size:12px;line-height:1.45}
 .created-product-body{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:22px;align-items:center;padding:24px}
 .created-product-summary{display:grid;gap:8px}.created-product-summary>strong{font-size:17px}.created-product-summary code{color:#176b87;font-weight:800}.created-product-summary span{color:#687984;font-size:12px;line-height:1.55}
 .created-label-preview{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:190px;padding:14px;border:1px dashed #9eafb8;border-radius:8px;background:#fff;text-align:center}.created-label-preview>strong{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.created-label-preview code{margin-top:3px;font-weight:800}.created-label-preview small{margin-top:4px;color:#60717b;font-size:9px}.created-qr{display:block;width:120px;height:120px;margin:5px auto}
 @media(max-width:600px){.created-product-body{grid-template-columns:1fr}.created-label-preview{min-height:180px}}
+
+@media (max-width:760px){
+  /* Add Product is a full-screen mobile workflow, not a scaled desktop modal. */
+  .modal.foreground-modal.wizard{
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    width:100%;
+    height:100dvh;
+    max-height:none;
+    overflow:hidden;
+    border-radius:0;
+    box-shadow:none;
+    transform:none;
+    overscroll-behavior:none;
+  }
+  .wizard>header{
+    position:relative;
+    top:auto;
+    z-index:3;
+    flex:0 0 auto;
+    align-items:center;
+    min-height:68px;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;
+    border-bottom:0;
+    background:#fff;
+  }
+  .wizard>header .eyebrow{margin:0;color:#398198;font-size:9px;letter-spacing:.08em}
+  .wizard>header h2{margin:3px 0 0;font-size:20px}
+  .wizard>header .icon-button{flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:#f5f8f9}
+
+  .wizard .steps{
+    position:relative;
+    z-index:3;
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    flex:0 0 auto;
+    gap:8px;
+    padding:8px 14px 12px;
+    border-bottom:1px solid #dfe7ea;
+    background:#fff;
+  }
+  .wizard .steps li,
+  .wizard .steps li.active{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:4px;
+    min-width:0;
+    padding:7px 3px;
+    border-radius:10px;
+    font-size:10px;
+    text-align:center;
+  }
+  .wizard .steps li.active{background:#edf7f9}
+  .wizard .steps span{width:25px;height:25px}
+
+  .wizard .modal-body{
+    flex:1 1 auto;
+    min-width:0;
+    min-height:0;
+    overflow-x:hidden;
+    overflow-y:auto;
+    padding:18px 16px 28px;
+    background:#f5f8f9;
+    -webkit-overflow-scrolling:touch;
+  }
+  .wizard .form-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:13px}
+  .wizard .form-grid label{gap:7px;font-size:12px}
+  .wizard .form-grid input,
+  .wizard .form-grid select,
+  .wizard .platform-choices input:not([type="checkbox"]){
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    min-height:50px;
+    padding:11px 12px;
+    border:1px solid #ccd8de;
+    border-radius:11px;
+    background:#fff;
+    font-size:16px;
+    line-height:1.25;
+  }
+  .wizard .form-grid input:focus,
+  .wizard .form-grid select:focus,
+  .wizard .platform-choices input:not([type="checkbox"]):focus{
+    border-color:#2783a0;
+    outline:3px solid rgba(39,131,160,.14);
+  }
+  .wizard .cost-input>span{display:grid;grid-template-columns:105px minmax(0,1fr);gap:8px}
+  .wizard .form-grid input[type="file"]{
+    height:auto;
+    min-height:54px;
+    padding:9px;
+    font-size:16px;
+  }
+  .wizard .form-grid input[type="file"]::file-selector-button{
+    min-height:34px;
+    margin-right:9px;
+    padding:0 10px;
+    border:0;
+    border-radius:8px;
+    color:#176b87;
+    background:#e8f4f7;
+    font-weight:750;
+  }
+  .wizard .image-results{grid-template-columns:1fr;max-height:none;margin-top:14px;padding:0}
+  .wizard .match-preview{height:190px;padding:8px;border:1px solid #d8e2e6;border-radius:12px;background:#fff}
+  .wizard .match-preview img{border-radius:8px;object-fit:contain}
+
+  .wizard .helper{margin:0 0 14px;line-height:1.55}
+  .wizard .platform-choices{gap:10px}
+  .wizard .platform-choices>div{
+    grid-template-columns:minmax(0,1fr);
+    gap:10px;
+    padding:13px;
+    border-radius:12px;
+    background:#fff;
+  }
+  .wizard .platform-toggle{min-height:42px}
+  .wizard .platform-toggle input{width:20px;height:20px;min-height:20px}
+  .wizard .platform-toggle span{width:32px;height:32px;border-radius:9px}
+
+  .wizard .modal-footer{
+    position:relative;
+    bottom:auto;
+    z-index:4;
+    display:grid;
+    grid-template-columns:minmax(92px,1fr) minmax(0,2fr);
+    flex:0 0 auto;
+    gap:10px;
+    width:100%;
+    padding:11px 14px calc(11px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid #dce5e9;
+    background:rgba(255,255,255,.97);
+    backdrop-filter:blur(12px);
+  }
+  .wizard .modal-footer>button,
+  .wizard .modal-footer>div{width:100%;min-width:0}
+  .wizard .modal-footer>div{display:block}
+  .wizard .modal-footer>div>button:first-child{display:none}
+  .wizard .modal-footer button{width:100%;min-height:50px;border-radius:11px;font-size:15px}
+  .wizard .modal-footer .primary{color:#fff;box-shadow:0 5px 14px rgba(23,107,135,.2)}
+}

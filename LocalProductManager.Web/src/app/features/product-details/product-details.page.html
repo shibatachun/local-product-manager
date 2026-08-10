@@ -1,0 +1,102 @@
+<main class="record-page">
+  <div class="loading" *ngIf="loading()">Loading product record…</div>
+  <section class="load-error" *ngIf="!loading() && !product()">
+    <h1>Product page unavailable</h1><p>{{ message() }}</p><button type="button" (click)="back()">← Return to products</button>
+  </section>
+  <ng-container *ngIf="product() as product">
+    <header class="record-header">
+      <button class="back" type="button" (click)="back()">← Back</button>
+      <div class="identity">
+        <img *ngIf="product.imagePath; else initials" [src]="imageUrl(product)" [alt]="product.productName">
+        <ng-template #initials><span class="placeholder">{{ product.productName.slice(0, 2).toUpperCase() }}</span></ng-template>
+        <div><p>PRODUCT MASTER RECORD</p><h1>{{ product.productName }}</h1><div class="chips"><code>{{ product.localInventoryId || 'No INV' }}</code><code>{{ product.categoryInventoryId || 'UNKNOWN' }}</code><code>{{ product.sku }}</code></div></div>
+      </div>
+      <button *ngIf="canEdit()" class="primary desktop-save" type="button" [disabled]="saving()" (click)="save()">{{ saving() ? 'Saving…' : 'Save all changes' }}</button>
+      <span *ngIf="!canEdit()" class="readonly-badge">Read only</span>
+    </header>
+
+    <p class="message" *ngIf="message()">{{ message() }}</p>
+    <fieldset class="record-grid editor" [disabled]="!canEdit()" *ngIf="record() as data">
+      <section class="card span-2 photo-card">
+        <div class="section-title"><div><p>PRODUCT PHOTOS</p><h2>Photo folder and main image</h2></div><label class="photo-upload">Take / upload photos<input type="file" multiple accept="image/*" capture="environment" (change)="uploadPhotos($event)"></label></div>
+        <div class="photo-library" *ngIf="images().length; else noProductPhotos">
+          <button type="button" *ngFor="let image of images()" [class.selected]="image.isPrimary" (click)="makePrimary(image)">
+            <img [src]="folderImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy"><span>{{ image.isPrimary ? 'Main image' : 'Set as main' }}</span>
+          </button>
+        </div>
+        <ng-template #noProductPhotos><div class="empty">No photos saved in this product folder yet.</div></ng-template>
+      </section>
+      <section class="card span-2 warehouse-card">
+        <div class="section-title"><div><p>WAREHOUSE AVAILABILITY</p><h2>{{ locations().length ? 'US warehouse' : 'Not currently assigned' }}</h2></div><strong>{{ product.qty }} total units</strong></div>
+        <div class="location-list" *ngIf="locations().length; else noLocation"><div *ngFor="let item of locations()"><span>{{ item.description }}</span><code>{{ item.code }}</code><b>{{ item.qty }} units</b></div></div>
+        <ng-template #noLocation><div class="empty">No counted US warehouse location. China warehouse balances will appear here after the warehouse migration is completed.</div></ng-template>
+      </section>
+      <section class="card span-2">
+        <div class="section-title"><div><p>CORE DATA</p><h2>Product details</h2></div></div>
+        <div class="fields four">
+          <label>External product code<input [(ngModel)]="data.details.externalProductCode"></label>
+          <label>Variant name<input [(ngModel)]="data.details.variantName"></label>
+          <label>Material<input [(ngModel)]="data.details.material"></label>
+          <label>Specification<input [(ngModel)]="data.details.specification"></label>
+          <label>Unit<input [(ngModel)]="data.details.unit" placeholder="piece, pack, pair…"></label>
+          <label>Style<input [(ngModel)]="data.details.style"></label>
+          <label>Development date<input type="date" [(ngModel)]="data.details.developmentDate"></label>
+          <label>Product type<input [value]="product.productType" disabled></label>
+          <label class="wide">Description<textarea rows="3" [(ngModel)]="data.details.description"></textarea></label>
+        </div>
+      </section>
+
+      <section class="card span-2">
+        <div class="section-title"><div><p>IDENTIFIERS</p><h2>External product codes</h2></div><button type="button" (click)="addIdentifier()">+ Add identifier</button></div>
+        <div class="empty" *ngIf="!data.identifiers.length">No UPC, China SKU, item number, or other external code recorded.</div>
+        <div class="repeat-row identifier" *ngFor="let item of data.identifiers; let i = index">
+          <label>Type<select [(ngModel)]="item.identifierType"><option>UPC</option><option>China SKU</option><option>Item number</option><option>EAN</option><option>Other</option></select></label>
+          <label>Value<input [(ngModel)]="item.value"></label><label>Notes<input [(ngModel)]="item.notes"></label>
+          <label class="check"><input type="checkbox" [(ngModel)]="item.isPrimary"> Primary</label><button class="remove" type="button" (click)="removeIdentifier(i)">Remove</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title"><div><p>COMPLIANCE</p><h2>Customs & shipping</h2></div></div>
+        <div class="fields two">
+          <label>Declaration name<input [(ngModel)]="data.compliance.declarationName"></label><label>Country of origin<input [(ngModel)]="data.compliance.countryOfOrigin"></label>
+          <label>HS code<input [(ngModel)]="data.compliance.hsCode"></label><label>Shipping method<input [(ngModel)]="data.compliance.shippingMethod"></label>
+          <label>Declared value<input type="number" [(ngModel)]="data.compliance.declaredValue"></label><label>Currency<input [(ngModel)]="data.compliance.declaredValueCurrency" placeholder="USD"></label>
+          <label>Expiration date<input type="date" [(ngModel)]="data.compliance.expirationDate"></label>
+        </div>
+        <div class="hazards"><label *ngFor="let field of [['containsBattery','Battery'],['containsPowder','Powder'],['containsLiquid','Liquid'],['containsMagnet','Magnet']]" class="tri">{{ field[1] }}<select [(ngModel)]="$any(data.compliance)[field[0]]"><option [ngValue]="null">Unknown</option><option [ngValue]="false">No</option><option [ngValue]="true">Yes</option></select></label></div>
+      </section>
+
+      <section class="card">
+        <div class="section-title"><div><p>PACKAGING</p><h2>Dimensions & handling</h2></div></div>
+        <div class="fields three">
+          <label>Pack quantity<input type="number" [(ngModel)]="data.packaging.packQuantity"></label><label>Length<input type="number" [(ngModel)]="data.packaging.packageLength"></label><label>Width<input type="number" [(ngModel)]="data.packaging.packageWidth"></label>
+          <label>Height<input type="number" [(ngModel)]="data.packaging.packageHeight"></label><label>Dimension unit<select [(ngModel)]="data.packaging.dimensionUnit"><option>in</option><option>cm</option><option>mm</option></select></label><label>Package weight<input type="number" [(ngModel)]="data.packaging.packageWeight"></label>
+          <label>Carton weight<input type="number" [(ngModel)]="data.packaging.cartonWeight"></label><label>Billable weight<input type="number" [(ngModel)]="data.packaging.billableWeight"></label><label>Weight unit<select [(ngModel)]="data.packaging.weightUnit"><option>oz</option><option>lb</option><option>g</option><option>kg</option></select></label>
+          <label>Packaging cost<input type="number" [(ngModel)]="data.packaging.packagingCost"></label><label>Cost currency<input [(ngModel)]="data.packaging.packagingCostCurrency"></label><label>Difficulty<input [(ngModel)]="data.packaging.packagingDifficulty"></label>
+          <label class="wide">Label requirements<textarea rows="2" [(ngModel)]="data.packaging.labelRequirements"></textarea></label>
+        </div>
+      </section>
+
+      <section class="card span-2">
+        <div class="section-title"><div><p>PROCUREMENT</p><h2>Suppliers & purchase links</h2></div><button type="button" (click)="addSupplier()">+ Add supplier</button></div>
+        <div class="empty" *ngIf="!data.suppliers.length">No supplier information recorded.</div>
+        <article class="supplier" *ngFor="let item of data.suppliers; let i = index">
+          <div class="fields four"><label>Supplier name<input [(ngModel)]="item.name"></label><label>Channel<input [(ngModel)]="item.procurementChannel" placeholder="1688, Alibaba…"></label><label>Buyer<input [(ngModel)]="item.buyer"></label><label>Contact<input [(ngModel)]="item.contactName"></label><label>Contact details<input [(ngModel)]="item.contactDetails"></label><label>Minimum price<input type="number" [(ngModel)]="item.minimumPurchasePrice"></label><label>MOQ<input type="number" [(ngModel)]="item.minimumOrderQuantity"></label><label>Currency<input [(ngModel)]="item.currency"></label><label>Provenance<input [(ngModel)]="item.provenance"></label><label class="check"><input type="checkbox" [(ngModel)]="item.isPreferred"> Preferred supplier</label></div>
+          <div class="links"><div *ngFor="let link of item.procurementLinks; let j = index"><input [(ngModel)]="link.url" placeholder="Procurement URL"><input [(ngModel)]="link.source" placeholder="Source"><button class="remove" (click)="removeLink(i,j)">×</button></div></div>
+          <footer><button type="button" (click)="addLink(i)">+ Add purchase link</button><button class="remove" type="button" (click)="removeSupplier(i)">Remove supplier</button></footer>
+        </article>
+      </section>
+
+      <section class="card span-2">
+        <div class="section-title"><div><p>PRICING</p><h2>Product prices</h2></div><button type="button" (click)="addPrice()">+ Add price</button></div>
+        <div class="empty" *ngIf="!data.prices.length">No normalized price records.</div>
+        <div class="repeat-row price" *ngFor="let item of data.prices; let i = index"><label>Price type<input [(ngModel)]="item.priceType"></label><label>Currency<input [(ngModel)]="item.currency"></label><label>Amount<input type="number" [(ngModel)]="item.amount"></label><label>Minimum quantity<input type="number" [(ngModel)]="item.quantityThreshold"></label><label>Effective from<input type="date" [(ngModel)]="item.effectiveFrom"></label><label>Effective to<input type="date" [(ngModel)]="item.effectiveTo"></label><label>Source<input [(ngModel)]="item.source"></label><button class="remove" type="button" (click)="removePrice(i)">Remove</button></div>
+      </section>
+    </fieldset>
+    <div class="mobile-save-bar" *ngIf="canEdit()">
+      <span><b>{{ product.categoryInventoryId || product.localInventoryId || 'Product' }}</b><small *ngIf="message()">{{ message() }}</small></span>
+      <button class="primary" type="button" [disabled]="saving()" (click)="save()">{{ saving() ? 'Saving…' : 'Save changes' }}</button>
+    </div>
+  </ng-container>
+</main>

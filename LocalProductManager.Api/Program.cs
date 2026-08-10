@@ -3,6 +3,7 @@ using LocalProductManager.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -67,6 +68,8 @@ builder.Services.AddScoped<FacebookReportImportService>();
 builder.Services.AddScoped<TikTokReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SocialDataMaintenanceService>();
+builder.Services.AddScoped<LiveStreamBidProductImportService>();
+builder.Services.AddScoped<ProductImageFolderService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();
 builder.Services.AddHttpClient<MetaOAuthService>();
@@ -96,6 +99,15 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                               ForwardedHeaders.XForwardedHost |
+                               ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownProxies.Add(System.Net.IPAddress.Loopback);
+    options.KnownProxies.Add(System.Net.IPAddress.IPv6Loopback);
+});
 
 var app = builder.Build();
 const string appVersion = "2026-06-18-auth-permissions-v1";
@@ -116,8 +128,14 @@ using (var scope = app.Services.CreateScope())
         db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
     }
     await ProductInventoryCategorySchema.UpgradeAsync(db);
+    await ProductExtendedDataSchema.UpgradeAsync(db);
+    await LiveStreamBidProductSchema.UpgradeAsync(db);
+    await scope.ServiceProvider.GetRequiredService<ProductImageFolderService>()
+        .OrganizeExistingProductsAsync();
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
 }
+
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {
