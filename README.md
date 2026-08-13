@@ -1,59 +1,64 @@
 # Local Product Manager
 
-Local Product Manager 是公司内部从零开发的商品、仓库、直播销售和营销运营系统。系统将商品资料、库存位置、扫码操作、BID 批次、标签打印、平台定价和营销数据集中在同一个局域网应用中，减少手工表格、重复录入及库存信息不同步的问题。
+[![English](https://img.shields.io/badge/Language-English-2563eb)](README.md)
+[![简体中文](https://img.shields.io/badge/语言-简体中文-dc2626)](README.zh-CN.md)
 
-当前版本：`0.1.6`
+**English** | [简体中文](README.zh-CN.md)
 
-生产入口：
+Local Product Manager is an internally developed system for product, warehouse, live-commerce, and marketing operations. It brings product data, inventory locations, scanning, BID batches, label printing, platform pricing, and marketing data into one LAN application, reducing manual spreadsheets, duplicate entry, and inventory inconsistencies.
+
+Current version: `0.1.6`
+
+Production URL:
 
 ```text
 https://inventory.jjgqaz.com/
 ```
 
-兼容入口：
+Compatibility URL:
 
 ```text
 https://inventory.jjgqaz.com:7265/
 ```
 
-系统仅供公司网络使用，不应直接开放到公网。
+The system is intended for the company network only and must not be exposed directly to the public internet.
 
-## 当前功能
+## Features
 
-### 商品与仓库
+### Products and Warehouses
 
-- 商品、父子 SKU、INV Number、分类编号和扩展资料管理
-- 商品成本、重量、尺寸、平台链接及图片目录管理
-- 仓库、货架、层位、Bin 和实际库位库存管理
-- Stock In、Stock Out、库存移动与操作历史
-- 扫码枪与移动端相机扫描 LPM 二维码
-- 批量 Excel/CSV 导入、导出和资料维护
+- Product, parent/child SKU, INV Number, category number, and extended-data management
+- Product cost, weight, dimensions, platform links, and image-folder management
+- Warehouse, shelf, level, Bin, and physical location inventory management
+- Stock In, Stock Out, inventory transfers, and operation history
+- Handheld scanner and mobile-camera support for LPM QR codes
+- Bulk Excel/CSV import, export, and data maintenance
 
-### Label Maker 与 BarTender
+### Label Maker and BarTender
 
-- 浏览器原生标签设计与打印继续保留
-- 产品标签、仓位标签、单排/双排卷纸和自定义预设
-- 管理员可配置第三方标签打印 HTTP 接口
-- 已接通 BarTender 2022 Integration Builder
-- BID Product 可从网站直接发送 UUID 和打印份数
-- BarTender 使用 PostgreSQL View 查询对应记录并打印 `.btw` 模板
-- 外部 CSV 已在国内贴标的产品不会重复进入本地 BarTender 打印流程
+- Built-in browser label design and printing
+- Product labels, location labels, single/double-column rolls, and custom presets
+- Administrator-configurable third-party label-printing HTTP endpoint
+- BarTender 2022 Integration Builder integration
+- Direct BID Product printing from the website using a UUID and copy count
+- BarTender queries the matching PostgreSQL View record and prints a `.btw` template
+- Products already labeled overseas through an external CSV are excluded from local BarTender printing
 
-BarTender 数据 View：
+BarTender data View:
 
 ```text
 bartender_bid_products
 ```
 
-为兼容现有模板，`Inventory` heading 显示实际库存；原应有库存追加为 `Expected Inventory`。
+For compatibility with existing templates, the `Inventory` heading represents physical inventory. The originally expected quantity is exposed as `Expected Inventory`.
 
-BarTender Integration 示例：
+BarTender Integration example:
 
 ```text
 POST http://localhost:5160/Integration/lpm-label-print/Execute
 ```
 
-请求中的主要变量：
+Main request variables:
 
 ```json
 {
@@ -63,60 +68,60 @@ POST http://localhost:5160/Integration/lpm-label-print/Execute
 }
 ```
 
-生产环境应在 Admin → Third-party label printing 中配置实际 endpoint、模板和打印机。`localhost` 指运行 BarTender Integration Service 的同一台服务器；跨主机时必须使用其局域网 IP。
+Configure the actual endpoint, template, and printer under Admin → Third-party label printing in production. `localhost` means the server running BarTender Integration Service; use its LAN IP when it runs on another host.
 
 ### Live Stream BID Products
 
-- BID 批次作为一级条目，支持展开、增加、编辑和删除批次内产品
-- 支持导入 1688/外部 BarTender CSV，也支持网站直接创建本地批次
-- 本地编号按批次号和产品序号生成稳定二维码，例如 `BID|B000001|P010`
-- Actual SKU、包装数量、成本、重量、材质和 Whatnot 安全起拍价
-- 批次与产品级 BarTender CSV 导出
-- 网站直接调用 BarTender 打印当前产品标签
-- 扫码确认直播成交并记录售价、汇率、成本和利润
+- BID batches as top-level entries, with expandable product creation, editing, and deletion
+- Import from 1688/external BarTender CSV files or create local batches in the application
+- Stable QR identifiers based on batch and product sequence, such as `BID|B000001|P010`
+- Actual SKU, pack quantity, cost, weight, material, and Whatnot safe starting price
+- Batch-level and product-level BarTender CSV export
+- Direct BarTender label printing for the selected product
+- Scan-based live-sale confirmation with sale price, exchange rate, cost, and profit tracking
 
-BID 库存分为：
+BID inventory has two values:
 
-- `Expected inventory`：批次或 CSV 中应有的系统库存
-- `Actual inventory`：已经实际到仓并完成清点的库存
+- `Expected inventory`: quantity expected from the batch or source CSV
+- `Actual inventory`: quantity physically received and counted at the warehouse
 
-外部 CSV 新导入时实际库存默认为 `0`；本地创建或从仓库转入时按当前数量初始化。BID 扫码模式提供增加/减少实际库存按钮；确认成交需要实际库存大于 0，并同时扣减两套库存。
+Newly imported external CSV products start with actual inventory `0`. Locally created products or products transferred from warehouse inventory initialize it from the current quantity. BID scanner mode can increase or decrease actual inventory. Confirming a sale requires actual inventory above zero and reduces both inventory values.
 
-### Whatnot 安全起拍价
+### Whatnot Safe Starting Price
 
-安全价模型包含：
+The safety-price model includes:
 
-- 商品人民币成本及实时/备用人民币兑美元汇率
-- 10% 商品成本安全缓冲
-- `$0.25` 包装预留
-- 主播人工：`$25 ÷ 60包 = $0.4167/包`
-- 8% 平台佣金
-- 2.9% 支付处理费
-- 1% 手续费税费预留
-- `$0.30` 固定处理费
-- 假定买家运费与税费产生的支付处理费
+- Product cost in CNY and a live or fallback CNY/USD exchange rate
+- 10% product-cost safety buffer
+- `$0.25` packaging allowance
+- Host labor: `$25 ÷ 60 packages = $0.4167/package`
+- 8% platform commission
+- 2.9% payment-processing fee
+- 1% fee-tax allowance
+- `$0.30` fixed processing fee
+- Processing fees caused by assumed buyer shipping and taxes
 
-人工和包装成本会先加入保本成本，再按平台留存率反推；结果向上取整为整数美元。BID 表头旁的信息按钮会显示完整计算过程。该结果是保本安全估算，不是最终售价或利润保证。
+Labor and packaging are added to break-even cost before reversing the platform retention rate. The result is rounded up to a whole US dollar. The information button beside the BID heading shows the full calculation. This is a break-even safety estimate, not a guaranteed sale price or profit.
 
-### Converter 与 Auto Listing
+### Converter and Auto Listing
 
-- `1688-bartender-converter/` 可在没有 1688 订单时创建和编辑 BarTender 数据
-- 支持按包价格/按数量单价、成本、重量、库存及 Whatnot 安全价
-- CSV heading 与 BarTender 模板保持兼容，数值保留两位小数
-- Auto Listing 页面预留 eBay、Walmart 和 Etsy 通道
-- 当前 eBay 流程以人工审核 Draft 为主，可生成 Markdown、Seller Hub CSV 和图片素材；Walmart/Etsy 尚未接入正式 API
+- `1688-bartender-converter/` can create and edit BarTender data without an existing 1688 order
+- Supports per-package price/per-unit price, cost, weight, inventory, and Whatnot safety price
+- CSV headings remain compatible with the BarTender template; numeric values use two decimal places
+- Auto Listing reserves channels for eBay, Walmart, and Etsy
+- The current eBay workflow focuses on manually reviewed drafts and can generate Markdown, Seller Hub CSV, and image assets; Walmart and Etsy production APIs are not connected yet
 
-### 营销、分析与管理
+### Marketing, Analytics, and Administration
 
-- Amazon ASIN、Attribution 链接和营销商品管理
-- YouTube、Meta、Pinterest、Instagram、Facebook、TikTok 数据接入/导入
-- 社交指标、视频趋势和 AI 分析后台任务
-- 平台定价估算、单位换算、文件存储与 3D 商品场景编辑
-- 管理员、用户、Session 和细分权限
-- 社交数据导入、导出与维护
-- PWA、Windows Tauri 桌面壳和签名自动更新
+- Amazon ASIN, Attribution link, and marketing-product management
+- YouTube, Meta, Pinterest, Instagram, Facebook, and TikTok data connections/imports
+- Social metrics, video trends, and AI analysis background tasks
+- Platform pricing estimates, unit conversion, file storage, and 3D product-scene editing
+- Administrator, user, session, and granular permissions
+- Social-data import, export, and maintenance
+- PWA, Windows Tauri desktop shell, and signed automatic updates
 
-## 技术架构
+## Architecture
 
 ```text
 Angular 22 / PWA / Tauri
@@ -127,228 +132,228 @@ ASP.NET Core HTTPS Gateway
           ▼
 ASP.NET Core API (.NET 10)
           │
-          ├── PostgreSQL（生产）
-          ├── SQLite（本地兼容/测试）
+          ├── PostgreSQL (production)
+          ├── SQLite (local compatibility/testing)
           ├── BarTender Integration Builder
-          └── 图片目录、营销平台与后台服务
+          └── Image folders, marketing platforms, and background services
 ```
 
-生产服务由 .NET Aspire AppHost 编排：
+Production services are orchestrated by the .NET Aspire AppHost:
 
-- `inventory-api`：内部 API，默认端口 `5077`
-- `inventory-https-gateway`：Angular 静态文件、HTTPS 和 API 反向代理
-- PostgreSQL：生产业务数据
-- Aspire Dashboard：资源状态和日志
+- `inventory-api`: internal API, port `5077` by default
+- `inventory-https-gateway`: Angular static files, HTTPS, and API reverse proxy
+- PostgreSQL: production business data
+- Aspire Dashboard: resource status and logs
 
-## 项目结构
+## Repository Structure
 
 ```text
-LocalProductManager.Api/               ASP.NET Core API、业务逻辑和数据库升级
-LocalProductManager.Api.Tests/         API 与库存工作流测试
-LocalProductManager.AppHost/           .NET Aspire 生产编排
-LocalProductManager.Gateway/           HTTPS、前端静态文件与 API 反向代理
-LocalProductManager.DatabaseMigration/ 数据库迁移辅助项目
-LocalProductManager.Web/               Angular、PWA 与 Tauri 桌面客户端
-1688-bartender-converter/               独立 BarTender CSV 转换工具
-config/deployment.json                  本机部署配置（不要提交真实密码）
-tools/                                  Aspire、备份、证书和安装包脚本
-updates/                                桌面端自动更新文件
+LocalProductManager.Api/               ASP.NET Core API, business logic, and schema upgrades
+LocalProductManager.Api.Tests/         API and inventory workflow tests
+LocalProductManager.AppHost/           .NET Aspire production orchestration
+LocalProductManager.Gateway/           HTTPS, frontend static files, and API reverse proxy
+LocalProductManager.DatabaseMigration/ Database migration helper
+LocalProductManager.Web/               Angular, PWA, and Tauri desktop client
+1688-bartender-converter/               Standalone BarTender CSV conversion tool
+config/deployment.json                  Local deployment config (never commit real passwords)
+tools/                                  Aspire, backup, certificate, and installer scripts
+updates/                                Desktop automatic-update files
 ```
 
-## 本地开发
+## Local Development
 
-环境要求：
+Requirements:
 
-- Windows 10/11 或 Windows Server
+- Windows 10/11 or Windows Server
 - .NET 10 SDK
-- Node.js 与 npm 11
-- PostgreSQL（按生产方式开发时）
-- Rust/Cargo 与 WebView2（仅构建 Tauri 安装包时）
-- BarTender 2022 Automation/Enterprise（仅测试一键标签打印时）
+- Node.js and npm 11
+- PostgreSQL when developing against the production-style stack
+- Rust/Cargo and WebView2 only when building the Tauri installer
+- BarTender 2022 Automation/Enterprise only when testing one-click label printing
 
-安装前端依赖：
+Install frontend dependencies:
 
 ```powershell
 cd LocalProductManager.Web
 npm ci
 ```
 
-启动 Angular 开发服务器：
+Start the Angular development server:
 
 ```powershell
 npm start
 ```
 
-默认地址：
+Default URL:
 
 ```text
 http://localhost:4200/
 ```
 
-单独启动 API：
+Start the API separately:
 
 ```powershell
 dotnet run --project LocalProductManager.Api --launch-profile http
 ```
 
-默认地址：
+Default URL:
 
 ```text
 http://localhost:5077/
 ```
 
-使用 Aspire 启动完整环境：
+Start the complete environment with Aspire:
 
 ```text
 start_aspire.bat
 ```
 
-也可使用：
+You can also use:
 
 ```text
 manage_aspire.bat
 ```
 
-## 部署配置
+## Deployment Configuration
 
-复制并填写：
+Copy and complete:
 
 ```text
 config/deployment.example.json → config/deployment.json
 ```
 
-配置包括：
+The configuration includes:
 
-- 局域网固定 IP
-- HTTPS/API/Dashboard 端口
-- PFX 路径与密码
-- PostgreSQL host、database、username 和 password
-- 自动更新路径
+- Static LAN IP
+- HTTPS, API, and Dashboard ports
+- PFX path and password
+- PostgreSQL host, database, username, and password
+- Automatic-update path
 
-不要将真实数据库密码、OAuth Secret、API Key、PFX 密码或私钥提交到 Git。
+Never commit real database passwords, OAuth secrets, API keys, PFX passwords, or private keys.
 
-前端构建前会自动运行 `scripts/sync-deployment.mjs`，将允许公开的部署地址同步到 Angular 配置；数据库凭据不会进入前端。
+Before a frontend build, `scripts/sync-deployment.mjs` automatically copies deployment addresses that are safe to expose into the Angular configuration. Database credentials are never copied into the frontend.
 
-## 构建与验证
+## Build and Verification
 
-前端：
+Frontend:
 
 ```powershell
 cd LocalProductManager.Web
 npm run build
 ```
 
-API：
+API:
 
 ```powershell
 dotnet build LocalProductManager.Api/LocalProductManager.Api.csproj
 ```
 
-测试：
+Tests:
 
 ```powershell
 dotnet test LocalProductManager.Api.Tests/LocalProductManager.Api.Tests.csproj
 ```
 
-当前 Angular 输出目录：
+Current Angular output directory:
 
 ```text
 LocalProductManager.Web/dist/LocalProductManager.Web/browser
 ```
 
-## 数据库升级与备份
+## Database Upgrades and Backups
 
-API 启动时会自动补齐表字段、索引和 BarTender View。生产环境使用 PostgreSQL；SQLite 路径只用于兼容和测试。
+At startup, the API automatically creates missing table columns, indexes, and the BarTender View. Production uses PostgreSQL; the SQLite path exists only for compatibility and testing.
 
-每日 PostgreSQL 备份：
+Install daily PostgreSQL backups:
 
 ```text
 install_postgres_daily_backup.bat
 ```
 
-手动工具：
+Manual utility:
 
 ```text
 manage_postgres.bat
 ```
 
-备份至少应覆盖：
+Backups should include at least:
 
-- PostgreSQL 数据库
-- 商品图片和共享文件目录
-- `config/deployment.json` 的安全副本
-- HTTPS PFX 与证书续期配置
-- Tauri updater 私钥
-- BarTender `.btw` 模板和 `.btin` Integration 文件
+- PostgreSQL database
+- Product images and shared-file directories
+- A secured copy of `config/deployment.json`
+- HTTPS PFX and certificate-renewal configuration
+- Tauri updater private key
+- BarTender `.btw` templates and `.btin` Integration files
 
-## BarTender 运行要求
+## BarTender Requirements
 
-网站一键打印依赖：
+One-click printing from the website requires:
 
 - BarTender Integration Service
 - BarTender Print Scheduler Service
-- 已部署并处于 Running 状态的 Web Service Integration
-- Integration Service 对 `.btw` 模板、PostgreSQL 和目标打印机的访问权限
-- 防火墙允许所配置的 Integration 端口（当前示例为 `5160`）
+- A deployed and Running Web Service Integration
+- Integration Service access to the `.btw` template, PostgreSQL, and target printer
+- Firewall access to the configured Integration port (currently `5160` in the example)
 
-模板通过 Query Prompt `BID_UUID` 接收 Integration Variable `recordId`，Copies 使用变量 `copies`。测试请求的 `action=test` 不打印；正式请求的 `action=print` 才执行 Print Document。
+The template receives Integration Variable `recordId` through Query Prompt `BID_UUID`; Copies uses variable `copies`. A test request with `action=test` does not print. Only `action=print` executes Print Document.
 
-## Windows 桌面版与更新
+## Windows Desktop App and Updates
 
-构建安装包：
+Build the installer:
 
 ```text
 build_installer.bat
 ```
 
-安装包和更新元数据发布到 `updates/`。仅修改 Angular 页面或 API 通常不需要重新构建 Tauri 壳；修改 Rust、窗口权限、图标或 updater 时需要重新打包。
+Installer and update metadata are published to `updates/`. Changes limited to Angular pages or the API usually do not require rebuilding the Tauri shell. Changes to Rust, window permissions, icons, or the updater require a new installer.
 
-版本号遵循语义化版本：
+Versions follow semantic versioning:
 
-- Patch：兼容的小修复
-- Minor：兼容的新功能
-- Major：重大或不兼容升级
+- Patch: compatible bug fixes
+- Minor: compatible new features
+- Major: significant or incompatible changes
 
-## 常见问题
+## Troubleshooting
 
-### 更新后页面仍是旧版本
+### The Old UI Is Still Visible After an Update
 
-- 重新执行 `npm run build`
-- 确认 Gateway 指向正确的 Angular `dist` 目录
-- 重启 Aspire 资源
-- 强制刷新或清除站点/PWA Service Worker 缓存
+- Run `npm run build` again
+- Confirm that the Gateway points to the correct Angular `dist` directory
+- Restart Aspire resources
+- Force-refresh or clear the site/PWA Service Worker cache
 
-### BarTender Test connection 成功但不打印
+### BarTender Test Connection Succeeds but Nothing Prints
 
-- 确认 Integration 已部署且 Running
-- 确认 Print Document 条件为 `action = print`
-- 确认 Query Prompt 为 `BID_UUID = recordId`
-- 确认 `recordId` 和 `copies` 已声明为 Integration Variables，并由 JSON Variables 覆盖
-- 在 Integration Builder 的 Messages、Action Status 和 Variables 中查看实际值
+- Confirm that the Integration is deployed and Running
+- Confirm that Print Document requires `action = print`
+- Confirm Query Prompt `BID_UUID = recordId`
+- Confirm that `recordId` and `copies` are declared as Integration Variables and overwritten by JSON Variables
+- Inspect the actual values under Messages, Action Status, and Variables in Integration Builder
 
-### BarTender 显示 No records found
+### BarTender Reports “No Records Found”
 
-- 在 `bartender_bid_products` 中确认 UUID 存在
-- UUID 必须包含 `BID|` 前缀
-- 检查模板 Query Prompt 名称是否为 `BID_UUID`
-- 外部 CSV 产品默认不进入本地标签 View
+- Confirm the UUID exists in `bartender_bid_products`
+- The UUID must include the `BID|` prefix
+- Confirm that the template Query Prompt is named `BID_UUID`
+- External CSV products are excluded from the local label View by default
 
-### 手机扫码无法启动相机
+### Mobile Scanner Cannot Start the Camera
 
-- 必须使用 HTTPS
-- 检查浏览器相机权限
-- iPhone 优先使用 Safari/PWA
-- 确认没有其他应用占用摄像头
+- Use HTTPS
+- Check browser camera permissions
+- Prefer Safari/PWA on iPhone
+- Confirm that no other application is using the camera
 
-### API 启动时 View 升级失败
+### View Upgrade Fails During API Startup
 
-PostgreSQL `CREATE OR REPLACE VIEW` 要求旧字段的名称和顺序保持不变。新增字段必须追加到 View 末尾，或在维护窗口中显式删除并重建 View。
+PostgreSQL `CREATE OR REPLACE VIEW` requires existing column names and order to remain unchanged. Append new columns to the end of the View, or explicitly drop and recreate it during a maintenance window.
 
-## 安全原则
+## Security Principles
 
-- 仅在公司局域网或受控 VPN 中使用
-- 为员工分配独立账号并遵循最小权限
-- 不在代码、截图、聊天、日志或提交记录中保存凭据
-- 删除仓库结构或库存前先确认关联数据
-- 定期验证数据库、图片、证书和 updater 私钥可恢复
-- 第三方打印 endpoint 只允许受信任的内部服务
+- Use only on the company LAN or a controlled VPN
+- Assign individual employee accounts and apply least privilege
+- Never store credentials in code, screenshots, chat, logs, or commits
+- Verify related data before deleting warehouse structures or inventory
+- Regularly test recovery of databases, images, certificates, and updater private keys
+- Allow third-party printing endpoints only for trusted internal services
