@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthApiService } from '../../core/auth-api.service';
 import { AppUserAdmin, CurrentUser, UserSessionAdmin } from '../../core/models';
+import { LabelPrintingApiService, LabelPrintingSettings } from '../../core/label-printing-api.service';
 
 @Component({
   selector: 'app-admin-page',
@@ -13,6 +14,7 @@ import { AppUserAdmin, CurrentUser, UserSessionAdmin } from '../../core/models';
 })
 export class AdminPage {
   readonly auth = inject(AuthApiService);
+  readonly labelPrinting = inject(LabelPrintingApiService);
   readonly currentUser = signal<CurrentUser | null>(null);
   readonly users = signal<AppUserAdmin[]>([]);
   readonly sessions = signal<UserSessionAdmin[]>([]);
@@ -20,6 +22,7 @@ export class AdminPage {
   readonly loading = signal(false);
   readonly loginForm = { userName: 'admin123', password: '' };
   readonly resetForm = { password: '' };
+  labelSettings: LabelPrintingSettings = { enabled: false, provider: 'BarTender', endpointUrl: 'http://localhost:5159', templateName: '', printerName: '', timeoutSeconds: 15 };
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -33,11 +36,26 @@ export class AdminPage {
         const snapshot = await this.auth.users();
         this.users.set(snapshot.users);
         this.sessions.set(snapshot.sessions);
+        this.labelSettings = await this.labelPrinting.settings();
       } else {
         this.users.set([]);
         this.sessions.set([]);
       }
     }, false);
+  }
+
+  async saveLabelSettings(): Promise<void> {
+    await this.run(async () => {
+      this.labelSettings = await this.labelPrinting.saveSettings(this.labelSettings);
+      this.show('Third-party label printing settings saved.');
+    });
+  }
+
+  async testLabelConnection(): Promise<void> {
+    await this.run(async () => {
+      this.labelSettings = await this.labelPrinting.saveSettings(this.labelSettings);
+      this.show((await this.labelPrinting.test()).message);
+    });
   }
 
   async login(): Promise<void> {
@@ -102,8 +120,8 @@ export class AdminPage {
     this.loading.set(true);
     try {
       await action();
-    } catch (error) {
-      if (showErrors) this.show(error instanceof Error ? error.message : 'Action failed.');
+    } catch (error: any) {
+      if (showErrors) this.show(error?.error?.message || error?.error || error?.message || 'Action failed.');
     } finally {
       this.loading.set(false);
     }

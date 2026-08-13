@@ -16,10 +16,9 @@ export class App {
 
     this.updates.versionUpdates
       .pipe(filter((event): event is VersionReadyEvent => event.type === 'VERSION_READY'))
-      .subscribe(() => {
-        if (globalThis.confirm('A new LocalProductManager version is ready. Reload now?')) {
-          globalThis.location.reload();
-        }
+      .subscribe(async () => {
+        await this.updates.activateUpdate();
+        globalThis.location.reload();
       });
   }
 }

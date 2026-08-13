@@ -6,6 +6,7 @@
 **/Data/*.db-wal
 **/Data/image-storage-roots.json
 **/Data/store-links.json
+**/Data/label-printing.json
 **/Data/youtube-oauth-token.json
 **/Data/youtube-client-secret.json
 **/Data/product-images/
@@ -25,3 +26,6 @@ _tools/
 updates/*
 !updates/.gitkeep
 LocalProductManager.Web/public/PROJECT_DOCUMENTATION.md
+/.tmp/
+/outputs/
+/1688-bartender-converter/*_BarTender*.csv

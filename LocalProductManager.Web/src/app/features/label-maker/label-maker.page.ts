@@ -8,6 +8,7 @@ import { ProductApiService } from '../../core/product-api.service';
 import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
 import { emptyLabelPresetSlots, LabelSettings, loadSavedLabelPresets, SavedLabelPreset, saveLabelPresets } from '../../core/label-preset-storage';
+import { LabelPrintingApiService, LabelPrintingSettings } from '../../core/label-printing-api.service';
 
 type LabelPreset = { name: string; width: number; height: number; columns: 1 | 2 };
 type BinLabel = { code: string; description: string };
@@ -24,10 +25,13 @@ export class LabelMakerPage implements AfterViewChecked {
   @ViewChildren('barcode') barcodeElements?: QueryList<ElementRef<HTMLElement>>;
   private readonly api = inject(ProductApiService);
   private readonly inventoryApi = inject(InventoryApiService);
+  private readonly thirdPartyPrinting = inject(LabelPrintingApiService);
 
   readonly products = signal<ProductListItem[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly printMessage = signal('');
+  readonly thirdPartySettings = signal<LabelPrintingSettings | null>(null);
   readonly mobileMenuOpen = signal(false);
   readonly selectedIds = signal(new Set<number>());
   readonly bins = signal<BinLabel[]>([]);
@@ -62,6 +66,7 @@ export class LabelMakerPage implements AfterViewChecked {
     this.loadCustomPresets();
     void this.loadProducts();
     void this.loadBins();
+    void this.loadThirdPartySettings();
   }
 
   ngAfterViewChecked(): void {
@@ -314,6 +319,23 @@ export class LabelMakerPage implements AfterViewChecked {
       frame.contentWindow?.print();
       setTimeout(() => frame.remove(), 1500);
     }, 300);
+  }
+
+  async printLabelsWithThirdParty(): Promise<void> {
+    if (!this.selectedProducts.length) return;
+    this.error.set(''); this.printMessage.set('');
+    try {
+      const result = await this.thirdPartyPrinting.print(this.selectedProducts.map(product => ({
+        recordType: 'inventory-product', recordId: this.barcodeValue(product), title: product.productName, sku: product.sku, copies: 1,
+      })));
+      this.printMessage.set(result.message);
+    } catch (error: any) {
+      this.error.set(error?.error?.message || 'Third-party label printing failed. Check General Settings and the printing service.');
+    }
+  }
+
+  private async loadThirdPartySettings(): Promise<void> {
+    try { this.thirdPartySettings.set(await this.thirdPartyPrinting.settings()); } catch { this.thirdPartySettings.set(null); }
   }
 
   printBinLabels(): void {

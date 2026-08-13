@@ -1,6 +1,6 @@
 import { Platform } from '../../core/models';
 
-export type ViewMode = 'products' | 'bidProducts' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
+export type ViewMode = 'products' | 'autoListing' | 'bidProducts' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 export type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 export type PricingPlatform = Exclude<Platform, 'shopify'>;
 export type ProductCostCurrency = 'rmb' | 'usd';
@@ -57,6 +57,7 @@ export interface PricingEstimate {
   billableWeight: number;
   shippingCost: number;
   breakEvenPrice: number;
+  rawSuggestedPrice: number;
   suggestedPrice: number;
   estimatedProfit: number;
   targetProfit: number;

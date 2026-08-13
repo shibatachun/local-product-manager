@@ -262,6 +262,19 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     } finally { this.loading.set(false); }
   }
 
+  async adjustBidActualInventory(delta: 1 | -1): Promise<void> {
+    const product = this.bidProduct();
+    if (!product || this.loading()) return;
+    this.loading.set(true); this.error.set(''); this.success.set('');
+    try {
+      const updated = await this.bidApi.adjustActualInventory(product.id, delta);
+      this.bidProduct.set(updated);
+      this.success.set(`Actual inventory ${delta > 0 ? 'increased' : 'decreased'} to ${updated.actualInventory}.`);
+    } catch (error: any) {
+      this.error.set(error?.error || (delta > 0 ? 'Actual inventory cannot exceed expected inventory.' : 'Actual inventory cannot be negative.'));
+    } finally { this.loading.set(false); }
+  }
+
   cancelBidSale(): void { this.reset(); setTimeout(() => this.barcodeInput?.nativeElement.focus()); }
 
   async addProduct(): Promise<void> {

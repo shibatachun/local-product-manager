@@ -23,6 +23,19 @@
   </section>
 
   <ng-container *ngIf="currentUser()?.isAdmin">
+    <section class="panel">
+      <div class="section-heading"><div><h2>Third-party label printing</h2><p>Connect BarTender or another HTTP-compatible label service. Existing browser printing remains available.</p></div></div>
+      <div class="integration-grid">
+        <label class="toggle-field"><input type="checkbox" [(ngModel)]="labelSettings.enabled" /> Enable third-party printing</label>
+        <label>Provider<input [(ngModel)]="labelSettings.provider" placeholder="BarTender" /></label>
+        <label class="wide">HTTP endpoint<input [(ngModel)]="labelSettings.endpointUrl" placeholder="http://localhost:5159/..." /></label>
+        <label>Template / document<input [(ngModel)]="labelSettings.templateName" placeholder="InventoryLabel.btw" /></label>
+        <label>Printer<input [(ngModel)]="labelSettings.printerName" placeholder="Default printer" /></label>
+        <label>Timeout (seconds)<input type="number" min="2" max="120" [(ngModel)]="labelSettings.timeoutSeconds" /></label>
+      </div>
+      <div class="maintenance-actions"><button class="primary" type="button" (click)="saveLabelSettings()" [disabled]="loading()">Save connection</button><button type="button" (click)="testLabelConnection()" [disabled]="loading()">Test connection</button></div>
+      <p class="danger-note">The endpoint is called by the inventory server. For BarTender Integration Builder, enter the deployed Web Service Integration URL rather than only the Designer application address.</p>
+    </section>
     <section class="panel maintenance-panel">
       <div class="section-heading">
         <div>

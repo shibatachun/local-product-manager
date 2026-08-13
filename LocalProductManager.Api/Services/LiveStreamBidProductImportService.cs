@@ -76,7 +76,7 @@ public sealed class LiveStreamBidProductImportService(AppDbContext db)
         {
             if (!existing.TryGetValue(row.Uuid, out var item))
             {
-                item = new LiveStreamBidProduct { Uuid = row.Uuid };
+                item = new LiveStreamBidProduct { Uuid = row.Uuid, RequiresLocalLabel = false, ActualInventory = 0 };
                 db.LiveStreamBidProducts.Add(item);
                 created++;
             }

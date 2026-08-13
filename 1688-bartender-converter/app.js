@@ -6,6 +6,7 @@
     dropZone: document.querySelector("#drop-zone"),
     dropTitle: document.querySelector("#drop-title"),
     dropSubtitle: document.querySelector("#drop-subtitle"),
+    createButton: document.querySelector("#create-button"),
     workspace: document.querySelector("#workspace"),
     rowCount: document.querySelector("#row-count"),
     mergeCount: document.querySelector("#merge-count"),
@@ -15,6 +16,7 @@
     recordBody: document.querySelector("#record-body"),
     emptyFilter: document.querySelector("#empty-filter"),
     exportButton: document.querySelector("#export-button"),
+    addRowButton: document.querySelector("#add-row-button"),
     message: document.querySelector("#message"),
   };
 
@@ -43,6 +45,34 @@
     return cell;
   }
 
+  function createInput(record, field, options = {}) {
+    const input = document.createElement("input");
+    input.className = options.className || "record-input";
+    input.type = options.type || "text";
+    input.value = record[field] ?? "";
+    if (options.min != null) input.min = String(options.min);
+    if (options.step != null) input.step = String(options.step);
+    input.placeholder = options.placeholder || "";
+    input.setAttribute("aria-label", options.label || field);
+    input.addEventListener("input", () => {
+      let value = input.value;
+      if (options.integer) {
+        const parsed = Number.parseInt(value, 10);
+        value = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      }
+      record[field] = options.trim === false ? value : typeof value === "string" ? value.trim() : value;
+      options.onInput?.(input);
+    });
+    return input;
+  }
+
+  function createInputCell(input, className = "") {
+    const cell = document.createElement("td");
+    if (className) cell.className = className;
+    cell.append(input);
+    return cell;
+  }
+
   function displayWeight(value, unit) {
     return value === "" || value == null ? "—" : `${value} ${unit}`;
   }
@@ -62,7 +92,11 @@
 
       const row = document.createElement("tr");
       row.append(createCell(index + 1, "row-number"));
-      row.append(createCell(record.UUID, "uuid"));
+      row.append(createInputCell(createInput(record, "UUID", {
+        className: "record-input code-input",
+        placeholder: "BID|单品货号|SKU ID",
+        label: `第${index + 1}行 BID Code`,
+      }), "uuid-input-cell"));
 
       const titleCell = document.createElement("td");
       titleCell.className = "title-cell";
@@ -76,7 +110,21 @@
       titleCell.append(titleInput);
       row.append(titleCell);
 
-      row.append(createCell(record.Quantity, "numeric"));
+      const recalculate = () => {
+        ConverterCore.updateRecord(record, record["Weight (g)"]);
+        row.children[8].textContent = displayWeight(record["Weight (oz)"], "oz");
+        row.children[10].textContent = record["Total Cost"];
+        row.children[11].textContent = record["Whatnot Auction Safe Price"];
+      };
+      row.append(createInputCell(createInput(record, "Quantity", {
+        className: "inventory-input",
+        type: "number",
+        min: 0,
+        step: 1,
+        integer: true,
+        label: `第${index + 1}行数量`,
+        onInput: recalculate,
+      }), "numeric"));
 
       const inventoryCell = document.createElement("td");
       inventoryCell.className = "numeric";
@@ -94,7 +142,36 @@
       });
       inventoryCell.append(inventoryInput);
       row.append(inventoryCell);
-      row.append(createCell(record["Unit Price"], "numeric"));
+
+      const priceTypeCell = document.createElement("td");
+      const priceTypeSelect = document.createElement("select");
+      priceTypeSelect.className = "price-type-select";
+      priceTypeSelect.setAttribute("aria-label", `第${index + 1}行计价方式`);
+      [
+        ["per-unit", "按单个 × 数量"],
+        ["per-package", "按整包价格"],
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        priceTypeSelect.append(option);
+      });
+      priceTypeSelect.value = record["Price Type"] || "per-unit";
+      priceTypeSelect.addEventListener("change", () => {
+        record["Price Type"] = priceTypeSelect.value;
+        recalculate();
+      });
+      priceTypeCell.append(priceTypeSelect);
+      row.append(priceTypeCell);
+      row.append(createInputCell(createInput(record, "Unit Price", {
+        className: "inventory-input price-input",
+        type: "number",
+        min: 0,
+        step: "any",
+        trim: false,
+        label: `第${index + 1}行单价`,
+        onInput: recalculate,
+      }), "numeric"));
 
       const weightCell = document.createElement("td");
       weightCell.className = "numeric";
@@ -111,8 +188,9 @@
       input.addEventListener("input", () => {
         ConverterCore.updateRecord(record, input.value);
         input.classList.toggle("missing", record["Weight (g)"] === "");
-        row.children[7].textContent = displayWeight(record["Weight (oz)"], "oz");
-        row.children[9].textContent = record["Total Cost"];
+        row.children[8].textContent = displayWeight(record["Weight (oz)"], "oz");
+        row.children[10].textContent = record["Total Cost"];
+        row.children[11].textContent = record["Whatnot Auction Safe Price"];
         updateSummary();
       });
       const unit = document.createElement("span");
@@ -134,6 +212,20 @@
       materialCell.append(materialInput);
       row.append(materialCell);
       row.append(createCell(record["Total Cost"], "numeric"));
+      row.append(createCell(record["Whatnot Auction Safe Price"], "numeric"));
+
+      const actionCell = document.createElement("td");
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "row-delete-button";
+      deleteButton.type = "button";
+      deleteButton.textContent = "删除";
+      deleteButton.addEventListener("click", () => {
+        convertedData.records.splice(index, 1);
+        updateSummary();
+        renderRecords();
+      });
+      actionCell.append(deleteButton);
+      row.append(actionCell);
       fragment.append(row);
     });
 
@@ -183,6 +275,31 @@
     }
   }
 
+  async function createBlankTemplate() {
+    setMessage();
+    convertedData = {
+      headers: ["UUID", "Title", "Quantity", "Inventory", "Unit Price", "Weight (g)", "Weight (oz)", "Material", "Total Cost", "Whatnot Auction Safe Price"],
+      records: [await ConverterCore.createBlankRecord("first-row")],
+      mergeCount: 0,
+    };
+    sourceName = "Custom_Label_Template";
+    elements.dropTitle.textContent = "空白 BarTender 模板";
+    elements.dropSubtitle.textContent = "直接编辑下方字段，不需要上传 1688 订单";
+    elements.searchInput.value = "";
+    elements.exportButton.disabled = false;
+    updateSummary();
+    renderRecords();
+    elements.workspace.classList.remove("hidden");
+    elements.workspace.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function addBlankRow() {
+    if (!convertedData) return createBlankTemplate();
+    convertedData.records.push(await ConverterCore.createBlankRecord(`row-${convertedData.records.length}-${Date.now()}`));
+    updateSummary();
+    renderRecords();
+  }
+
   function downloadCsv() {
     if (!convertedData) return;
     const csv = ConverterCore.toCsv(convertedData);
@@ -200,6 +317,8 @@
   elements.fileInput.addEventListener("change", () => processFile(elements.fileInput.files[0]));
   elements.searchInput.addEventListener("input", renderRecords);
   elements.exportButton.addEventListener("click", downloadCsv);
+  elements.createButton.addEventListener("click", createBlankTemplate);
+  elements.addRowButton.addEventListener("click", addBlankRow);
 
   ["dragenter", "dragover"].forEach((eventName) => {
     elements.dropZone.addEventListener(eventName, (event) => {

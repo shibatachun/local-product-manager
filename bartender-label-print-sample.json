@@ -1,0 +1,19 @@
+{
+  "action": "print",
+  "provider": "BarTender",
+  "template": "label_format_localdatabaseConnected.btw",
+  "printer": "",
+  "recordType": "bid-product",
+  "recordId": "BID|B000001|P010",
+  "copies": 1,
+  "requestedAt": "2026-08-13T12:00:00Z",
+  "items": [
+    {
+      "recordType": "bid-product",
+      "recordId": "BID|B000001|P010",
+      "title": "Flower Beads",
+      "sku": null,
+      "copies": 1
+    }
+  ]
+}

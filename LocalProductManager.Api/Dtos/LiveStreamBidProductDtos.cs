@@ -3,10 +3,16 @@ namespace LocalProductManager.Api.Dtos;
 public sealed record LiveStreamBidProductDto(
     int Id,
     int? SourceProductId,
+    string? BatchNumber,
+    int? BatchProductNumber,
+    string? ActualSku,
+    bool RequiresLocalLabel,
+    decimal? WhatnotAuctionSafePrice,
     string Uuid,
     string Title,
     int Quantity,
     int Inventory,
+    int ActualInventory,
     decimal UnitPrice,
     decimal? WeightGrams,
     decimal? WeightOunces,
@@ -17,6 +23,38 @@ public sealed record LiveStreamBidProductDto(
     DateTimeOffset? SoldAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+public sealed record CreateLiveStreamBidListRow(
+    int? SourceProductId,
+    string? ExternalUuid,
+    string? ActualSku,
+    decimal? WhatnotAuctionSafePrice,
+    string Title,
+    int Quantity,
+    int Inventory,
+    decimal UnitPrice,
+    decimal? WeightGrams,
+    decimal? WeightOunces,
+    string? Material,
+    decimal? TotalCost);
+
+public sealed record CreateLiveStreamBidListRequest(IReadOnlyList<CreateLiveStreamBidListRow> Rows);
+
+public sealed record UpdateLiveStreamBidProductRequest(
+    string? ActualSku,
+    decimal? WhatnotAuctionSafePrice,
+    string Title,
+    int Quantity,
+    int Inventory,
+    decimal UnitPrice,
+    decimal? WeightGrams,
+    decimal? WeightOunces,
+    string? Material,
+    decimal? TotalCost);
+
+public sealed record CreateLiveStreamBidListResult(
+    string BatchNumber,
+    IReadOnlyList<LiveStreamBidProductDto> Products);
 
 public sealed record LiveStreamBidImportResult(
     int Created,
@@ -31,6 +69,8 @@ public sealed record MoveProductToLiveStreamBidRequest(
     int Quantity);
 
 public sealed record ConfirmLiveStreamBidSaleRequest(decimal? ActualSalePrice);
+
+public sealed record AdjustLiveStreamBidActualInventoryRequest(int Delta);
 
 public sealed record LiveStreamBidSaleDto(
     int Id,

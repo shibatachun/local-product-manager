@@ -13,6 +13,7 @@
 
     <nav aria-label="Main navigation" [class.mobile-open]="mobileMenuOpen()">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'autoListing'" (click)="changeView('autoListing')"><span>AI</span> Auto Listing</button>
       <button [class.active]="view() === 'bidProducts'" (click)="changeView('bidProducts')"><span>BP</span> Live Stream Bid Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
       <button [class.active]="view() === 'barcodeScanner'" (click)="changeView('barcodeScanner')"><span>▣</span> Barcode Scanner</button>
@@ -51,7 +52,7 @@
       </div>
     </header>
 
-    <ng-container *ngIf="view() === 'products'; else bidProductsView">
+    <ng-container *ngIf="view() === 'products'; else autoListingView">
       <section class="store-band">
         <div class="store-card" *ngFor="let option of listingOptions">
           <a [class.disabled]="!storeLink(option.value)?.url" [href]="storeLink(option.value)?.url || '#'" target="_blank" rel="noreferrer">{{ option.label }}</a>
@@ -154,6 +155,9 @@
       </section>
     </ng-container>
 
+    <ng-template #autoListingView>
+      <app-auto-listing-panel *ngIf="view() === 'autoListing'; else bidProductsView"></app-auto-listing-panel>
+    </ng-template>
     <ng-template #bidProductsView>
       <ng-container *ngIf="view() === 'bidProducts'; else marketingView">
         <app-live-stream-bid-products-panel [canImport]="canImportData()" [canMove]="!!currentUser()?.canManageStorage" [isAdmin]="!!currentUser()?.isAdmin"></app-live-stream-bid-products-panel>
@@ -344,6 +348,7 @@
           <div class="estimate-panel" *ngIf="pricingResult() as estimate; else pricingEmpty">
             <div class="estimate-summary">
               <div><span>Suggested listing price</span><strong>{{ currency(estimate.suggestedPrice) }}</strong></div>
+              <div><span>Calculated before .99 pricing</span><strong>{{ currency(estimate.rawSuggestedPrice) }}</strong></div>
               <div><span>Break-even price</span><strong>{{ currency(estimate.breakEvenPrice) }}</strong></div>
               <div><span>Estimated profit</span><strong>{{ currency(estimate.estimatedProfit) }}</strong></div>
               <div><span>Target profit</span><strong>{{ estimate.targetProfitEnabled ? currency(estimate.targetProfit) : 'Margin mode' }}</strong></div>

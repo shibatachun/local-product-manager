@@ -69,6 +69,8 @@ builder.Services.AddScoped<TikTokReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SocialDataMaintenanceService>();
 builder.Services.AddScoped<LiveStreamBidProductImportService>();
+builder.Services.AddSingleton<ThirdPartyLabelPrintService>();
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<ProductImageFolderService>();
 builder.Services.AddHttpClient<YouTubeOAuthService>();
 builder.Services.AddHttpClient<PinterestOAuthService>();

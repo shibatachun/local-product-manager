@@ -1,0 +1,28 @@
+<section class="auto-listing">
+  <header><div><small>AUTOMATED COMMERCE</small><h2>Auto Listing</h2><p>Turn product photos and local inventory data into reviewed marketplace listings.</p></div><span class="draft-only">Draft mode</span></header>
+  <p class="message" *ngIf="message()">{{ message() }}</p>
+  <div class="platforms">
+    <article class="platform active"><b>e</b><div><h3>eBay</h3><p>{{ platform('ebay')?.message || 'Loading connector status…' }}</p></div><span>{{ platform('ebay')?.status === 'configuration_required' ? 'Setup required' : 'In progress' }}</span></article>
+    <article class="platform"><b>W</b><div><h3>Walmart</h3><p>{{ platform('walmart')?.message || 'Connector reserved.' }}</p></div><span>Coming soon</span></article>
+    <article class="platform"><b>E</b><div><h3>Etsy</h3><p>{{ platform('etsy')?.message || 'Connector reserved.' }}</p></div><span>Coming soon</span></article>
+  </div>
+
+  <div class="workspace">
+    <section class="setup">
+      <small>EBAY WORKFLOW</small><h3>Create listing draft</h3>
+      <label>Local product<select [(ngModel)]="selectedProductId"><option [ngValue]="null">Choose a product</option><option *ngFor="let product of products()" [ngValue]="product.id">{{ product.sku }} · {{ product.productName }}</option></select></label>
+      <button type="button" (click)="generateDraft()" [disabled]="!selectedProductId || loading()">{{ loading() ? 'Working…' : 'Generate eBay draft' }}</button>
+      <ol><li>Use product photos and main image</li><li>Generate title, description, category and aspects with AI</li><li>Use the saved local pricing result</li><li>Review before publishing through eBay OAuth</li></ol>
+    </section>
+
+    <section class="draft" *ngIf="draft() as item; else emptyDraft">
+      <div class="readiness" [class.ready]="!item.missingFields.length">{{ item.missingFields.length ? 'Needs input' : 'Ready for eBay enrichment' }}</div>
+      <label>Title <small>{{ item.title.length }}/80</small><input maxlength="80" [(ngModel)]="item.title"></label>
+      <label>Description<textarea rows="8" [(ngModel)]="item.description"></textarea></label>
+      <div class="fields"><label>Price<input type="number" min="0" step="0.01" [(ngModel)]="item.price"></label><label>Quantity<input type="number" min="0" step="1" [(ngModel)]="item.quantity"></label><label>Condition<select [(ngModel)]="item.condition"><option value="NEW">New</option><option value="USED_EXCELLENT">Used - Excellent</option><option value="USED_GOOD">Used - Good</option></select></label></div>
+      <div class="missing" *ngIf="item.missingFields.length"><strong>Complete before publishing:</strong><span *ngFor="let field of item.missingFields">{{ field }}</span></div>
+      <footer><button type="button" disabled>Connect & publish to eBay</button><small>Publishing unlocks after OAuth, policies, category and required aspects are configured.</small></footer>
+    </section>
+    <ng-template #emptyDraft><section class="empty"><strong>No eBay draft selected</strong><span>Choose a local product to begin.</span></section></ng-template>
+  </div>
+</section>

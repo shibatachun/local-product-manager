@@ -38,10 +38,13 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
             var bidProduct = new LiveStreamBidProduct
             {
                 SourceProductId = product.Id,
+                ActualSku = product.Sku,
+                RequiresLocalLabel = true,
                 Uuid = Guid.NewGuid().ToString().ToUpperInvariant(),
                 Title = product.ProductName,
                 Quantity = 1,
                 Inventory = quantity,
+                ActualInventory = quantity,
                 UnitPrice = product.Cost ?? 0,
                 WeightOunces = product.Weight,
                 WeightGrams = product.Weight.HasValue ? decimal.Round(product.Weight.Value * 28.349523125m, 4) : null,

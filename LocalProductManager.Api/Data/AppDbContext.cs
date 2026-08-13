@@ -152,8 +152,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("live_stream_bid_products");
             entity.HasIndex(item => item.Uuid).IsUnique();
             entity.HasIndex(item => item.SourceProductId);
+            entity.HasIndex(item => new { item.BatchNumber, item.BatchProductNumber }).IsUnique();
             entity.HasOne(item => item.SourceProduct).WithMany().HasForeignKey(item => item.SourceProductId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(item => item.Uuid).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.BatchNumber).HasMaxLength(20);
+            entity.Property(item => item.ActualSku).HasMaxLength(200);
+            entity.Property(item => item.WhatnotAuctionSafePrice).HasPrecision(12, 2);
             entity.Property(item => item.Title).HasMaxLength(1000).IsRequired();
             entity.Property(item => item.UnitPrice).HasPrecision(12, 2);
             entity.Property(item => item.WeightGrams).HasPrecision(12, 4);

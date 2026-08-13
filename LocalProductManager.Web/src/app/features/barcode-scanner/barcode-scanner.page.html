@@ -97,14 +97,26 @@
     <section class="result-card bid-result" *ngIf="!loading() && bidProduct() as item">
       <div class="result-heading"><span class="bid-icon">BID</span><div><small>Live stream bid product</small><h2>{{ item.title }}</h2></div><span class="sold-status" *ngIf="item.isSold">Sold out</span></div>
       <dl>
+        <div><dt>Batch</dt><dd>{{ item.batchNumber || '—' }}<span *ngIf="item.batchProductNumber"> · #{{ item.batchProductNumber }}</span></dd></div>
         <div><dt>UUID</dt><dd><code>{{ item.uuid }}</code></dd></div>
-        <div><dt>Inventory</dt><dd class="quantity">{{ item.inventory }}</dd></div>
+        <div><dt>Actual SKU</dt><dd><code *ngIf="item.actualSku">{{ item.actualSku }}</code><span *ngIf="!item.actualSku">—</span></dd></div>
+        <div><dt>Quantity / package</dt><dd>{{ item.quantity | number:'1.0-0' }}</dd></div>
+        <div><dt>Expected inventory</dt><dd class="quantity">{{ item.inventory }}</dd></div>
+        <div><dt>Actual inventory</dt><dd class="quantity">{{ item.actualInventory }}</dd></div>
+        <div><dt>Unit price</dt><dd>¥{{ item.unitPrice | number:'1.2-2' }}</dd></div>
+        <div><dt>Weight</dt><dd>{{ item.weightGrams === null ? '—' : ((item.weightGrams | number:'1.0-2') + ' g') }}<span *ngIf="item.weightOunces !== null"> · {{ item.weightOunces | number:'1.2-2' }} oz</span></dd></div>
         <div><dt>Material</dt><dd>{{ item.material || '—' }}</dd></div>
-        <div><dt>Recorded cost</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</dd></div>
+        <div><dt>Cost / package</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</dd></div>
+        <div><dt>Inventory total value</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + ((item.totalCost * item.inventory) | number:'1.2-2')) }}</dd></div>
+        <div><dt>Whatnot safe start</dt><dd>{{ item.whatnotAuctionSafePrice === null ? '—' : ('$' + (item.whatnotAuctionSafePrice | number:'1.2-2')) }}</dd></div>
       </dl>
+      <div class="bid-actual-inventory-actions">
+        <button type="button" (click)="adjustBidActualInventory(1)" [disabled]="loading() || item.actualInventory >= item.inventory">+ Actual inventory</button>
+        <button type="button" (click)="adjustBidActualInventory(-1)" [disabled]="loading() || item.actualInventory <= 0">− Actual inventory</button>
+      </div>
       <div class="bid-sale-form">
         <label>Actual sale price (USD) <span>Optional</span><div class="price-input"><b>$</b><input type="number" min="0" step="0.01" inputmode="decimal" [(ngModel)]="actualSalePrice" placeholder="Leave blank if unknown" /></div></label>
-        <div><button class="confirm-sale" type="button" (click)="confirmBidSale()" [disabled]="loading() || item.inventory <= 0">Confirm sold</button><button type="button" (click)="cancelBidSale()">Cancel</button></div>
+        <div><button class="confirm-sale" type="button" (click)="confirmBidSale()" [disabled]="loading() || item.inventory <= 0 || item.actualInventory <= 0">Confirm sold</button><button type="button" (click)="cancelBidSale()">Cancel</button></div>
       </div>
       <section class="bid-today" *ngIf="bidToday() as today"><header><strong>Today's live sales</strong><div class="bid-currency"><button type="button" [class.active]="bidCurrency() === 'usd'" (click)="bidCurrency.set('usd')">USD</button><button type="button" [class.active]="bidCurrency() === 'rmb'" (click)="bidCurrency.set('rmb')">RMB</button></div><span>{{ today.soldCount }} sold</span></header><div><span>Cost <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.totalCostUsd : today.totalCostRmb) | number:'1.2-2' }}</b></span><span>Sales <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.actualRevenueUsd : today.actualRevenueRmb) | number:'1.2-2' }}</b></span><span>Profit <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.realizedProfitUsd : today.realizedProfitRmb) | number:'1.2-2' }}</b></span></div></section>
       <button class="scan-again" type="button" (click)="reset()">Scan another item</button>

@@ -33,6 +33,7 @@ import { InventoryManagerPanelComponent } from '../inventory-manager/inventory-m
 import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
 import { LabelMakerPage } from '../label-maker/label-maker.page';
 import { LiveStreamBidProductsPanelComponent } from '../live-stream-bid-products/live-stream-bid-products-panel.component';
+import { AutoListingPanelComponent } from '../auto-listing/auto-listing-panel.component';
 import {
   AsinRelationshipRow,
   LogisticsOption,
@@ -61,7 +62,7 @@ interface ProductTableColumn {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent, AutoListingPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -696,6 +697,7 @@ export class ProductManagerPage {
   pageEyebrow(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
+      autoListing: 'Automated commerce',
       bidProducts: 'Live commerce',
       inventory: 'Warehouse operations',
       barcodeScanner: 'Inventory tools',
@@ -714,6 +716,7 @@ export class ProductManagerPage {
   pageTitle(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
+      autoListing: 'Auto Listing',
       bidProducts: 'Live Stream Bid Products',
       inventory: 'Inventory Manager',
       barcodeScanner: 'Barcode Scanner',
@@ -1771,9 +1774,10 @@ export class ProductManagerPage {
     const breakEvenVariableRate = category.feeRate + config.processingRate + bufferRate;
     const suggestedVariableRate = breakEvenVariableRate + marginRate;
     const breakEvenPrice = fixedCost / Math.max(0.01, 1 - breakEvenVariableRate);
-    const suggestedPrice = targetProfitEnabled
+    const rawSuggestedPrice = targetProfitEnabled
       ? (fixedCost + targetProfit) / Math.max(0.01, 1 - breakEvenVariableRate)
       : fixedCost / Math.max(0.01, 1 - suggestedVariableRate);
+    const suggestedPrice = this.toPsychologicalPrice(rawSuggestedPrice);
     const platformFee = suggestedPrice * category.feeRate;
     const processingFee = suggestedPrice * config.processingRate + config.fixedFee;
     const buffer = suggestedPrice * bufferRate;
@@ -1812,6 +1816,7 @@ export class ProductManagerPage {
       billableWeight,
       shippingCost,
       breakEvenPrice,
+      rawSuggestedPrice,
       suggestedPrice,
       estimatedProfit,
       targetProfit,
@@ -2091,6 +2096,11 @@ export class ProductManagerPage {
 
   hideBrokenImage(event: Event): void {
     (event.target as HTMLImageElement).style.display = 'none';
+  }
+
+  private toPsychologicalPrice(value: number): number {
+    const safeValue = Math.max(0, this.safeNumber(value));
+    return Math.floor(safeValue) + 0.99;
   }
 
   showBrokenDetailImage(event: Event): void {

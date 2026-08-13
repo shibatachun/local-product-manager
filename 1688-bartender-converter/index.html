@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>1688 → BarTender CSV</title>
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=9">
 </head>
 <body>
   <main class="app-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">LOCAL CONVERSION TOOL <span class="version-badge">v1.2.0</span></p>
+        <p class="eyebrow">LOCAL CONVERSION TOOL <span class="version-badge">v1.4.1</span></p>
         <h1>1688 → BarTender CSV</h1>
         <p class="hero-copy">展开订单中的合并单元格，补充二维码唯一码、重量和成本，然后导出可供 BarTender 使用的 CSV。</p>
       </div>
@@ -33,6 +33,11 @@
           <strong id="drop-title">选择或拖入 Excel 文件</strong>
           <span id="drop-subtitle">原始文件不会被修改或上传</span>
         </label>
+        <div class="manual-create">
+          <span class="or-divider">或</span>
+          <button class="secondary-button" id="create-button" type="button">Create 空白模板</button>
+          <small>无需 1688 订单，直接输入自定义标签数据。</small>
+        </div>
       </div>
     </section>
 
@@ -62,16 +67,20 @@
             <div class="step-heading"><span class="step-number small">2</span><h2>检查重量与成本</h2></div>
             <p>标题中的克重会自动识别。修改“重量(g)”后，盎司和总成本会即时更新。</p>
           </div>
-          <label class="search-box">
-            <span>⌕</span>
-            <input id="search-input" type="search" placeholder="搜索标题、材质或 BID code">
-          </label>
+          <div class="editor-actions">
+            <button class="secondary-button compact" id="add-row-button" type="button">＋ 新增一行</button>
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="search-input" type="search" placeholder="搜索标题、材质或 BID code">
+            </label>
+          </div>
         </div>
 
         <div class="formula-note">
           <span>计算规则</span>
           <code>重量(oz) = 重量(g) ÷ 28.349523125</code>
-          <code>总成本 = 0.05 × 重量(g) + 单价 × 数量</code>
+          <code>Total Cost = 0.05 × 重量(g) + 货品成本</code>
+          <code>Whatnot Safe Price = 保本成本 + 包装费 + 主播人工费（$25 ÷ 60包）与平台费用计算后向上取整</code>
         </div>
 
         <div class="table-wrap">
@@ -83,11 +92,14 @@
                 <th class="editable-heading">货品标题</th>
                 <th class="numeric">数量</th>
                 <th class="numeric editable-heading">Inventory</th>
-                <th class="numeric">单价(元)</th>
+                <th class="editable-heading">计价方式</th>
+                <th class="numeric editable-heading">输入价格(元)</th>
                 <th class="numeric editable-heading">重量(g)</th>
                 <th class="numeric">重量(oz)</th>
                 <th>材质</th>
                 <th class="numeric">总成本</th>
+                <th class="numeric">Whatnot Safe Price ($)</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="record-body"></tbody>
@@ -101,7 +113,7 @@
           <span class="step-number small">3</span>
           <div>
             <h2>导出 BarTender CSV</h2>
-            <p>CSV 使用 UTF-8 BOM 编码，仅输出9个必要字段，第一列为二维码使用的稳定 BID|UUID code。</p>
+            <p>CSV 使用 UTF-8 BOM 编码，输出 BarTender 字段及 Whatnot 安全起拍价，第一列为二维码使用的稳定 BID|UUID code。</p>
           </div>
         </div>
         <button class="primary-button" id="export-button" type="button">下载 CSV</button>
@@ -112,7 +124,7 @@
   </main>
 
   <script src="./vendor/xlsx.full.min.js"></script>
-  <script src="./converter-core.js?v=6"></script>
-  <script src="./app.js?v=6"></script>
+  <script src="./converter-core.js?v=9"></script>
+  <script src="./app.js?v=9"></script>
 </body>
 </html>

@@ -132,17 +132,32 @@ popd
 echo Building Aspire and API...
 dotnet build "%APPHOST%" --configuration Release
 if errorlevel 1 (echo .NET build failed. & pause & exit /b 1)
-call :findpid
-if defined ASPIRE_PID taskkill /PID !ASPIRE_PID! /T /F >nul 2>&1
-timeout /t 2 /nobreak >nul
-call :findpid
-if defined ASPIRE_PID (
-  echo Aspire did not stop cleanly. Refusing to start a duplicate instance.
+call :waitforstop
+if errorlevel 1 (
+  echo Aspire dashboard port is still occupied after cleanup.
+  echo Run option 2 ^(Stop Aspire^) once, then retry Build and Restart.
   pause
   exit /b 1
 )
 call :start
 exit /b
+
+:waitforstop
+for /l %%I in (1,1,15) do (
+  call :findpid
+  if not defined ASPIRE_PID exit /b 0
+  if %%I==1 echo Waiting for Aspire dashboard port to be released...
+  timeout /t 1 /nobreak >nul
+)
+call :findpid
+if defined ASPIRE_PID (
+  echo Stopping remaining dashboard listener PID !ASPIRE_PID!...
+  taskkill /PID !ASPIRE_PID! /T /F >nul 2>&1
+  timeout /t 2 /nobreak >nul
+)
+call :findpid
+if defined ASPIRE_PID exit /b 1
+exit /b 0
 
 :stopprojectprocesses
 call :findpid

@@ -1,0 +1,140 @@
+﻿<IntegrationFile Version="10" ID="b60ee851-1877-407d-af6b-440ef4210c03">
+  <ActionGroup ID="853c20b5-ed80-4b50-ae2d-a4ea40ded0a8" RunMethod="Sequential" MessagingEnabled="false">
+    <Actions>
+      <WebRequestIntegration Name="Local Product Manager Label Printing" IgnoreErrors="true" ID="aae70274-db6b-40b5-b28f-99f15223063d" ActionExecution="WaitForPreviousEventPrintJob" Port="5160" ServiceName="lpm-label-print" ResponseFormat="Json">
+        <Description>Print BID and inventory labels from Local Product Manager</Description>
+        <Variables>
+          <Variable Name="action" Type="System.String">
+            <Value>print</Value>
+          </Variable>
+          <Variable Name="copies" Type="System.String">
+            <Value>1</Value>
+          </Variable>
+          <Variable Name="recordId" Type="System.String">
+            <Value>BID|B000001|P010</Value>
+          </Variable>
+        </Variables>
+        <ActionGroup ID="5f0cf21c-cba0-4390-8ad3-f4f1e1de0ab1" RunMethod="Sequential" MessagingEnabled="false">
+          <Actions>
+            <PrintAction Name="Print Document" RunType="UseConditionVariable" IgnoreErrors="false" ID="c613fdd6-dae8-43cc-b901-f03d5fc6b8c1" CloseDocumentAfterPrint="true" CopiesPerSerialNumber="%copies%">
+              <ConditionExpression>
+                <Expression>[%action%] = 'print'</Expression>
+                <VariableDataTypes>{"action":"Text"}</VariableDataTypes>
+              </ConditionExpression>
+              <DocumentFile Path="C:\Users\jjgqa\local-product-manager\label_format_localdatabaseConnected.btw">
+                <FileSystem.System />
+              </DocumentFile>
+              <QueryPrompts Name="BID_UUID" Value="%recordId%" />
+              <PrintToFileFolder Path="%IntegrationFileNameWithoutExtension%">
+                <FileSystem.Temporary />
+              </PrintToFileFolder>
+            </PrintAction>
+          </Actions>
+        </ActionGroup>
+        <ContentData ContentDataType="JsonVariables" />
+        <Samples>
+          <Sample Name="LPM BID Print Request">
+            <Variables>
+              <Variable Name="action" Type="System.String">
+                <Value>print</Value>
+              </Variable>
+              <Variable Name="copies" Type="System.String">
+                <Value>1</Value>
+              </Variable>
+              <Variable Name="EventData" Type="System.String">
+                <Value>{
+  "action": "print",
+  "provider": "BarTender",
+  "template": "label_format_localdatabaseConnected.btw",
+  "printer": "",
+  "recordType": "bid-product",
+  "recordId": "BID|B000001|P010",
+  "copies": 1,
+  "requestedAt": "2026-08-13T12:00:00Z",
+  "items": [
+    {
+      "recordType": "bid-product",
+      "recordId": "BID|B000001|P010",
+      "title": "Flower Beads",
+      "sku": null,
+      "copies": 1
+    }
+  ]
+}
+</Value>
+              </Variable>
+              <Variable Name="items" Type="System.String">
+                <Value>[{"recordType":"bid-product","recordId":"BID|B000001|P010","title":"Flower Beads","sku":null,"copies":1}]</Value>
+              </Variable>
+              <Variable Name="printer" Type="System.String">
+                <Value></Value>
+              </Variable>
+              <Variable Name="provider" Type="System.String">
+                <Value>BarTender</Value>
+              </Variable>
+              <Variable Name="recordId" Type="System.String">
+                <Value>BID|B000001|P010</Value>
+              </Variable>
+              <Variable Name="recordType" Type="System.String">
+                <Value>bid-product</Value>
+              </Variable>
+              <Variable Name="requestedAt" Type="System.String">
+                <Value>2026-08-13T12:00:00Z</Value>
+              </Variable>
+              <Variable Name="template" Type="System.String">
+                <Value>label_format_localdatabaseConnected.btw</Value>
+              </Variable>
+            </Variables>
+          </Sample>
+        </Samples>
+        <ResponseHeaders />
+        <ResponseData>
+          <Value>{
+  "accepted": true,
+  "message": "BarTender received the Local Product Manager request."
+}</Value>
+        </ResponseData>
+      </WebRequestIntegration>
+    </Actions>
+  </ActionGroup>
+  <Metadata>
+    <Properties>
+      <Properties Name="MostRecentlyUsedSamples" Type="System.Collections.Generic.List`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]">
+        <Value>
+          <string>0</string>
+        </Value>
+      </Properties>
+      <Properties Name="MostRecentlyUsedVariables" Type="System.String">
+        <Value>action;copies;recordId;EventData</Value>
+      </Properties>
+      <Properties Name="SelectedDeploymentConfiguration" Type="System.String">
+        <Value>Custom</Value>
+      </Properties>
+      <Properties Name="SelectedIntegration" Type="System.Int32">
+        <Value>0</Value>
+      </Properties>
+      <Properties Name="SelectedOptionsPage" Type="System.String">
+        <Value>1;0</Value>
+      </Properties>
+    </Properties>
+  </Metadata>
+  <SourcePath>C:\Users\jjgqa\local-product-manager\IntegrationFile.btin</SourcePath>
+  <IsPrinting>false</IsPrinting>
+  <IsPrintPreview>false</IsPrintPreview>
+  <DeploymentConfigurations>
+    <DeploymentConfiguration CancelIfIntegrationFileExistsOnTargetServer="false">
+      <Name>Test</Name>
+      <TargetServers>
+        <TargetServer Name="This Computer" IsServerGroup="false" />
+      </TargetServers>
+      <DeploymentSchedule Method="Immediately" />
+    </DeploymentConfiguration>
+    <DeploymentConfiguration CancelIfIntegrationFileExistsOnTargetServer="false">
+      <Name>Production</Name>
+      <TargetServers>
+        <TargetServer Name="This Computer" IsServerGroup="false" />
+      </TargetServers>
+      <DeploymentSchedule Method="OnSpecifiedDate" />
+    </DeploymentConfiguration>
+  </DeploymentConfigurations>
+</IntegrationFile>

@@ -86,6 +86,11 @@
         <h2>Printer</h2>
         <p>Uses the printer connected to this device. Choose your label printer in the system print dialog and set scale to 100%.</p>
         <button class="primary" type="button" [disabled]="labelMode === 'product' ? !selectedProducts.length : !selectedBins.length" (click)="labelMode === 'product' ? printLabels() : printBinLabels()">Connect & print</button>
+        <ng-container *ngIf="thirdPartySettings() as integration">
+          <p *ngIf="integration.enabled">Or send selected product labels to {{ integration.provider }} using the shared General Settings connection.</p>
+          <button type="button" *ngIf="integration.enabled && labelMode === 'product'" [disabled]="!selectedProducts.length" (click)="printLabelsWithThirdParty()">Print with {{ integration.provider }}</button>
+        </ng-container>
+        <p class="error" *ngIf="printMessage()">{{ printMessage() }}</p>
       </section>
     </aside>
 

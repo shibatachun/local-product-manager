@@ -3,6 +3,7 @@
 
   const GRAMS_PER_OUNCE = 28.349523125;
   const SHIPPING_COST_PER_GRAM = 0.05;
+  const DEFAULT_RMB_TO_USD_RATE = 0.15;
   const EXPORT_HEADERS = [
     "UUID",
     "Title",
@@ -13,6 +14,7 @@
     "Weight (oz)",
     "Material",
     "Total Cost",
+    "Whatnot Auction Safe Price",
   ];
 
   function uniqueHeaders(rawHeaders) {
@@ -111,17 +113,43 @@
     return matches.join(" / ");
   }
 
-  function calculate(grValue, priceValue, quantityValue) {
+  function calculate(grValue, priceValue, quantityValue, priceType = "per-unit") {
     const grams = Number.parseFloat(grValue);
     const price = Number.parseFloat(priceValue);
     const quantity = Number.parseFloat(quantityValue);
     const hasGrams = Number.isFinite(grams);
+    const merchandiseCost = Number.isFinite(price)
+      ? priceType === "per-package"
+        ? price
+        : Number.isFinite(quantity) ? price * quantity : NaN
+      : NaN;
+    const packageCost = hasGrams && Number.isFinite(merchandiseCost)
+      ? SHIPPING_COST_PER_GRAM * grams + merchandiseCost
+      : NaN;
+    const totalCost = Number.isFinite(packageCost) ? packageCost.toFixed(2) : "";
     return {
       ounces: hasGrams ? (grams / GRAMS_PER_OUNCE).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") : "",
-      totalCost: hasGrams && Number.isFinite(price) && Number.isFinite(quantity)
-        ? (SHIPPING_COST_PER_GRAM * grams + price * quantity).toFixed(2)
-        : "",
+      totalCost,
+      whatnotSafePrice: calculateWhatnotSafePrice(totalCost),
     };
+  }
+
+  function calculateWhatnotSafePrice(totalCostRmb, rmbToUsdRate = DEFAULT_RMB_TO_USD_RATE) {
+    const cost = Number.parseFloat(totalCostRmb);
+    const exchangeRate = Number.parseFloat(rmbToUsdRate);
+    if (!Number.isFinite(cost) || !Number.isFinite(exchangeRate) || exchangeRate <= 0) return "";
+    const commissionRate = 0.08;
+    const processingRate = 0.029;
+    const feeTaxReserveRate = 0.01;
+    const fixedProcessingFee = 0.30;
+    const assumedBuyerShippingAndTax = 10.00;
+    const packagingReserve = 0.25;
+    const hostLaborCostPerPackage = 25 / 60;
+    const costSafetyBufferRate = 0.10;
+    const protectedCost = cost * exchangeRate * (1 + costSafetyBufferRate) + packagingReserve + hostLaborCostPerPackage;
+    const fixedAndAncillaryFees = fixedProcessingFee + assumedBuyerShippingAndTax * processingRate;
+    const retainedSaleRate = 1 - commissionRate - processingRate - feeTaxReserveRate;
+    return Math.ceil((protectedCost + fixedAndAncillaryFees) / retainedSaleRate).toFixed(2);
   }
 
   function bytesToUuid(bytes) {
@@ -168,17 +196,19 @@
         ? `BID|${itemNumber}|${skuId}`
         : `BID|${await stableUuid(seed)}`;
       const grams = detectGrams(source["货品标题"]);
-      const calculated = calculate(grams, source["单价(元)"], source["数量"]);
+      const calculated = calculate(grams, source["单价(元)"], source["数量"], "per-unit");
       records.push({
         UUID: bidCode,
         Title: source["货品标题"] || "",
         Quantity: source["数量"] || "",
         Inventory: inventory,
+        "Price Type": "per-unit",
         "Unit Price": source["单价(元)"] || "",
         "Weight (g)": grams,
         "Weight (oz)": calculated.ounces,
         Material: detectMaterial(source["货品标题"]),
         "Total Cost": calculated.totalCost,
+        "Whatnot Auction Safe Price": calculated.whatnotSafePrice,
       });
     }
     return {
@@ -190,10 +220,32 @@
 
   function updateRecord(record, grams) {
     record["Weight (g)"] = String(grams ?? "").trim();
-    const calculated = calculate(record["Weight (g)"], record["Unit Price"], record.Quantity);
+    const calculated = calculate(
+      record["Weight (g)"],
+      record["Unit Price"],
+      record.Quantity,
+      record["Price Type"],
+    );
     record["Weight (oz)"] = calculated.ounces;
     record["Total Cost"] = calculated.totalCost;
+    record["Whatnot Auction Safe Price"] = calculated.whatnotSafePrice;
     return record;
+  }
+
+  async function createBlankRecord(seed = `${Date.now()}|${Math.random()}`) {
+    return {
+      UUID: `BID|${await stableUuid(`manual|${seed}`)}`,
+      Title: "",
+      Quantity: 1,
+      Inventory: 1,
+      "Price Type": "per-package",
+      "Unit Price": "",
+      "Weight (g)": "",
+      "Weight (oz)": "",
+      Material: "",
+      "Total Cost": "",
+      "Whatnot Auction Safe Price": "",
+    };
   }
 
   function escapeCsv(value) {
@@ -212,12 +264,15 @@
   const api = {
     GRAMS_PER_OUNCE,
     SHIPPING_COST_PER_GRAM,
+    DEFAULT_RMB_TO_USD_RATE,
     flattenWorksheet,
     detectGrams,
     detectMaterial,
     calculate,
+    calculateWhatnotSafePrice,
     stableUuid,
     enrichRecords,
+    createBlankRecord,
     updateRecord,
     toCsv,
   };

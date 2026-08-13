@@ -1,28 +1,165 @@
 <section class="bid-layout">
   <div class="summary-grid">
-    <article><span>Bid products</span><strong>{{ products().length }}</strong></article>
-    <article><span>Total inventory</span><strong>{{ totalQuantity() | number }}</strong></article>
-    <article><span>Recorded cost</span><strong>¥{{ totalCost() | number:'1.2-2' }}</strong></article>
+    <article>
+      <span>Bid products</span><strong>{{ products().length }}</strong>
+    </article>
+    <article>
+      <span>Total inventory</span><strong>{{ totalQuantity() | number }}</strong>
+    </article>
+    <article>
+      <span>Total inventory value</span><strong>¥{{ totalCost() | number: '1.2-2' }}</strong>
+    </article>
   </div>
 
   <section class="history-card">
-    <header><div><strong>Stream live selling history</strong><small>Daily sales summaries</small></div><div class="currency-switch"><button type="button" [class.active]="displayCurrency() === 'usd'" (click)="displayCurrency.set('usd')">USD</button><button type="button" [class.active]="displayCurrency() === 'rmb'" (click)="displayCurrency.set('rmb')">RMB</button></div></header>
+    <header>
+      <div><strong>Stream live selling history</strong><small>Daily sales summaries</small></div>
+      <div class="currency-switch">
+        <button
+          type="button"
+          [class.active]="displayCurrency() === 'usd'"
+          (click)="displayCurrency.set('usd')"
+        >
+          USD</button
+        ><button
+          type="button"
+          [class.active]="displayCurrency() === 'rmb'"
+          (click)="displayCurrency.set('rmb')"
+        >
+          RMB
+        </button>
+      </div>
+    </header>
     <div class="day-list" *ngIf="history().length; else noHistory">
-      <article *ngFor="let day of history()" role="button" tabindex="0" (click)="openDay(day.date)" (keydown.enter)="openDay(day.date)"><div><strong>{{ day.date | date:'longDate' }}</strong><small>{{ day.soldCount }} sales · {{ day.totalUnits }} units</small></div><span>Cost <b>{{ currencySymbol() }}{{ summaryCost(day) | number:'1.2-2' }}</b></span><span>Sales <b>{{ currencySymbol() }}{{ summaryRevenue(day) | number:'1.2-2' }}</b></span><span>Profit <b [class.negative]="summaryProfit(day) < 0">{{ currencySymbol() }}{{ summaryProfit(day) | number:'1.2-2' }}</b></span><button type="button" class="delete-day" *ngIf="isAdmin" (click)="deleteDay(day.date, $event)">Delete day</button><i>›</i></article>
+      <article
+        *ngFor="let day of history()"
+        role="button"
+        tabindex="0"
+        (click)="openDay(day.date)"
+        (keydown.enter)="openDay(day.date)"
+      >
+        <div>
+          <strong>{{ day.date | date: 'longDate' }}</strong
+          ><small>{{ day.soldCount }} sales · {{ day.totalUnits }} units</small>
+        </div>
+        <span
+          >Cost <b>{{ currencySymbol() }}{{ summaryCost(day) | number: '1.2-2' }}</b></span
+        ><span
+          >Sales <b>{{ currencySymbol() }}{{ summaryRevenue(day) | number: '1.2-2' }}</b></span
+        ><span
+          >Profit
+          <b [class.negative]="summaryProfit(day) < 0"
+            >{{ currencySymbol() }}{{ summaryProfit(day) | number: '1.2-2' }}</b
+          ></span
+        ><button
+          type="button"
+          class="delete-day"
+          *ngIf="isAdmin"
+          (click)="deleteDay(day.date, $event)"
+        >
+          Delete day</button
+        ><i>›</i>
+      </article>
     </div>
     <ng-template #noHistory><p class="no-sales">No live selling history yet.</p></ng-template>
   </section>
 
   <section class="day-detail" *ngIf="selectedDay() as summary">
-    <header><div><strong>{{ summary.date | date:'longDate' }}</strong><small>{{ summary.soldCount }} sales · {{ summary.totalUnits }} units</small></div><button type="button" class="close-detail" (click)="closeDay()">Close</button></header>
-    <div class="today-totals"><div><small>Cost</small><strong>{{ currencySymbol() }}{{ summaryCost(summary) | number:'1.2-2' }}</strong></div><div><small>Actual sales</small><strong>{{ currencySymbol() }}{{ summaryRevenue(summary) | number:'1.2-2' }}</strong></div><div><small>Realized profit</small><strong [class.negative]="summaryProfit(summary) < 0">{{ currencySymbol() }}{{ summaryProfit(summary) | number:'1.2-2' }}</strong></div></div>
-    <div class="sale-list"><article *ngFor="let sale of summary.sales"><div><strong>{{ sale.productTitle }}</strong><code>{{ sale.productUuid }}</code><small *ngIf="sale.exchangeRateRmbToUsd">Rate {{ sale.exchangeRateRmbToUsd | number:'1.4-4' }} CNY→USD · {{ sale.exchangeRateDate }}</small></div><span>Cost {{ displayCurrency() === 'usd' ? (sale.cost === null || sale.exchangeRateRmbToUsd === null ? '—' : ('$' + ((sale.cost * sale.exchangeRateRmbToUsd) | number:'1.2-2'))) : (sale.cost === null ? '—' : ('¥' + (sale.cost | number:'1.2-2'))) }}</span><span>Sale {{ displayCurrency() === 'usd' ? (sale.actualSalePriceUsd === null ? '—' : ('$' + (sale.actualSalePriceUsd | number:'1.2-2'))) : (sale.salePriceRmb === null ? '—' : ('¥' + (sale.salePriceRmb | number:'1.2-2'))) }}</span><span>Profit {{ displayCurrency() === 'usd' ? (sale.profitUsd === null ? '—' : ('$' + (sale.profitUsd | number:'1.2-2'))) : (sale.profitRmb === null ? '—' : ('¥' + (sale.profitRmb | number:'1.2-2'))) }}</span><time>{{ sale.soldAt | date:'shortTime' }}</time><button type="button" class="delete-sale" *ngIf="isAdmin" (click)="deleteSale(sale.id)">Delete</button></article></div>
+    <header>
+      <div>
+        <strong>{{ summary.date | date: 'longDate' }}</strong
+        ><small>{{ summary.soldCount }} sales · {{ summary.totalUnits }} units</small>
+      </div>
+      <button type="button" class="close-detail" (click)="closeDay()">Close</button>
+    </header>
+    <div class="today-totals">
+      <div>
+        <small>Cost</small
+        ><strong>{{ currencySymbol() }}{{ summaryCost(summary) | number: '1.2-2' }}</strong>
+      </div>
+      <div>
+        <small>Actual sales</small
+        ><strong>{{ currencySymbol() }}{{ summaryRevenue(summary) | number: '1.2-2' }}</strong>
+      </div>
+      <div>
+        <small>Realized profit</small
+        ><strong [class.negative]="summaryProfit(summary) < 0"
+          >{{ currencySymbol() }}{{ summaryProfit(summary) | number: '1.2-2' }}</strong
+        >
+      </div>
+    </div>
+    <div class="sale-list">
+      <article *ngFor="let sale of summary.sales">
+        <div>
+          <strong>{{ sale.productTitle }}</strong
+          ><code>{{ sale.productUuid }}</code
+          ><small *ngIf="sale.exchangeRateRmbToUsd"
+            >Rate {{ sale.exchangeRateRmbToUsd | number: '1.4-4' }} CNY→USD ·
+            {{ sale.exchangeRateDate }}</small
+          >
+        </div>
+        <span
+          >Cost
+          {{
+            displayCurrency() === 'usd'
+              ? sale.cost === null || sale.exchangeRateRmbToUsd === null
+                ? '—'
+                : '$' + (sale.cost * sale.exchangeRateRmbToUsd | number: '1.2-2')
+              : sale.cost === null
+                ? '—'
+                : '¥' + (sale.cost | number: '1.2-2')
+          }}</span
+        ><span
+          >Sale
+          {{
+            displayCurrency() === 'usd'
+              ? sale.actualSalePriceUsd === null
+                ? '—'
+                : '$' + (sale.actualSalePriceUsd | number: '1.2-2')
+              : sale.salePriceRmb === null
+                ? '—'
+                : '¥' + (sale.salePriceRmb | number: '1.2-2')
+          }}</span
+        ><span
+          >Profit
+          {{
+            displayCurrency() === 'usd'
+              ? sale.profitUsd === null
+                ? '—'
+                : '$' + (sale.profitUsd | number: '1.2-2')
+              : sale.profitRmb === null
+                ? '—'
+                : '¥' + (sale.profitRmb | number: '1.2-2')
+          }}</span
+        ><time>{{ sale.soldAt | date: 'shortTime' }}</time
+        ><button type="button" class="delete-sale" *ngIf="isAdmin" (click)="deleteSale(sale.id)">
+          Delete
+        </button>
+      </article>
+    </div>
   </section>
 
   <section class="import-card" *ngIf="canImport">
-    <div><strong>Import BarTender CSV</strong><p>Imports UUID, title, quantity, inventory, price, weight, material, and total cost. Existing UUIDs are updated.</p></div>
-    <label class="file-picker"><input type="file" accept=".csv,text/csv" (change)="selectFile($event)" /><span>{{ selectedFile?.name || 'Choose CSV file' }}</span></label>
-    <button class="primary" type="button" [disabled]="!selectedFile || loading()" (click)="importCsv()">{{ loading() ? 'Importing…' : 'Import CSV' }}</button>
+    <div>
+      <strong>Import BarTender CSV</strong>
+      <p>
+        Imports UUID, title, quantity, inventory, price, weight, material, and total cost. Existing
+        UUIDs are updated.
+      </p>
+    </div>
+    <label class="file-picker"
+      ><input type="file" accept=".csv,text/csv" (change)="selectFile($event)" /><span>{{
+        selectedFile?.name || 'Choose CSV file'
+      }}</span></label
+    >
+    <button
+      class="primary"
+      type="button"
+      [disabled]="!selectedFile || loading()"
+      (click)="importCsv()"
+    >
+      {{ loading() ? 'Importing…' : 'Import CSV' }}
+    </button>
   </section>
 
   <p class="notice success" *ngIf="message()">{{ message() }}</p>
@@ -30,37 +167,377 @@
 
   <section class="list-card">
     <header>
-      <div><strong>Imported batches</strong><small>Separate from regular product inventory</small></div>
-      <label class="search"><span>⌕</span><input placeholder="Search UUID, title, or material" [ngModel]="search()" (ngModelChange)="search.set($event)" /></label>
-      <div class="list-actions"><button class="move-product" type="button" *ngIf="canMove" (click)="openMoveProduct()">+ Move local product to BID</button><button type="button" (click)="load()" [disabled]="loading()">Refresh</button></div>
+      <div>
+        <strong>Imported batches</strong><small>Separate from regular product inventory</small>
+      </div>
+      <label class="search"
+        ><span>⌕</span
+        ><input
+          placeholder="Search UUID, Actual SKU, title, or material"
+          [ngModel]="search()"
+          (ngModelChange)="search.set($event)"
+      /></label>
+      <div class="list-actions">
+        <button
+          class="move-product"
+          type="button"
+          *ngIf="canImport || canMove"
+          (click)="openCreateList()"
+        >
+          + Create BID List</button
+        ><button type="button" (click)="load()" [disabled]="loading()">Refresh</button>
+      </div>
     </header>
-    <div class="table-scroll" *ngIf="filteredProducts().length; else emptyState">
-      <table>
-        <thead><tr><th>UUID</th><th>Title</th><th>Qty</th><th>Unit price</th><th>Weight</th><th>Material</th><th>Total cost</th><th>Inventory</th></tr></thead>
-        <tbody><tr *ngFor="let item of filteredProducts()">
-          <td><code>{{ item.uuid }}</code></td>
-          <td class="title-cell">{{ item.title }}</td>
-          <td>{{ item.quantity }}</td>
-          <td>¥{{ item.unitPrice | number:'1.2-2' }}</td>
-          <td><span *ngIf="item.weightGrams !== null">{{ item.weightGrams | number:'1.0-4' }} g</span><small *ngIf="item.weightOunces !== null">{{ item.weightOunces | number:'1.0-4' }} oz</small><span class="muted" *ngIf="item.weightGrams === null && item.weightOunces === null">—</span></td>
-          <td>{{ item.material || '—' }}</td>
-          <td>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</td>
-          <td><span class="sold-pill" *ngIf="item.inventory === 0">0 remaining</span><span *ngIf="item.inventory > 0">{{ item.inventory }} remaining</span><small>{{ item.importedFileName }}</small></td>
-        </tr></tbody>
+    <div class="table-scroll" *ngIf="batchGroups().length; else emptyState">
+      <table class="batch-table">
+        <thead>
+          <tr>
+            <th>Batch</th>
+            <th>Products</th>
+            <th>Total inventory</th>
+            <th>Batch total value</th>
+            <th>Last updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let batch of batchGroups()">
+            <tr class="batch-row" (click)="toggleBatch(batch.key)">
+              <td>
+                <button type="button" class="expand-button">
+                  {{ expandedBatch() === batch.key ? '−' : '+' }}</button
+                ><strong>{{ batch.batchNumber || 'Legacy product' }}</strong>
+              </td>
+              <td>{{ batch.products.length }}</td>
+              <td>{{ batch.inventory }}</td>
+              <td>¥{{ batch.cost | number: '1.2-2' }}</td>
+              <td>{{ batch.updatedAt | date: 'short' }}</td>
+              <td>
+                <div class="row-actions" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    *ngIf="batch.batchNumber"
+                    (click)="exportBatch(batch.batchNumber)"
+                  >
+                    BarTender CSV</button
+                  ><button
+                    type="button"
+                    class="edit-product"
+                    *ngIf="batch.batchNumber && (canImport || canMove)"
+                    (click)="openAddToBatch(batch.batchNumber)"
+                  >
+                    + Add Product
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr class="batch-detail-row" *ngIf="expandedBatch() === batch.key">
+              <td colspan="6">
+                <div class="batch-products">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>UUID</th>
+                        <th>Actual SKU</th>
+                        <th>Title</th>
+                        <th>Qty</th>
+                        <th>Unit price</th>
+                        <th>Weight</th>
+                        <th>Material</th>
+                        <th>Total cost</th>
+                        <th class="safe-price-heading">Whatnot safe start <button type="button" class="safe-price-info" title="Show safe-price calculation" aria-label="Show Whatnot safe-price calculation" (click)="safePriceHelpOpen.set(true)">!</button></th>
+                        <th>Expected inventory</th>
+                        <th>Actual inventory</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let item of batch.products">
+                        <td>
+                          <small>#{{ item.batchProductNumber || '—' }}</small
+                          ><code>BID|{{ item.uuid }}</code>
+                        </td>
+                        <td>
+                          <code *ngIf="item.actualSku">{{ item.actualSku }}</code>
+                          <span *ngIf="!item.actualSku">—</span>
+                        </td>
+                        <td class="title-cell">{{ item.title }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>¥{{ item.unitPrice | number: '1.2-2' }}</td>
+                        <td>
+                          <span *ngIf="item.weightGrams !== null"
+                            >{{ item.weightGrams | number: '1.0-2' }} g</span
+                          ><small *ngIf="item.weightOunces !== null"
+                            >{{ item.weightOunces | number: '1.0-2' }} oz</small
+                          >
+                        </td>
+                        <td>{{ item.material || '—' }}</td>
+                        <td>
+                          {{
+                            item.totalCost === null ? '—' : '¥' + (item.totalCost | number: '1.2-2')
+                          }}
+                        </td>
+                        <td>
+                          {{
+                            item.whatnotAuctionSafePrice === null
+                              ? '—'
+                              : '$' + (item.whatnotAuctionSafePrice | number: '1.2-2')
+                          }}
+                        </td>
+                        <td>{{ item.inventory }} remaining</td>
+                        <td>{{ item.actualInventory }} received</td>
+                        <td>
+                          <div class="row-actions">
+                            <button
+                              type="button"
+                              *ngIf="item.requiresLocalLabel && labelPrintingSettings()?.enabled"
+                              (click)="printBidLabel(item)"
+                              [disabled]="loading()"
+                            >
+                              Print label</button
+                            >
+                            <span class="external-label-status" *ngIf="!item.requiresLocalLabel" title="This external CSV product was labeled before import">Label already printed</span>
+                            <button
+                              type="button"
+                              class="edit-product"
+                              *ngIf="canImport || canMove"
+                              (click)="openEditProduct(item)"
+                            >
+                              Edit</button
+                            ><button
+                              type="button"
+                              class="delete-product"
+                              *ngIf="canImport || canMove"
+                              (click)="deleteProduct(item)"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
       </table>
     </div>
-    <ng-template #emptyState><div class="empty">{{ loading() ? 'Loading bid products…' : 'No bid products imported yet.' }}</div></ng-template>
+    <ng-template #emptyState
+      ><div class="empty">
+        {{ loading() ? 'Loading bid products…' : 'No bid products imported yet.' }}
+      </div></ng-template
+    >
+  </section>
+
+  <div class="safe-price-help-backdrop" *ngIf="safePriceHelpOpen()" (click)="safePriceHelpOpen.set(false)"></div>
+  <section class="safe-price-help" *ngIf="safePriceHelpOpen()" role="dialog" aria-modal="true" aria-labelledby="safe-price-help-title">
+    <header><div><small>Whatnot auction guardrail</small><h2 id="safe-price-help-title">Safe start calculation</h2></div><button type="button" aria-label="Close" (click)="safePriceHelpOpen.set(false)">×</button></header>
+    <div class="safe-price-formula">
+      <p><b>1. Product cost in USD</b><code>Total Cost (RMB) × current RMB→USD rate</code></p>
+      <p><b>2. Protected operating cost</b><code>Product cost × 1.10 + $0.25 packaging + ($25 ÷ 60) host labor</code></p>
+      <p><b>3. Fixed and ancillary fees</b><code>$0.30 processing + ($10 assumed shipping/tax × 2.9%)</code></p>
+      <p><b>4. Platform retained-sale rate</b><code>1 − 8% commission − 2.9% processing − 1% fee-tax reserve = 88.1%</code></p>
+      <p><b>5. Safe starting price</b><code>Ceiling((protected cost + fixed/ancillary fees) ÷ 88.1%)</code></p>
+    </div>
+    <aside><strong>Host labor allowance</strong><span>$25 per hour ÷ 60 packages per hour = $0.4167 per sold package. It is included before platform fees are reversed.</span></aside>
+    <p class="safe-price-note">The result is rounded up to the next whole dollar. It is a break-even safety estimate, not a guaranteed profit or final selling price.</p>
+  </section>
+
+  <div class="move-backdrop" *ngIf="createOpen()" (click)="closeCreateList()"></div>
+  <section class="create-modal" *ngIf="createOpen()" role="dialog" aria-modal="true">
+    <header>
+      <div>
+        <small>{{
+          editingProduct()
+            ? 'Keep batch and barcode unchanged'
+            : targetBatch()
+              ? targetBatch()
+              : 'Database batch'
+        }}</small>
+        <h2>
+          {{
+            editingProduct()
+              ? 'Edit BID Product'
+              : targetBatch()
+                ? 'Add Products to Batch'
+                : 'Create BID List'
+          }}
+        </h2>
+      </div>
+      <button type="button" (click)="closeCreateList()">×</button>
+    </header>
+    <div class="edit-identity" *ngIf="editingProduct() as item">
+      <span
+        >Batch: <b>{{ item.batchNumber || 'Legacy' }}</b></span
+      ><span
+        >Barcode: <code>BID|{{ item.uuid }}</code></span
+      >
+    </div>
+    <div class="actual-sku-editor">
+      <label *ngFor="let row of draftRows(); let i = index"
+        ><span>Product {{ i + 1 }} Actual SKU</span
+        ><input [(ngModel)]="row.actualSku" placeholder="Enter the company SKU"
+      /></label>
+    </div>
+    <div class="create-tools" *ngIf="!editingProduct()">
+      <label class="file-picker"
+        ><input type="file" accept=".csv,text/csv" (change)="loadDraftCsv($event)" /><span
+          >Import converted 1688 CSV</span
+        ></label
+      ><select [(ngModel)]="draftProductId">
+        <option [ngValue]="null">Choose warehouse product</option>
+        <option *ngFor="let product of localInventoryProducts()" [ngValue]="product.id">
+          {{ product.sku }} · {{ product.productName }} ({{ product.qty }})
+        </option></select
+      ><button type="button" (click)="addWarehouseProduct()" [disabled]="!draftProductId">
+        Add product</button
+      ><button type="button" (click)="addBlankRow()">+ Blank row</button>
+    </div>
+    <div class="draft-scroll">
+      <table class="draft-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Quantity</th>
+            <th>Inventory</th>
+            <th>Unit Price</th>
+            <th>Pricing</th>
+            <th>Weight (g)</th>
+            <th>Weight (oz)</th>
+            <th>Material</th>
+            <th>Total Cost</th>
+            <th>Whatnot Safe Start ($)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of draftRows(); let i = index">
+            <td>{{ i + 1 }}</td>
+            <td><input [(ngModel)]="row.title" /></td>
+            <td>
+              <input
+                type="number"
+                min="1"
+                [(ngModel)]="row.quantity"
+                (ngModelChange)="recalculate(row)"
+              />
+            </td>
+            <td><input type="number" min="0" [(ngModel)]="row.inventory" /></td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                step=".01"
+                [(ngModel)]="row.unitPrice"
+                (ngModelChange)="recalculate(row)"
+              />
+            </td>
+            <td>
+              <select [(ngModel)]="row.priceType" (ngModelChange)="recalculate(row)">
+                <option value="per-package">Price per package</option>
+                <option value="per-unit">Unit price × quantity</option>
+              </select>
+            </td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                step=".0001"
+                [(ngModel)]="row.weightGrams"
+                (ngModelChange)="recalculate(row)"
+              />
+            </td>
+            <td><input type="number" min="0" step=".0001" [(ngModel)]="row.weightOunces" /></td>
+            <td><input [(ngModel)]="row.material" /></td>
+            <td><input type="number" min="0" step=".01" [(ngModel)]="row.totalCost" /></td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                step=".01"
+                [(ngModel)]="row.whatnotAuctionSafePrice"
+                placeholder="0.00"
+              />
+            </td>
+            <td>
+              <button type="button" class="remove-row" (click)="removeDraftRow(i)">Delete</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <footer>
+      <span>{{
+        editingProduct()
+          ? 'Changes update the database; existing sales history remains unchanged.'
+          : targetBatch()
+            ? 'New local products continue the product numbering in this batch.'
+            : 'The server assigns BID|B000001|P001 style codes when saved.'
+      }}</span
+      ><button type="button" (click)="closeCreateList()">Cancel</button
+      ><button class="primary" type="button" (click)="saveBatch()" [disabled]="loading()">
+        {{ editingProduct() ? 'Save changes' : targetBatch() ? 'Add to batch' : 'Create & save' }}
+      </button>
+    </footer>
   </section>
 
   <div class="move-backdrop" *ngIf="moveOpen()" (click)="closeMoveProduct()"></div>
-  <section class="move-modal" *ngIf="moveOpen()" role="dialog" aria-modal="true" aria-labelledby="move-bid-title">
-    <header><div><small>Live stream BID product</small><h2 id="move-bid-title">Move local inventory to BID</h2></div><button type="button" (click)="closeMoveProduct()">×</button></header>
+  <section
+    class="move-modal"
+    *ngIf="moveOpen()"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="move-bid-title"
+  >
+    <header>
+      <div>
+        <small>Live stream BID product</small>
+        <h2 id="move-bid-title">Move local inventory to BID</h2>
+      </div>
+      <button type="button" (click)="closeMoveProduct()">×</button>
+    </header>
     <div class="move-form">
-      <p>The selected quantity will be removed from its warehouse bin and added as a new BID product.</p>
-      <label>Local product<select [(ngModel)]="moveProductId" (ngModelChange)="moveProductChanged()"><option [ngValue]="null">Choose a product</option><option *ngFor="let product of localInventoryProducts()" [ngValue]="product.id">{{ product.sku }} · {{ product.productName }} ({{ product.qty }})</option></select></label>
-      <label>Warehouse location<select [(ngModel)]="moveLocationKey" [disabled]="!moveProductId"><option value="">Choose a location</option><option *ngFor="let location of moveLocations()" [value]="location.key">{{ location.description }} · {{ location.qty }} available</option></select></label>
-      <label>Quantity<input type="number" min="1" step="1" inputmode="numeric" [(ngModel)]="moveQuantity" /></label>
+      <p>
+        The selected quantity will be removed from its warehouse bin and added as a new BID product.
+      </p>
+      <label
+        >Local product<select [(ngModel)]="moveProductId" (ngModelChange)="moveProductChanged()">
+          <option [ngValue]="null">Choose a product</option>
+          <option *ngFor="let product of localInventoryProducts()" [ngValue]="product.id">
+            {{ product.sku }} · {{ product.productName }} ({{ product.qty }})
+          </option>
+        </select></label
+      >
+      <label
+        >Warehouse location<select [(ngModel)]="moveLocationKey" [disabled]="!moveProductId">
+          <option value="">Choose a location</option>
+          <option *ngFor="let location of moveLocations()" [value]="location.key">
+            {{ location.description }} · {{ location.qty }} available
+          </option>
+        </select></label
+      >
+      <label
+        >Quantity<input
+          type="number"
+          min="1"
+          step="1"
+          inputmode="numeric"
+          [(ngModel)]="moveQuantity"
+      /></label>
     </div>
-    <footer><button type="button" (click)="closeMoveProduct()">Cancel</button><button class="primary" type="button" (click)="moveSelectedProduct()" [disabled]="loading() || !moveProductId || !moveLocationKey">Move to BID</button></footer>
+    <footer>
+      <button type="button" (click)="closeMoveProduct()">Cancel</button
+      ><button
+        class="primary"
+        type="button"
+        (click)="moveSelectedProduct()"
+        [disabled]="loading() || !moveProductId || !moveLocationKey"
+      >
+        Move to BID
+      </button>
+    </footer>
   </section>
 </section>
