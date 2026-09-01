@@ -7,6 +7,7 @@ import { EncodeHintType } from '@zxing/library';
 import { ProductApiService } from '../../core/product-api.service';
 import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
+import { productCategoryNumber } from '../../core/product-inventory-category';
 import { emptyLabelPresetSlots, LabelSettings, loadSavedLabelPresets, SavedLabelPreset, saveLabelPresets } from '../../core/label-preset-storage';
 import { LabelPrintingApiService, LabelPrintingSettings } from '../../core/label-printing-api.service';
 
@@ -244,7 +245,7 @@ export class LabelMakerPage implements AfterViewChecked {
   }
 
   categoryInventoryNumber(product: ProductListItem): string {
-    return product.categoryInventoryId || 'UNKNOWN';
+    return productCategoryNumber(product);
   }
 
   barcodeValue(product: ProductListItem): string {
@@ -325,7 +326,7 @@ export class LabelMakerPage implements AfterViewChecked {
     if (!this.selectedProducts.length) return;
     this.error.set(''); this.printMessage.set('');
     try {
-      const result = await this.thirdPartyPrinting.print(this.selectedProducts.map(product => ({
+      const result = await this.thirdPartyPrinting.printInventory(this.selectedProducts.map(product => ({
         recordType: 'inventory-product', recordId: this.barcodeValue(product), title: product.productName, sku: product.sku, copies: 1,
       })));
       this.printMessage.set(result.message);
@@ -335,7 +336,7 @@ export class LabelMakerPage implements AfterViewChecked {
   }
 
   private async loadThirdPartySettings(): Promise<void> {
-    try { this.thirdPartySettings.set(await this.thirdPartyPrinting.settings()); } catch { this.thirdPartySettings.set(null); }
+    try { this.thirdPartySettings.set(await this.thirdPartyPrinting.inventorySettings()); } catch { this.thirdPartySettings.set(null); }
   }
 
   printBinLabels(): void {

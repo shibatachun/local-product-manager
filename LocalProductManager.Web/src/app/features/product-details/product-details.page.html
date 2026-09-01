@@ -18,7 +18,7 @@
     <p class="message" *ngIf="message()">{{ message() }}</p>
     <fieldset class="record-grid editor" [disabled]="!canEdit()" *ngIf="record() as data">
       <section class="card span-2 photo-card">
-        <div class="section-title"><div><p>PRODUCT PHOTOS</p><h2>Photo folder and main image</h2></div><label class="photo-upload">Take / upload photos<input type="file" multiple accept="image/*" capture="environment" (change)="uploadPhotos($event)"></label></div>
+        <div class="section-title"><div><p>PRODUCT PHOTOS</p><h2>Photo folder and main image</h2></div><div class="photo-actions"><a class="local-folder-button" role="button" tabindex="0" *ngIf="canOpenLocalFolder()" (click)="openLocalImageFolder()" (keydown.enter)="openLocalImageFolder()">Open local folder</a><label class="photo-upload">Take / upload photos<input type="file" multiple accept="image/*" capture="environment" (change)="uploadPhotos($event)"></label></div></div>
         <div class="photo-library" *ngIf="images().length; else noProductPhotos">
           <button type="button" *ngFor="let image of images()" [class.selected]="image.isPrimary" (click)="makePrimary(image)">
             <img [src]="folderImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy"><span>{{ image.isPrimary ? 'Main image' : 'Set as main' }}</span>

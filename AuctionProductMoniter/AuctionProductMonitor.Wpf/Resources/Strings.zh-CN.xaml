@@ -1,0 +1,70 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+  <sys:String x:Key="WindowTitle">Auction Product Monitor</sys:String>
+  <sys:String x:Key="Subtitle">按直播Session记录Whatnot成交、买家和商品编号</sys:String>
+  <sys:String x:Key="Language">语言</sys:String>
+
+  <sys:String x:Key="ReceiverStarting">正在启动本地接收器…</sys:String>
+  <sys:String x:Key="ReceiverRunning">接收器运行中：{0}　数据：{1}</sys:String>
+  <sys:String x:Key="StartFailed">启动失败：{0}</sys:String>
+  <sys:String x:Key="SaveFailed">保存Session失败：{0}</sys:String>
+  <sys:String x:Key="AnotherInstanceRunning">Auction Product Monitor 已经在运行。本机只能同时运行一个实例。</sys:String>
+  <sys:String x:Key="CloseWhileLiveTitle">直播仍在进行</sys:String>
+  <sys:String x:Key="CloseWhileLivePrompt">Session {0} 仍在直播中。&#x0a;&#x0a;选择“是”结束直播并退出；选择“否”直接退出但保留未结束的 Session；选择“取消”返回 Monitor。</sys:String>
+
+  <sys:String x:Key="LiveSession">直播Session</sys:String>
+  <sys:String x:Key="StartLive">开始直播</sys:String>
+  <sys:String x:Key="OpenScreenshotFolder">打开截图文件夹</sys:String>
+  <sys:String x:Key="OpenScreenshotFolderFailed">无法打开截图文件夹：{0}</sys:String>
+  <sys:String x:Key="EndLive">结束直播</sys:String>
+  <sys:String x:Key="NoActiveSession">尚未开始直播；插件成交不会写入记录。</sys:String>
+  <sys:String x:Key="ActiveSession">直播中：{0}　开始于 {1}</sys:String>
+  <sys:String x:Key="IgnoredSale">已忽略 #{0}：请先点击“开始直播”。</sys:String>
+
+  <sys:String x:Key="CurrentSalesNotStarted">当前直播成交（未开始）</sys:String>
+  <sys:String x:Key="CurrentSales">当前直播成交：{0}</sys:String>
+  <sys:String x:Key="CurrentSalesCount">当前直播成交：{0}（{1}笔）</sys:String>
+  <sys:String x:Key="LastEndedSession">最近结束：{0}（{1}笔成交）</sys:String>
+  <sys:String x:Key="HistoricalSessions">历史直播Session</sys:String>
+  <sys:String x:Key="HistoricalSessionSales">历史直播成交：{0}（{1}笔）</sys:String>
+  <sys:String x:Key="BackToCurrentSession">返回当前直播</sys:String>
+  <sys:String x:Key="LiveRunning">直播中</sys:String>
+
+  <sys:String x:Key="BarTenderIntegration">BarTender专用Integration</sys:String>
+  <sys:String x:Key="TestConnection">测试连接</sys:String>
+  <sys:String x:Key="PrintTestLabel">测试打印标签</sys:String>
+  <sys:String x:Key="PrintSelectedSale">打印选中成交</sys:String>
+  <sys:String x:Key="AutoPrint">收到新成交后自动打印（调试期间建议关闭）</sys:String>
+  <sys:String x:Key="PrintNotTested">尚未测试BarTender连接。</sys:String>
+  <sys:String x:Key="SelectSaleFirst">请先在当前直播成交列表选择一行。</sys:String>
+  <sys:String x:Key="TestingConnection">正在测试BarTender连接…</sys:String>
+  <sys:String x:Key="PrintingTestLabel">正在发送样式标签打印请求…</sys:String>
+  <sys:String x:Key="TestLabelAccepted">样式标签打印请求已接受（SAMPLE BUYER / TEST-001）。</sys:String>
+  <sys:String x:Key="PrintingProduct">正在打印 #{0}…</sys:String>
+  <sys:String x:Key="ConnectionSuccess">BarTender连接成功（测试不会打印）。</sys:String>
+  <sys:String x:Key="PrintAccepted">#{0} 打印请求已接受。</sys:String>
+  <sys:String x:Key="PrintFailed">BarTender请求失败：{0}</sys:String>
+
+  <sys:String x:Key="ColumnTime">时间</sys:String>
+  <sys:String x:Key="ColumnBuyerName">买家名称</sys:String>
+  <sys:String x:Key="ColumnProductNumber">商品编号</sys:String>
+  <sys:String x:Key="ColumnLiveDate">直播日期</sys:String>
+  <sys:String x:Key="ColumnSession">Session</sys:String>
+  <sys:String x:Key="ColumnStart">开始</sys:String>
+  <sys:String x:Key="ColumnEnd">结束</sys:String>
+  <sys:String x:Key="ColumnSaleCount">成交数</sys:String>
+  <sys:String x:Key="RelayTitle">局域网 BarTender 打印中转</sys:String>
+  <sys:String x:Key="CopyAddress">复制地址</sys:String>
+  <sys:String x:Key="CopyKey">复制密钥</sys:String>
+  <sys:String x:Key="RelayReady">其他电脑使用上方地址和密钥发送打印请求。</sys:String>
+  <sys:String x:Key="RelayForwarded">已转发 #{0}（{1}）到 BarTender。</sys:String>
+  <sys:String x:Key="RelayFailed">中转失败：{0}</sys:String>
+  <sys:String x:Key="AddressCopied">请求地址已复制。</sys:String>
+  <sys:String x:Key="KeyCopied">访问密钥已复制。</sys:String>
+  <sys:String x:Key="RelayClientTitle">远程打印中转器</sys:String>
+  <sys:String x:Key="SaveSettings">保存设置</sys:String>
+  <sys:String x:Key="SettingsSaved">远程打印设置已保存。</sys:String>
+</ResourceDictionary>

@@ -7,20 +7,39 @@ namespace LocalProductManager.Api.Services;
 public sealed class ThirdPartyLabelPrintService(IWebHostEnvironment environment, IHttpClientFactory httpClientFactory)
 {
     private readonly string settingsPath = Path.Combine(environment.ContentRootPath, "Data", "label-printing.json");
+    private readonly string inventorySettingsPath = Path.Combine(environment.ContentRootPath, "Data", "inventory-label-printing.json");
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     public async Task<LabelPrintingSettingsDto> GetSettingsAsync(CancellationToken cancellationToken)
+        => await ReadSettingsAsync(settingsPath, Defaults(), cancellationToken);
+
+    public async Task<LabelPrintingSettingsDto> GetInventorySettingsAsync(CancellationToken cancellationToken)
+        => await ReadSettingsAsync(inventorySettingsPath, InventoryDefaults(), cancellationToken);
+
+    private static async Task<LabelPrintingSettingsDto> ReadSettingsAsync(
+        string path,
+        LabelPrintingSettingsDto defaults,
+        CancellationToken cancellationToken)
     {
-        if (!File.Exists(settingsPath)) return Defaults();
+        if (!File.Exists(path)) return defaults;
         try
         {
-            await using var stream = File.OpenRead(settingsPath);
-            return await JsonSerializer.DeserializeAsync<LabelPrintingSettingsDto>(stream, JsonOptions, cancellationToken) ?? Defaults();
+            await using var stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<LabelPrintingSettingsDto>(stream, JsonOptions, cancellationToken) ?? defaults;
         }
-        catch (JsonException) { return Defaults(); }
+        catch (JsonException) { return defaults; }
     }
 
     public async Task<LabelPrintingSettingsDto> SaveSettingsAsync(SaveLabelPrintingSettingsRequest request, CancellationToken cancellationToken)
+        => await SaveSettingsAsync(settingsPath, request, cancellationToken);
+
+    public async Task<LabelPrintingSettingsDto> SaveInventorySettingsAsync(SaveLabelPrintingSettingsRequest request, CancellationToken cancellationToken)
+        => await SaveSettingsAsync(inventorySettingsPath, request, cancellationToken);
+
+    private static async Task<LabelPrintingSettingsDto> SaveSettingsAsync(
+        string path,
+        SaveLabelPrintingSettingsRequest request,
+        CancellationToken cancellationToken)
     {
         var settings = new LabelPrintingSettingsDto(
             request.Enabled,
@@ -29,15 +48,27 @@ public sealed class ThirdPartyLabelPrintService(IWebHostEnvironment environment,
             request.TemplateName?.Trim() ?? "",
             request.PrinterName?.Trim() ?? "",
             Math.Clamp(request.TimeoutSeconds, 2, 120));
-        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-        await using var stream = File.Create(settingsPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await using var stream = File.Create(path);
         await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
         return settings;
     }
 
     public async Task<LabelPrintResult> SendAsync(IReadOnlyList<PrintLabelItemRequest> items, bool test, CancellationToken cancellationToken)
+        => await SendAsync(items, test, false, cancellationToken);
+
+    public async Task<LabelPrintResult> SendInventoryAsync(IReadOnlyList<PrintLabelItemRequest> items, bool test, CancellationToken cancellationToken)
+        => await SendAsync(items, test, true, cancellationToken);
+
+    private async Task<LabelPrintResult> SendAsync(
+        IReadOnlyList<PrintLabelItemRequest> items,
+        bool test,
+        bool inventory,
+        CancellationToken cancellationToken)
     {
-        var settings = await GetSettingsAsync(cancellationToken);
+        var settings = inventory
+            ? await GetInventorySettingsAsync(cancellationToken)
+            : await GetSettingsAsync(cancellationToken);
         if (!settings.Enabled && !test) return new(false, "Third-party label printing is disabled in General Settings.");
         if (!Uri.TryCreate(settings.EndpointUrl, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("http" or "https"))
             return new(false, "Enter a valid HTTP or HTTPS printing endpoint in General Settings.");
@@ -70,4 +101,11 @@ public sealed class ThirdPartyLabelPrintService(IWebHostEnvironment environment,
     }
 
     private static LabelPrintingSettingsDto Defaults() => new(false, "BarTender", "http://localhost:5159", "", "", 15);
+    private static LabelPrintingSettingsDto InventoryDefaults() => new(
+        false,
+        "BarTender",
+        "http://localhost:5161/Integration/lpm-inventory-label-print/Execute",
+        "",
+        "",
+        15);
 }

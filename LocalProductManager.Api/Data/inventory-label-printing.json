@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "provider": "BarTender",
+  "endpointUrl": "http://localhost:5162/Integration/lpm-inventory-label-print/Execute",
+  "templateName": "",
+  "printerName": "Default printer",
+  "timeoutSeconds": 15
+}

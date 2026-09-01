@@ -128,6 +128,15 @@ public sealed class IsolatedApiFactory : WebApplicationFactory<Program>
         return (locationQty, productQty);
     }
 
+    public async Task SetProductTotalAsync(InventoryFixture fixture, int qty)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var product = await db.Products.SingleAsync(item => item.Id == fixture.ProductId);
+        product.Qty = qty;
+        await db.SaveChangesAsync();
+    }
+
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);

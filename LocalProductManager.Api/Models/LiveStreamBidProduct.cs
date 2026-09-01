@@ -9,6 +9,7 @@ public sealed class LiveStreamBidProduct
     public string? ActualSku { get; set; }
     public bool RequiresLocalLabel { get; set; }
     public decimal? WhatnotAuctionSafePrice { get; set; }
+    public string? ItemCode { get; set; }
     public string Uuid { get; set; } = "";
     public string Title { get; set; } = "";
     public int Quantity { get; set; }

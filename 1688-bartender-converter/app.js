@@ -115,6 +115,7 @@
         row.children[8].textContent = displayWeight(record["Weight (oz)"], "oz");
         row.children[10].textContent = record["Total Cost"];
         row.children[11].textContent = record["Whatnot Auction Safe Price"];
+        row.children[12].textContent = record["Item Code"];
       };
       row.append(createInputCell(createInput(record, "Quantity", {
         className: "inventory-input",
@@ -134,11 +135,11 @@
       inventoryInput.inputMode = "numeric";
       inventoryInput.min = "0";
       inventoryInput.step = "1";
-      inventoryInput.value = record.Inventory;
-      inventoryInput.setAttribute("aria-label", `第${index + 1}行库存数量`);
+      inventoryInput.value = record["Expected Inventory"];
+      inventoryInput.setAttribute("aria-label", `第${index + 1}行应有库存数量`);
       inventoryInput.addEventListener("input", () => {
         const value = Number.parseInt(inventoryInput.value, 10);
-        record.Inventory = Number.isFinite(value) && value >= 0 ? value : 0;
+        record["Expected Inventory"] = Number.isFinite(value) && value >= 0 ? value : 0;
       });
       inventoryCell.append(inventoryInput);
       row.append(inventoryCell);
@@ -191,6 +192,7 @@
         row.children[8].textContent = displayWeight(record["Weight (oz)"], "oz");
         row.children[10].textContent = record["Total Cost"];
         row.children[11].textContent = record["Whatnot Auction Safe Price"];
+        row.children[12].textContent = record["Item Code"];
         updateSummary();
       });
       const unit = document.createElement("span");
@@ -213,6 +215,7 @@
       row.append(materialCell);
       row.append(createCell(record["Total Cost"], "numeric"));
       row.append(createCell(record["Whatnot Auction Safe Price"], "numeric"));
+      row.append(createCell(record["Item Code"], "item-code"));
 
       const actionCell = document.createElement("td");
       const deleteButton = document.createElement("button");
@@ -278,8 +281,8 @@
   async function createBlankTemplate() {
     setMessage();
     convertedData = {
-      headers: ["UUID", "Title", "Quantity", "Inventory", "Unit Price", "Weight (g)", "Weight (oz)", "Material", "Total Cost", "Whatnot Auction Safe Price"],
-      records: [await ConverterCore.createBlankRecord("first-row")],
+      headers: [...ConverterCore.EXPORT_HEADERS],
+      records: [await ConverterCore.createBlankRecord()],
       mergeCount: 0,
     };
     sourceName = "Custom_Label_Template";
@@ -295,7 +298,7 @@
 
   async function addBlankRow() {
     if (!convertedData) return createBlankTemplate();
-    convertedData.records.push(await ConverterCore.createBlankRecord(`row-${convertedData.records.length}-${Date.now()}`));
+    convertedData.records.push(await ConverterCore.createBlankRecord());
     updateSummary();
     renderRecords();
   }

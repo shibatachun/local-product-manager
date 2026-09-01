@@ -1,0 +1,102 @@
+/*
+ * Shared responsive form-control contract.
+ *
+ * `.adaptive-control` is available for non-standard/custom controls. Native
+ * text-entry controls opt in automatically so new forms cannot accidentally
+ * reintroduce iOS focus zoom or viewport-width overflow.
+ */
+
+:root {
+  --adaptive-control-desktop-height: 38px;
+  --adaptive-control-mobile-height: 46px;
+  --adaptive-control-mobile-font-size: 16px;
+}
+
+html,
+body,
+app-root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+app-root {
+  display: block;
+  overflow-x: clip;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:where(
+  .adaptive-control,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='hidden']),
+  select,
+  textarea
+) {
+  min-width: 0;
+  max-width: 100%;
+  font-family: inherit;
+}
+
+:where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='hidden']),
+  select,
+  textarea
+):not([class]) {
+  /* Native controls without a component class still receive the shared class behavior. */
+  box-sizing: border-box;
+}
+
+:where(label, form, fieldset) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 820px), (pointer: coarse) {
+  :where(
+    .adaptive-control,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='hidden']),
+    select,
+    textarea
+  ) {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: var(--adaptive-control-mobile-font-size) !important;
+    line-height: 1.25;
+  }
+
+  :where(
+    .adaptive-control,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='hidden']),
+    select
+  ) {
+    min-height: var(--adaptive-control-mobile-height);
+  }
+
+  textarea.adaptive-control,
+  textarea {
+    min-height: 92px;
+    resize: vertical;
+  }
+
+  input[type='file'] {
+    height: auto;
+    padding-block: 8px;
+  }
+
+  /* Keep focused controls inside the visual viewport without disabling user zoom. */
+  :where(input, select, textarea):focus {
+    scroll-margin-inline: 16px;
+    scroll-margin-block: 88px;
+  }
+}

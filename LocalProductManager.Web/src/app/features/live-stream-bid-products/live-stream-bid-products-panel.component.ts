@@ -1,10 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { LiveStreamBidDailySummary, LiveStreamBidDraftRow, LiveStreamBidProduct, LiveStreamBidProductApiService } from '../../core/live-stream-bid-product-api.service';
+import { LiveStreamBidDailySummary, LiveStreamBidDraftRow, LiveStreamBidImportConflict, LiveStreamBidProduct, LiveStreamBidProductApiService, LiveStreamBidRegeneratedUuid } from '../../core/live-stream-bid-product-api.service';
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
 import { LabelPrintingApiService, LabelPrintingSettings } from '../../core/label-printing-api.service';
+
+type BulkCsvImportResult = { fileName: string; batchNumber: string | null; products: number; error: string | null };
+type UuidImportPreview = { fileName: string; rowNumber: number; title: string; originalUuid: string };
 
 @Component({
   selector: 'app-live-stream-bid-products-panel',
@@ -35,6 +38,8 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   moveLocationKey = '';
   moveQuantity = 1;
   selectedFile: File | null = null;
+  readonly bulkCsvFiles = signal<File[]>([]);
+  readonly bulkCsvResults = signal<BulkCsvImportResult[]>([]);
   readonly createOpen = signal(false);
   readonly draftRows = signal<LiveStreamBidDraftRow[]>([]);
   readonly editingProduct = signal<LiveStreamBidProduct | null>(null);
@@ -42,6 +47,10 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   readonly expandedBatch = signal<string | null>(null);
   readonly labelPrintingSettings = signal<LabelPrintingSettings | null>(null);
   readonly safePriceHelpOpen = signal(false);
+  readonly importConflicts = signal<LiveStreamBidImportConflict[]>([]);
+  readonly regeneratedUuids = signal<LiveStreamBidRegeneratedUuid[]>([]);
+  readonly uuidImportConfirmation = signal<UuidImportPreview[]>([]);
+  private pendingUuidImportAction: (() => Promise<void>) | null = null;
   draftProductId: number | null = null;
 
   readonly filteredProducts = computed(() => {
@@ -49,12 +58,26 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     if (!keyword) return this.products();
     return this.products().filter(item =>
       item.uuid.toLowerCase().includes(keyword) ||
+      (item.itemCode ?? '').toLowerCase().includes(keyword) ||
       (item.actualSku ?? '').toLowerCase().includes(keyword) ||
       item.title.toLowerCase().includes(keyword) ||
       (item.material ?? '').toLowerCase().includes(keyword));
   });
   readonly totalQuantity = computed(() => this.products().reduce((sum, item) => sum + item.inventory, 0));
   readonly totalCost = computed(() => this.products().reduce((sum, item) => sum + (item.totalCost ?? 0) * item.inventory, 0));
+  readonly averageUnitPrice = computed(() => {
+    const inventory = this.totalQuantity();
+    return inventory === 0
+      ? null
+      : this.products().reduce((sum, item) => sum + item.unitPrice * item.inventory, 0) / inventory;
+  });
+  readonly averageWeightGrams = computed(() => {
+    const productsWithWeight = this.products().filter(item => item.weightGrams !== null && item.inventory > 0);
+    const inventory = productsWithWeight.reduce((sum, item) => sum + item.inventory, 0);
+    return inventory === 0
+      ? null
+      : productsWithWeight.reduce((sum, item) => sum + item.weightGrams! * item.inventory, 0) / inventory;
+  });
   readonly batchGroups = computed(() => {
     const groups = new Map<string, LiveStreamBidProduct[]>();
     for (const item of this.filteredProducts()) {
@@ -210,12 +233,26 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
 
   async importCsv(): Promise<void> {
     if (!this.selectedFile || this.loading()) return;
+    const file = this.selectedFile;
+    const duplicates = this.findDuplicateImportedUuids([{ fileName: file.name, rows: await this.draftRowsFromCsv(file) }]);
+    if (duplicates.length) {
+      this.requestUuidImportConfirmation(duplicates, () => this.executeCsvImport(file));
+      return;
+    }
+    await this.executeCsvImport(file);
+  }
+
+  private async executeCsvImport(file: File): Promise<void> {
     this.loading.set(true);
     this.message.set('');
     this.error.set('');
+    this.importConflicts.set([]);
+    this.regeneratedUuids.set([]);
     try {
-      const result = await this.api.importCsv(this.selectedFile);
-      this.message.set(`Import complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`);
+      const result = await this.api.importCsv(file);
+      this.message.set(`Import complete: ${result.created} created, ${result.regeneratedUuids.length} duplicate UUID(s) replaced, ${result.skipped} invalid rows skipped, ${result.conflicts.length} SKU conflict(s).`);
+      this.importConflicts.set(result.conflicts);
+      this.regeneratedUuids.set(result.regeneratedUuids);
       this.selectedFile = null;
       await this.load();
     } catch (error: any) {
@@ -223,12 +260,19 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     } finally { this.loading.set(false); }
   }
 
+  async printRegeneratedLabel(item: LiveStreamBidRegeneratedUuid): Promise<void> {
+    this.loading.set(true); this.error.set('');
+    try { this.message.set((await this.labelPrinting.printBidProduct(item.productId, 1)).message); }
+    catch (error: any) { this.error.set(error?.error?.message || error?.error || 'Could not print the replacement label.'); }
+    finally { this.loading.set(false); }
+  }
+
   async openCreateList(): Promise<void> {
     this.loading.set(true); this.error.set('');
     try {
       const products = await this.inventoryApi.products();
       this.localInventoryProducts.set(products.flatMap(product => [product, ...product.children]));
-      this.draftRows.set([this.blankRow()]); this.draftProductId = null; this.createOpen.set(true);
+      this.draftRows.set([this.blankRow()]); this.draftProductId = null; this.bulkCsvFiles.set([]); this.bulkCsvResults.set([]); this.createOpen.set(true);
       this.editingProduct.set(null); this.targetBatch.set(null);
     } catch { this.error.set('Could not load local products.'); }
     finally { this.loading.set(false); }
@@ -248,7 +292,8 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   openEditProduct(item: LiveStreamBidProduct): void {
     const price = item.unitPrice, quantity = item.quantity, grams = item.weightGrams ?? 0, total = item.totalCost ?? 0;
     this.editingProduct.set(item); this.draftRows.set([{
-      sourceProductId: item.sourceProductId, externalUuid: item.uuid, actualSku: item.actualSku, title: item.title, quantity, inventory: item.inventory,
+      sourceProductId: item.sourceProductId, externalUuid: item.uuid, actualSku: item.actualSku, title: item.title, quantity,
+      expectedInventory: item.inventory, actualInventory: item.actualInventory,
       unitPrice: price, weightGrams: item.weightGrams, weightOunces: item.weightOunces,
       material: item.material, totalCost: item.totalCost, whatnotAuctionSafePrice: item.whatnotAuctionSafePrice, priceType: this.inferPriceType(price, quantity, grams, total)
     }]); this.createOpen.set(true);
@@ -257,7 +302,8 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   addWarehouseProduct(): void {
     const product = this.localInventoryProducts().find(item => item.id === this.draftProductId); if (!product) return;
     this.draftRows.update(rows => [...rows.filter(row => row.title.trim()), {
-      sourceProductId: product.id, externalUuid: null, actualSku: product.sku, title: product.productName, quantity: 1, inventory: Math.max(1, product.qty),
+      sourceProductId: product.id, externalUuid: null, actualSku: product.sku, title: product.productName, quantity: 1,
+      expectedInventory: Math.max(1, product.qty), actualInventory: Math.max(1, product.qty),
       unitPrice: product.cost ?? 0, weightGrams: product.weight, weightOunces: product.weight == null ? null : +(product.weight / 28.349523125).toFixed(4),
       material: null, totalCost: product.cost == null ? null : +(product.cost + (product.weight ?? 0) * .05).toFixed(2), whatnotAuctionSafePrice: null, priceType: 'per-package'
     }]); this.draftProductId = null;
@@ -266,26 +312,130 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   updateOunces(row: LiveStreamBidDraftRow): void { row.weightOunces = row.weightGrams == null ? null : +(Number(row.weightGrams) / 28.349523125).toFixed(4); }
   async loadDraftCsv(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return;
-    const records = this.parseCsv(await file.text()); if (records.length < 2) return;
+    this.draftRows.set(await this.draftRowsFromCsv(file));
+  }
+  selectBulkCsvFiles(event: Event): void {
+    this.setBulkCsvFiles(Array.from((event.target as HTMLInputElement).files ?? []));
+  }
+  dropBulkCsvFiles(event: DragEvent): void {
+    event.preventDefault();
+    this.setBulkCsvFiles(Array.from(event.dataTransfer?.files ?? []));
+  }
+  removeBulkCsvFile(index: number): void {
+    this.bulkCsvFiles.update(files => files.filter((_, fileIndex) => fileIndex !== index));
+  }
+  private setBulkCsvFiles(files: File[]): void {
+    const csvFiles = files.filter(file => file.name.toLowerCase().endsWith('.csv'));
+    const unique = new Map(this.bulkCsvFiles().map(file => [`${file.name}|${file.size}|${file.lastModified}`, file]));
+    for (const file of csvFiles) unique.set(`${file.name}|${file.size}|${file.lastModified}`, file);
+    this.bulkCsvFiles.set([...unique.values()]);
+    this.bulkCsvResults.set([]);
+    this.error.set(csvFiles.length === files.length ? '' : 'Only CSV files were added to the batch import queue.');
+  }
+  async importBulkConvertedCsvs(): Promise<void> {
+    const files = this.bulkCsvFiles();
+    if (!files.length || this.loading()) return;
+    const prepared = await Promise.all(files.map(async file => ({ file, rows: (await this.draftRowsFromCsv(file)).filter(row => row.title.trim()) })));
+    const duplicates = this.findDuplicateImportedUuids(prepared.map(item => ({ fileName: item.file.name, rows: item.rows })));
+    if (duplicates.length) {
+      this.requestUuidImportConfirmation(duplicates, () => this.executeBulkConvertedCsvs(prepared));
+      return;
+    }
+    await this.executeBulkConvertedCsvs(prepared);
+  }
+
+  private async executeBulkConvertedCsvs(prepared: { file: File; rows: LiveStreamBidDraftRow[] }[]): Promise<void> {
+    const files = prepared.map(item => item.file);
+    this.loading.set(true); this.error.set(''); this.message.set(''); this.bulkCsvResults.set([]);
+    const results: BulkCsvImportResult[] = [];
+    const regenerated: LiveStreamBidRegeneratedUuid[] = [];
+    for (const { file, rows } of prepared) {
+      try {
+        if (!rows.length) throw new Error('No valid product rows were found.');
+        const result = await this.api.createBatch(rows);
+        regenerated.push(...result.regeneratedUuids);
+        results.push({ fileName: file.name, batchNumber: result.batchNumber, products: result.products.length, error: null });
+      } catch (error: any) {
+        const detail = typeof error?.error === 'string' ? error.error : error?.message || 'Import failed.';
+        results.push({ fileName: file.name, batchNumber: null, products: 0, error: detail });
+      }
+      this.bulkCsvResults.set([...results]);
+    }
+    this.regeneratedUuids.set(regenerated);
+    const succeeded = results.filter(result => result.batchNumber).length;
+    this.message.set(`Bulk import complete: ${succeeded}/${files.length} CSV files created as separate batches.`);
+    this.bulkCsvFiles.set([]);
+    this.createOpen.set(false);
+    await this.load();
+    this.loading.set(false);
+  }
+  private async draftRowsFromCsv(file: File): Promise<LiveStreamBidDraftRow[]> {
+    const records = this.parseCsv(await file.text()); if (records.length < 2) return [];
     const headings = records[0].map(value => value.trim().toLowerCase());
     const at = (row: string[], name: string) => row[headings.indexOf(name)] ?? '';
-    this.draftRows.set(records.slice(1).filter(row => row.some(Boolean)).map(row => ({
-      sourceProductId: null, externalUuid: this.normalizeImportedUuid(at(row, 'uuid')), actualSku: at(row, 'actual sku') || null, title: at(row, 'title'), quantity: +(at(row, 'quantity') || 1), inventory: +(at(row, 'inventory') || 1),
+    return records.slice(1).filter(row => row.some(Boolean)).map(row => ({
+      sourceProductId: null, externalUuid: this.normalizeImportedUuid(at(row, 'uuid')), actualSku: at(row, 'actual sku') || null, title: at(row, 'title'), quantity: +(at(row, 'quantity') || 1),
+      expectedInventory: +(at(row, 'expected inventory') || 0), actualInventory: +(at(row, 'inventory') || 0),
       unitPrice: +(at(row, 'unit price') || 0), weightGrams: at(row, 'weight (g)') === '' ? null : +at(row, 'weight (g)'),
       weightOunces: at(row, 'weight (oz)') === '' ? null : +at(row, 'weight (oz)'), material: at(row, 'material') || null,
       totalCost: at(row, 'total cost') === '' ? null : +at(row, 'total cost'),
       whatnotAuctionSafePrice: at(row, 'whatnot auction safe price') === '' ? null : +at(row, 'whatnot auction safe price')
       , priceType: this.inferPriceType(+(at(row, 'unit price') || 0), +(at(row, 'quantity') || 1), +(at(row, 'weight (g)') || 0), +(at(row, 'total cost') || 0))
-    })));
+    }));
+  }
+  private findDuplicateImportedUuids(groups: { fileName: string; rows: LiveStreamBidDraftRow[] }[]): UuidImportPreview[] {
+    const used = new Set(this.products().map(product => this.normalizeImportedUuid(product.uuid)?.toLowerCase()).filter((uuid): uuid is string => !!uuid));
+    const duplicates: UuidImportPreview[] = [];
+    for (const group of groups) {
+      group.rows.forEach((row, index) => {
+        const normalized = this.normalizeImportedUuid(row.externalUuid ?? '');
+        const uuid = normalized?.toLowerCase();
+        if (!uuid) return;
+        if (used.has(uuid)) duplicates.push({ fileName: group.fileName, rowNumber: index + 2, title: row.title, originalUuid: normalized! });
+        else used.add(uuid);
+      });
+    }
+    return duplicates;
+  }
+
+  private requestUuidImportConfirmation(preview: UuidImportPreview[], action: () => Promise<void>): void {
+    this.pendingUuidImportAction = action;
+    this.uuidImportConfirmation.set(preview);
+    this.error.set('');
+  }
+
+  cancelUuidImport(): void {
+    this.pendingUuidImportAction = null;
+    this.uuidImportConfirmation.set([]);
+    this.message.set('Import abandoned. No products or batches were created.');
+  }
+
+  async confirmUuidImport(): Promise<void> {
+    const action = this.pendingUuidImportAction;
+    if (!action || this.loading()) return;
+    try { await action(); }
+    finally {
+      this.pendingUuidImportAction = null;
+      this.uuidImportConfirmation.set([]);
+    }
   }
   async saveBatch(): Promise<void> {
     const rows = this.draftRows().filter(row => row.title.trim()); if (!rows.length) { this.error.set('Add at least one product.'); return; }
+    const duplicates = this.editingProduct() ? [] : this.findDuplicateImportedUuids([{ fileName: 'Create BID List', rows }]);
+    if (duplicates.length) {
+      this.requestUuidImportConfirmation(duplicates, () => this.executeSaveBatch(rows));
+      return;
+    }
+    await this.executeSaveBatch(rows);
+  }
+
+  private async executeSaveBatch(rows: LiveStreamBidDraftRow[]): Promise<void> {
     this.loading.set(true); this.error.set('');
     try {
       const editing = this.editingProduct();
       if (editing) { await this.api.updateProduct(editing.id, rows[0]); this.message.set(`BID|${editing.uuid} updated.`); }
-      else if (this.targetBatch()) { const result = await this.api.addBatchProducts(this.targetBatch()!, rows); this.message.set(`${result.products.length} products added to ${result.batchNumber}.`); }
-      else { const result = await this.api.createBatch(rows); this.message.set(`Batch ${result.batchNumber} created with ${result.products.length} products.`); }
+      else if (this.targetBatch()) { const result = await this.api.addBatchProducts(this.targetBatch()!, rows); this.regeneratedUuids.set(result.regeneratedUuids); this.message.set(`${result.products.length} products added to ${result.batchNumber}; ${result.regeneratedUuids.length} duplicate UUID(s) replaced.`); }
+      else { const result = await this.api.createBatch(rows); this.regeneratedUuids.set(result.regeneratedUuids); this.message.set(`Batch ${result.batchNumber} created with ${result.products.length} products; ${result.regeneratedUuids.length} duplicate UUID(s) replaced.`); }
       this.createOpen.set(false); this.editingProduct.set(null); this.targetBatch.set(null); await this.load();
     }
     catch (error: any) { this.error.set(typeof error?.error === 'string' ? error.error : 'Could not create BID list.'); }
@@ -299,13 +449,32 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     catch (error: any) { this.error.set(error?.status === 409 ? 'This product has sales history and cannot be deleted.' : 'Could not delete this BID product.'); }
     finally { this.loading.set(false); }
   }
+  async deleteBatch(batchNumber: string, productCount: number): Promise<void> {
+    if (!confirm(`Delete batch ${batchNumber} and all ${productCount} product records in it?\n\nThis cannot be undone. Batches with sales history cannot be deleted.`)) return;
+    this.loading.set(true); this.error.set(''); this.message.set('');
+    try {
+      await this.api.deleteBatch(batchNumber);
+      if (this.expandedBatch() === batchNumber) this.expandedBatch.set(null);
+      this.message.set(`Batch ${batchNumber} and its ${productCount} products were deleted.`);
+      await this.load();
+    } catch (error: any) {
+      this.error.set(error?.status === 409 ? 'This batch has sales history and cannot be deleted.' : 'Could not delete this batch.');
+    } finally { this.loading.set(false); }
+  }
   recalculate(row: LiveStreamBidDraftRow): void {
     const price = Number(row.unitPrice), quantity = Number(row.quantity), grams = Number(row.weightGrams ?? 0);
     const merchandise = row.priceType === 'per-package' ? price : price * quantity;
     row.totalCost = Number.isFinite(merchandise) ? +(merchandise + grams * .05).toFixed(2) : null;
     this.updateOunces(row);
   }
-  private blankRow(): LiveStreamBidDraftRow { return { sourceProductId: null, externalUuid: null, actualSku: null, title: '', quantity: 1, inventory: 1, unitPrice: 0, weightGrams: null, weightOunces: null, material: null, totalCost: 0, whatnotAuctionSafePrice: null, priceType: 'per-package' }; }
+  itemCodeForPrice(price: number | null): string {
+    let value = Math.round(Number(price));
+    if (!Number.isFinite(value) || value < 1) return '—';
+    let code = '';
+    while (value > 0) { value--; code = String.fromCharCode(65 + value % 26) + code; value = Math.floor(value / 26); }
+    return code;
+  }
+  private blankRow(): LiveStreamBidDraftRow { return { sourceProductId: null, externalUuid: null, actualSku: null, title: '', quantity: 1, expectedInventory: 1, actualInventory: 1, unitPrice: 0, weightGrams: null, weightOunces: null, material: null, totalCost: 0, whatnotAuctionSafePrice: null, priceType: 'per-package' }; }
   private normalizeImportedUuid(value: string): string | null { const normalized = value.trim().replace(/^BID\s*\|\s*/i, '').trim(); return normalized || null; }
   private inferPriceType(price: number, quantity: number, grams: number, total: number): 'per-unit' | 'per-package' { return Math.abs(total - (price * quantity + grams * .05)) < Math.abs(total - (price + grams * .05)) ? 'per-unit' : 'per-package'; }
   private parseCsv(text: string): string[][] {

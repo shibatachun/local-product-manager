@@ -1,0 +1,19 @@
+{
+  "action": "print",
+  "provider": "BarTender",
+  "template": "C:\\Users\\jjgqa\\local-product-manager\\inventory_product_label.btw",
+  "printer": "PM-241-BT (Bluetooth) (Copy 1)",
+  "recordType": "inventory-product",
+  "recordId": "LPM|INV-35",
+  "copies": 1,
+  "requestedAt": "2026-08-17T12:00:00Z",
+  "items": [
+    {
+      "recordType": "inventory-product",
+      "recordId": "LPM|INV-35",
+      "title": "Test Product",
+      "sku": "TEST-SKU",
+      "copies": 1
+    }
+  ]
+}

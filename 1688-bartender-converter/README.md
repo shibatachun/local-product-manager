@@ -23,7 +23,7 @@ Double-click `open_converter.bat`, or open `index.html` in a modern browser.
 - Recalculates `总成本 = 0.05 × 重量(g) + 单价(元) × 数量` immediately.
 - Exports UTF-8 BOM CSV for BarTender and Chinese Windows compatibility.
 
-The exported CSV keeps the BarTender headings and adds `Whatnot Auction Safe Price`: `UUID`, `Title`, `Quantity`, `Inventory`, `Unit Price`, `Weight (g)`, `Weight (oz)`, `Material`, `Total Cost`, and `Whatnot Auction Safe Price`.
+The exported CSV includes `UUID`, `Title`, `Quantity`, `Inventory`, `Unit Price`, `Weight (g)`, `Weight (oz)`, `Material`, `Total Cost`, `Whatnot Auction Safe Price`, `Item Code`, and `Expected Inventory`. `Item Code` is derived from the calculated safe price (`$1 = A`, `$2 = B`, ... `$26 = Z`, `$27 = AA`). Decimal fields are exported with two decimal places. `Inventory` is actual/received stock; `Expected Inventory` is the imported or ordered stock. For shipments prepared in China, the converted quantity populates `Expected Inventory`, while `Inventory` starts at zero until the US warehouse physically receives and counts the goods.
 
 The Whatnot safe start uses the same break-even model as Local Product Manager: RMB cost converted at the safe fallback rate (0.15), 10% cost buffer, $0.25 packaging reserve, 8% commission, 2.9% processing, 1% fee-tax reserve, $0.30 fixed processing fee, and processing reserve on an assumed $10 buyer shipping/tax amount. The result rounds upward to a whole-dollar starting price and exports with two decimals.
 

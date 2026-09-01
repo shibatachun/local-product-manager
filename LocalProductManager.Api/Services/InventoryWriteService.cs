@@ -11,9 +11,44 @@ public sealed record InventoryAuditActor(
     string? RemoteIp,
     string? UserAgent);
 
-public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWriteService> logger)
+public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWriteService> logger, ExchangeRateService exchangeRates)
 {
     private const int MaxAttempts = 3;
+
+    public Task<bool> MoveAsync(
+        int productId, int? sourceLevelId, int? sourceBinNumber,
+        int targetLevelId, int targetBinNumber, int quantity,
+        InventoryAuditActor actor, CancellationToken cancellationToken) =>
+        ExecuteWithRetryAsync(async () =>
+        {
+            if (quantity < 1 || sourceLevelId == targetLevelId && sourceBinNumber == targetBinNumber)
+                return false;
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var targetBefore = await CurrentQuantityAsync(targetLevelId, targetBinNumber, productId, cancellationToken);
+            var now = DateTimeOffset.UtcNow;
+            if (sourceLevelId.HasValue && sourceBinNumber.HasValue)
+            {
+                var sourceBefore = await CurrentQuantityAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, cancellationToken);
+                if (sourceBefore < quantity) return false;
+                if (await AdjustLocationQuantityAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, -quantity, now, cancellationToken) == 0)
+                    return false;
+                await DeleteZeroQuantityAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, cancellationToken);
+                await WriteHistoryAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, sourceBefore, sourceBefore - quantity,
+                    actor, $"move_out:{targetLevelId}:{targetBinNumber}", now, cancellationToken);
+            }
+            else
+            {
+                var totalQty = await db.Products.Where(item => item.Id == productId).Select(item => item.Qty).FirstOrDefaultAsync(cancellationToken);
+                var locatedQty = await db.ShelfLevelInventories.Where(item => item.ProductId == productId)
+                    .SumAsync(item => (int?)item.Qty, cancellationToken) ?? 0;
+                if (totalQty - locatedQty < quantity) return false;
+            }
+            await AdjustLocationQuantityAsync(targetLevelId, targetBinNumber, productId, quantity, now, cancellationToken);
+            await WriteHistoryAsync(targetLevelId, targetBinNumber, productId, targetBefore, targetBefore + quantity,
+                actor, sourceLevelId.HasValue ? $"move_in:{sourceLevelId}:{sourceBinNumber}" : "place_unassigned", now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
 
     public Task<LiveStreamBidProduct?> MoveToBidAsync(
         int levelId,
@@ -30,10 +65,11 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
             var beforeQty = await CurrentQuantityAsync(levelId, binNumber, productId, cancellationToken);
             if (quantity < 1 || beforeQty < quantity) return null;
             var now = DateTimeOffset.UtcNow;
+            var safePricingRate = await GetSafePricingExchangeRateAsync(cancellationToken);
             var affected = await AdjustLocationQuantityAsync(levelId, binNumber, productId, -quantity, now, cancellationToken);
             if (affected == 0) return null;
             await DeleteZeroQuantityAsync(levelId, binNumber, productId, cancellationToken);
-            await UpdateProductTotalAsync(productId, now, cancellationToken);
+            await AdjustProductTotalAsync(productId, -quantity, now, cancellationToken);
             await WriteHistoryAsync(levelId, binNumber, productId, beforeQty, beforeQty - quantity, actor, "bid_transfer", now, cancellationToken);
             var bidProduct = new LiveStreamBidProduct
             {
@@ -49,6 +85,8 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
                 WeightOunces = product.Weight,
                 WeightGrams = product.Weight.HasValue ? decimal.Round(product.Weight.Value * 28.349523125m, 4) : null,
                 TotalCost = product.Cost.HasValue ? decimal.Round(product.Cost.Value, 2) : null,
+                WhatnotAuctionSafePrice = WhatnotSafePriceCalculator.Calculate(product.Cost, safePricingRate),
+                ItemCode = WhatnotSafePriceCalculator.ToItemCode(WhatnotSafePriceCalculator.Calculate(product.Cost, safePricingRate)),
                 ImportedFileName = "Local inventory transfer",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -58,6 +96,12 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
             await transaction.CommitAsync(cancellationToken);
             return bidProduct;
         }, cancellationToken);
+
+    private async Task<decimal> GetSafePricingExchangeRateAsync(CancellationToken cancellationToken)
+    {
+        try { return (await exchangeRates.GetRmbToUsdAsync(cancellationToken)).Rate; }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException) { return 0.15m; }
+    }
 
     public Task SetAsync(
         int levelId,
@@ -74,7 +118,7 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
 
             await SetLocationQuantityAsync(levelId, binNumber, productId, qty, now, cancellationToken);
 
-            await UpdateProductTotalAsync(productId, now, cancellationToken);
+            await AdjustProductTotalAsync(productId, qty - beforeQty, now, cancellationToken);
             await WriteHistoryAsync(
                 levelId, binNumber, productId, beforeQty, qty, actor, "set", now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -105,7 +149,7 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
 
             await DeleteZeroQuantityAsync(levelId, binNumber, productId, cancellationToken);
 
-            await UpdateProductTotalAsync(productId, now, cancellationToken);
+            await AdjustProductTotalAsync(productId, delta, now, cancellationToken);
             await WriteHistoryAsync(
                 levelId, binNumber, productId, beforeQty, beforeQty + delta, actor, "adjust", now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -276,28 +320,21 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
         }
     }
 
-    private Task<int> UpdateProductTotalAsync(
+    private Task<int> AdjustProductTotalAsync(
         int productId,
+        int delta,
         DateTimeOffset now,
         CancellationToken cancellationToken) =>
         db.Database.IsNpgsql()
             ? db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE products
-                SET "Qty" = COALESCE((
-                        SELECT SUM("Qty")
-                        FROM shelf_level_inventory
-                        WHERE "ProductId" = {productId}
-                    ), 0),
+                SET "Qty" = GREATEST(0, "Qty" + {delta}),
                     "UpdatedAt" = {now}
                 WHERE "Id" = {productId}
                 """, cancellationToken)
             : db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE products
-                SET Qty = COALESCE((
-                        SELECT SUM(Qty)
-                        FROM shelf_level_inventory
-                        WHERE ProductId = {productId}
-                    ), 0),
+                SET Qty = MAX(0, Qty + {delta}),
                     UpdatedAt = {now}
                 WHERE Id = {productId}
                 """, cancellationToken);

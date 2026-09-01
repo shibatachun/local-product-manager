@@ -58,4 +58,22 @@ public sealed class InventoryConcurrencyTests
         Assert.Equal(3, quantities.LocationQty);
         Assert.Equal(3, quantities.ProductQty);
     }
+
+    [Fact]
+    public async Task StockOperation_PreservesUnassignedQuantityFromProductDetailEdit()
+    {
+        using var factory = new IsolatedApiFactory();
+        using var client = factory.CreateClient();
+        var fixture = await factory.SeedInventoryAsync(initialQty: 5);
+        await factory.SetProductTotalAsync(fixture, 10);
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/inventory/levels/{fixture.LevelId}/inventory",
+            new { productId = fixture.ProductId, delta = 1, binNumber = 1 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var quantities = await factory.ReadQuantitiesAsync(fixture);
+        Assert.Equal(6, quantities.LocationQty);
+        Assert.Equal(11, quantities.ProductQty);
+    }
 }

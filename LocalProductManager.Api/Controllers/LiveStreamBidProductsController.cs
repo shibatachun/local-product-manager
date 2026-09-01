@@ -16,7 +16,6 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LiveStreamBidProductDto>>> GetAll(CancellationToken cancellationToken)
     {
-        await PopulateMissingWhatnotSafePricesAsync(cancellationToken);
         return Ok((await db.LiveStreamBidProducts.AsNoTracking().OrderByDescending(item => item.UpdatedAt)
             .ToListAsync(cancellationToken)).Select(ToDto));
     }
@@ -203,17 +202,10 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
         if (request.Rows.Count == 0) return BadRequest("Add at least one product.");
         if (request.Rows.Count > 1000) return BadRequest("A batch can contain at most 1,000 products.");
-        if (request.Rows.Any(row => string.IsNullOrWhiteSpace(row.Title) || row.Quantity < 1 || row.Inventory < 0 || row.UnitPrice < 0 || row.TotalCost < 0 || row.WhatnotAuctionSafePrice < 0))
+        if (request.Rows.Any(row => string.IsNullOrWhiteSpace(row.Title) || row.Quantity < 1 || row.ExpectedInventory < 0 || row.ActualInventory < 0 || row.UnitPrice < 0 || row.TotalCost < 0 || row.WhatnotAuctionSafePrice < 0))
             return BadRequest("Every row needs a title and valid non-negative values.");
 
-        var externalUuids = request.Rows.Where(row => !string.IsNullOrWhiteSpace(row.ExternalUuid))
-            .Select(row => NormalizeBidCode(row.ExternalUuid!)).ToArray();
-        if (externalUuids.Any(string.IsNullOrWhiteSpace) || externalUuids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != externalUuids.Length)
-            return BadRequest("Imported UUID values must be present and unique.");
-        var externalUpper = externalUuids.Select(value => value.ToUpperInvariant()).ToArray();
-        if (externalUpper.Length > 0 && await db.LiveStreamBidProducts.AsNoTracking()
-            .AnyAsync(item => externalUpper.Contains(item.Uuid.ToUpper()), cancellationToken))
-            return Conflict("One or more imported UUID values already exist.");
+        var (resolvedUuids, uuidChanges) = await ResolveImportedUuidsAsync(request.Rows, cancellationToken);
 
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
         var existing = await db.LiveStreamBidProducts.AsNoTracking().Where(item => item.BatchNumber != null)
@@ -228,13 +220,14 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             BatchNumber = batchNumber,
             BatchProductNumber = index + 1,
             ActualSku = string.IsNullOrWhiteSpace(row.ActualSku) ? null : row.ActualSku.Trim(),
-            RequiresLocalLabel = string.IsNullOrWhiteSpace(row.ExternalUuid),
-            WhatnotAuctionSafePrice = CalculateWhatnotSafePrice(row.TotalCost, rmbToUsdRate),
-            Uuid = string.IsNullOrWhiteSpace(row.ExternalUuid) ? $"{batchNumber}|P{index + 1:000}" : NormalizeBidCode(row.ExternalUuid),
+            RequiresLocalLabel = string.IsNullOrWhiteSpace(row.ExternalUuid) || uuidChanges.ContainsKey(index),
+            WhatnotAuctionSafePrice = WhatnotSafePriceCalculator.Calculate(row.TotalCost, rmbToUsdRate),
+            ItemCode = WhatnotSafePriceCalculator.ToItemCode(WhatnotSafePriceCalculator.Calculate(row.TotalCost, rmbToUsdRate)),
+            Uuid = string.IsNullOrWhiteSpace(row.ExternalUuid) ? $"{batchNumber}|P{index + 1:000}" : resolvedUuids[index]!,
             Title = row.Title.Trim(),
             Quantity = row.Quantity,
-            Inventory = row.Inventory,
-            ActualInventory = string.IsNullOrWhiteSpace(row.ExternalUuid) ? row.Inventory : 0,
+            Inventory = row.ExpectedInventory,
+            ActualInventory = row.ActualInventory,
             UnitPrice = row.UnitPrice,
             WeightGrams = row.WeightGrams,
             WeightOunces = row.WeightOunces ?? (row.WeightGrams.HasValue ? decimal.Round(row.WeightGrams.Value / 28.349523125m, 4) : null),
@@ -247,7 +240,8 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         db.LiveStreamBidProducts.AddRange(products);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new CreateLiveStreamBidListResult(batchNumber, products.Select(ToDto).ToArray()));
+        return Ok(new CreateLiveStreamBidListResult(batchNumber, products.Select(ToDto).ToArray(),
+            BuildRegeneratedUuidDtos(products, uuidChanges)));
     }
 
     [HttpGet("batches/{batchNumber}/bartender.csv")]
@@ -258,13 +252,16 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             .Where(item => item.BatchNumber == normalized)
             .OrderBy(item => item.BatchProductNumber).ToListAsync(cancellationToken);
         if (rows.Count == 0) return NotFound();
-        var csv = new StringBuilder("UUID,Title,Quantity,Inventory,Unit Price,Weight (g),Weight (oz),Material,Total Cost\r\n");
+        var csv = new StringBuilder("UUID,Title,Quantity,Inventory,Unit Price,Weight (g),Weight (oz),Material,Total Cost,Whatnot Auction Safe Price,Item Code,Expected Inventory\r\n");
         foreach (var row in rows)
             csv.AppendLine(string.Join(',', new[] {
                 Csv($"BID|{NormalizeBidCode(row.Uuid)}"), Csv(row.Title), row.Quantity.ToString(CultureInfo.InvariantCulture),
-                row.Inventory.ToString(CultureInfo.InvariantCulture), row.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
+                row.ActualInventory.ToString(CultureInfo.InvariantCulture), row.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
                 row.WeightGrams?.ToString("F2", CultureInfo.InvariantCulture) ?? "", row.WeightOunces?.ToString("F2", CultureInfo.InvariantCulture) ?? "",
-                Csv(row.Material ?? ""), row.TotalCost?.ToString("F2", CultureInfo.InvariantCulture) ?? "" }));
+                Csv(row.Material ?? ""), row.TotalCost?.ToString("F2", CultureInfo.InvariantCulture) ?? "",
+                row.WhatnotAuctionSafePrice?.ToString("F2", CultureInfo.InvariantCulture) ?? "",
+                Csv(row.ItemCode ?? ""),
+                row.Inventory.ToString(CultureInfo.InvariantCulture) }));
         return File(new UTF8Encoding(true).GetBytes(csv.ToString()), "text/csv; charset=utf-8", $"{normalized}-bartender.csv");
     }
 
@@ -277,17 +274,11 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
         var normalizedBatch = batchNumber.Trim().ToUpperInvariant();
         if (request.Rows.Count == 0 || request.Rows.Count > 1000) return BadRequest("Add between 1 and 1,000 products.");
-        if (request.Rows.Any(row => string.IsNullOrWhiteSpace(row.Title) || row.Quantity < 1 || row.Inventory < 0 || row.UnitPrice < 0 || row.TotalCost < 0 || row.WhatnotAuctionSafePrice < 0))
+        if (request.Rows.Any(row => string.IsNullOrWhiteSpace(row.Title) || row.Quantity < 1 || row.ExpectedInventory < 0 || row.ActualInventory < 0 || row.UnitPrice < 0 || row.TotalCost < 0 || row.WhatnotAuctionSafePrice < 0))
             return BadRequest("Every row needs a title and valid non-negative values.");
         if (!await db.LiveStreamBidProducts.AsNoTracking().AnyAsync(item => item.BatchNumber == normalizedBatch, cancellationToken))
             return NotFound("Batch not found.");
-        var externalUuids = request.Rows.Where(row => !string.IsNullOrWhiteSpace(row.ExternalUuid))
-            .Select(row => NormalizeBidCode(row.ExternalUuid!)).ToArray();
-        if (externalUuids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != externalUuids.Length)
-            return BadRequest("Imported UUID values must be unique.");
-        var externalUpper = externalUuids.Select(value => value.ToUpperInvariant()).ToArray();
-        if (externalUpper.Length > 0 && await db.LiveStreamBidProducts.AsNoTracking().AnyAsync(item => externalUpper.Contains(item.Uuid.ToUpper()), cancellationToken))
-            return Conflict("One or more imported UUID values already exist.");
+        var (resolvedUuids, uuidChanges) = await ResolveImportedUuidsAsync(request.Rows, cancellationToken);
 
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
         var nextProductNumber = (await db.LiveStreamBidProducts.Where(item => item.BatchNumber == normalizedBatch)
@@ -301,11 +292,12 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             {
                 SourceProductId = row.SourceProductId, BatchNumber = normalizedBatch, BatchProductNumber = productNumber,
                 ActualSku = string.IsNullOrWhiteSpace(row.ActualSku) ? null : row.ActualSku.Trim(),
-                RequiresLocalLabel = string.IsNullOrWhiteSpace(row.ExternalUuid),
-                WhatnotAuctionSafePrice = CalculateWhatnotSafePrice(row.TotalCost, rmbToUsdRate),
-                Uuid = string.IsNullOrWhiteSpace(row.ExternalUuid) ? $"{normalizedBatch}|P{productNumber:000}" : NormalizeBidCode(row.ExternalUuid),
-                Title = row.Title.Trim(), Quantity = row.Quantity, Inventory = row.Inventory, UnitPrice = row.UnitPrice,
-                ActualInventory = string.IsNullOrWhiteSpace(row.ExternalUuid) ? row.Inventory : 0,
+                RequiresLocalLabel = string.IsNullOrWhiteSpace(row.ExternalUuid) || uuidChanges.ContainsKey(index),
+                WhatnotAuctionSafePrice = WhatnotSafePriceCalculator.Calculate(row.TotalCost, rmbToUsdRate),
+                ItemCode = WhatnotSafePriceCalculator.ToItemCode(WhatnotSafePriceCalculator.Calculate(row.TotalCost, rmbToUsdRate)),
+                Uuid = string.IsNullOrWhiteSpace(row.ExternalUuid) ? $"{normalizedBatch}|P{productNumber:000}" : resolvedUuids[index]!,
+                Title = row.Title.Trim(), Quantity = row.Quantity, Inventory = row.ExpectedInventory, UnitPrice = row.UnitPrice,
+                ActualInventory = row.ActualInventory,
                 WeightGrams = row.WeightGrams,
                 WeightOunces = row.WeightOunces ?? (row.WeightGrams.HasValue ? decimal.Round(row.WeightGrams.Value / 28.349523125m, 4) : null),
                 Material = string.IsNullOrWhiteSpace(row.Material) ? null : row.Material.Trim(), TotalCost = row.TotalCost,
@@ -316,7 +308,8 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         db.LiveStreamBidProducts.AddRange(products);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new CreateLiveStreamBidListResult(normalizedBatch, products.Select(ToDto).ToArray()));
+        return Ok(new CreateLiveStreamBidListResult(normalizedBatch, products.Select(ToDto).ToArray(),
+            BuildRegeneratedUuidDtos(products, uuidChanges)));
     }
 
     [HttpDelete("{id:int}")]
@@ -334,6 +327,25 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         return NoContent();
     }
 
+    [HttpDelete("batches/{batchNumber}")]
+    public async Task<IActionResult> DeleteBatch(string batchNumber, CancellationToken cancellationToken)
+    {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken) &&
+            !await auth.CanManageStorageAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
+        var normalized = batchNumber.Trim().ToUpperInvariant();
+        var products = await db.LiveStreamBidProducts
+            .Where(item => item.BatchNumber == normalized)
+            .ToListAsync(cancellationToken);
+        if (products.Count == 0) return NotFound();
+        var productIds = products.Select(item => item.Id).ToArray();
+        if (await db.LiveStreamBidSales.AsNoTracking().AnyAsync(item => productIds.Contains(item.BidProductId), cancellationToken))
+            return Conflict("This batch has sales history and cannot be deleted.");
+        db.LiveStreamBidProducts.RemoveRange(products);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<LiveStreamBidProductDto>> UpdateProduct(
         int id, UpdateLiveStreamBidProductRequest request, CancellationToken cancellationToken)
@@ -341,22 +353,25 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         if (!await auth.CanImportDataAsync(HttpContext, cancellationToken) &&
             !await auth.CanManageStorageAsync(HttpContext, cancellationToken))
             return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
-        if (string.IsNullOrWhiteSpace(request.Title) || request.Quantity < 1 || request.Inventory < 0 ||
+        if (string.IsNullOrWhiteSpace(request.Title) || request.Quantity < 1 || request.ExpectedInventory < 0 || request.ActualInventory < 0 ||
             request.UnitPrice < 0 || request.WeightGrams < 0 || request.WeightOunces < 0 || request.TotalCost < 0 || request.WhatnotAuctionSafePrice < 0)
             return BadRequest("Enter a title and valid non-negative values.");
         var product = await db.LiveStreamBidProducts.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (product is null) return NotFound();
         product.Title = request.Title.Trim();
         product.ActualSku = string.IsNullOrWhiteSpace(request.ActualSku) ? null : request.ActualSku.Trim();
-        product.WhatnotAuctionSafePrice = CalculateWhatnotSafePrice(request.TotalCost, await GetSafePricingExchangeRateAsync(cancellationToken));
+        product.WhatnotAuctionSafePrice = WhatnotSafePriceCalculator.Calculate(request.TotalCost, await GetSafePricingExchangeRateAsync(cancellationToken));
+        product.ItemCode = WhatnotSafePriceCalculator.ToItemCode(product.WhatnotAuctionSafePrice);
         product.Quantity = request.Quantity;
-        product.Inventory = request.Inventory;
+        // In the edit form Inventory represents the physically counted stock.
+        // Expected inventory remains the imported/batch quantity of record.
+        product.Inventory = request.ExpectedInventory;
+        product.ActualInventory = request.ActualInventory;
         product.UnitPrice = request.UnitPrice;
         product.WeightGrams = request.WeightGrams;
         product.WeightOunces = request.WeightOunces ?? (request.WeightGrams.HasValue ? decimal.Round(request.WeightGrams.Value / 28.349523125m, 4) : null);
         product.Material = string.IsNullOrWhiteSpace(request.Material) ? null : request.Material.Trim();
         product.TotalCost = request.TotalCost;
-        product.IsSold = request.Inventory == 0;
         product.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(product));
@@ -398,7 +413,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     }
 
     private static LiveStreamBidProductDto ToDto(LiveStreamBidProduct item) => new(
-        item.Id, item.SourceProductId, item.BatchNumber, item.BatchProductNumber, item.ActualSku, item.RequiresLocalLabel, item.WhatnotAuctionSafePrice, NormalizeBidCode(item.Uuid), item.Title, item.Quantity, item.Inventory, item.ActualInventory, item.UnitPrice, item.WeightGrams,
+        item.Id, item.SourceProductId, item.BatchNumber, item.BatchProductNumber, item.ActualSku, item.RequiresLocalLabel, item.WhatnotAuctionSafePrice, item.ItemCode, NormalizeBidCode(item.Uuid), item.Title, item.Quantity, item.Inventory, item.ActualInventory, item.UnitPrice, item.WeightGrams,
         item.WeightOunces, item.Material, EffectiveCost(item), item.ImportedFileName, item.IsSold, item.SoldAt, item.CreatedAt, item.UpdatedAt);
 
     private static int ParseBatchNumber(string value) =>
@@ -411,35 +426,6 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     {
         try { return (await exchangeRates.GetRmbToUsdAsync(cancellationToken)).Rate; }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException) { return 0.15m; }
-    }
-
-    private static decimal? CalculateWhatnotSafePrice(decimal? totalCostRmb, decimal rmbToUsdRate)
-    {
-        if (!totalCostRmb.HasValue) return null;
-        const decimal commissionRate = 0.08m;
-        const decimal processingRate = 0.029m;
-        const decimal feeTaxReserveRate = 0.01m;
-        const decimal fixedProcessingFee = 0.30m;
-        const decimal assumedBuyerShippingAndTax = 10.00m;
-        const decimal packagingReserve = 0.25m;
-        const decimal hostLaborCostPerPackage = 25m / 60m;
-        const decimal costSafetyBufferRate = 0.10m;
-        var protectedCost = totalCostRmb.Value * rmbToUsdRate * (1 + costSafetyBufferRate) + packagingReserve + hostLaborCostPerPackage;
-        var fixedAndAncillaryFees = fixedProcessingFee + assumedBuyerShippingAndTax * processingRate;
-        var retainedSaleRate = 1 - commissionRate - processingRate - feeTaxReserveRate;
-        return decimal.Ceiling((protectedCost + fixedAndAncillaryFees) / retainedSaleRate);
-    }
-
-    private async Task PopulateMissingWhatnotSafePricesAsync(CancellationToken cancellationToken)
-    {
-        var products = await db.LiveStreamBidProducts
-            .Where(item => item.TotalCost != null)
-            .ToListAsync(cancellationToken);
-        if (products.Count == 0) return;
-        var rate = await GetSafePricingExchangeRateAsync(cancellationToken);
-        foreach (var product in products)
-            product.WhatnotAuctionSafePrice = CalculateWhatnotSafePrice(product.TotalCost, rate);
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static LiveStreamBidSaleDto ToSaleDto(LiveStreamBidSale item) => new(
@@ -491,6 +477,38 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
             includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
     }
+
+    private async Task<(string?[] Resolved, Dictionary<int, (string Original, string New)> Changes)> ResolveImportedUuidsAsync(
+        IReadOnlyList<CreateLiveStreamBidListRow> rows, CancellationToken cancellationToken)
+    {
+        var existing = await db.LiveStreamBidProducts.AsNoTracking().Select(item => item.Uuid).ToListAsync(cancellationToken);
+        var used = existing.Select(NormalizeBidCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var resolved = new string?[rows.Count];
+        var changes = new Dictionary<int, (string Original, string New)>();
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var external = rows[index].ExternalUuid;
+            if (string.IsNullOrWhiteSpace(external)) continue;
+            var original = NormalizeBidCode(external);
+            if (!string.IsNullOrWhiteSpace(original) && used.Add(original))
+            {
+                resolved[index] = original;
+                continue;
+            }
+
+            string replacement;
+            do replacement = Guid.NewGuid().ToString().ToUpperInvariant();
+            while (!used.Add(replacement));
+            resolved[index] = replacement;
+            changes[index] = (original, replacement);
+        }
+        return (resolved, changes);
+    }
+
+    private static IReadOnlyList<LiveStreamBidRegeneratedUuidDto> BuildRegeneratedUuidDtos(
+        IReadOnlyList<LiveStreamBidProduct> products, IReadOnlyDictionary<int, (string Original, string New)> changes) =>
+        changes.OrderBy(change => change.Key).Select(change => new LiveStreamBidRegeneratedUuidDto(
+            change.Key + 2, products[change.Key].Id, change.Value.Original, change.Value.New, products[change.Key].Title)).ToArray();
 
     private static string NormalizeBidCode(string value)
     {

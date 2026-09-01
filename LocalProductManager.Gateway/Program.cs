@@ -13,6 +13,12 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 const string serviceName = "inventory-https-gateway";
 const string meterName = "LocalProductManager.Gateway";
+const long maximumRequestBodySize = 250L * 1024 * 1024;
+
+// Large spreadsheet imports pass through this gateway before reaching the API.
+// Keep the gateway limit at least as large as the largest API import endpoint.
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = maximumRequestBodySize);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

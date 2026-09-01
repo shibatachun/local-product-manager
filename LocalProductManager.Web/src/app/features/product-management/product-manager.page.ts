@@ -11,6 +11,7 @@ import {
   CurrentUser,
   Platform,
   ProductDetail,
+  ProductExtendedData,
   ProductListItem,
   ProductListing,
   ImageHostBrowseResult,
@@ -23,7 +24,10 @@ import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService, ProductImageFile } from '../../core/product-api.service';
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
 import { ProgressiveImageDirective } from '../../core/progressive-image.directive';
+import { productCategoryNumber } from '../../core/product-inventory-category';
 import { defaultProductLabelPresets, LabelSettings, loadSavedLabelPresets, SavedLabelPreset } from '../../core/label-preset-storage';
+import { LabelPrintingApiService } from '../../core/label-printing-api.service';
+import { LiveStreamBidProductApiService } from '../../core/live-stream-bid-product-api.service';
 import { FileStoragePanelComponent } from '../file-storage/file-storage-panel.component';
 import { VideoTrendPanelComponent } from '../video-trend/video-trend-panel.component';
 import { UnitConverterPanelComponent } from '../unit-converter/unit-converter-panel.component';
@@ -34,6 +38,8 @@ import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
 import { LabelMakerPage } from '../label-maker/label-maker.page';
 import { LiveStreamBidProductsPanelComponent } from '../live-stream-bid-products/live-stream-bid-products-panel.component';
 import { AutoListingPanelComponent } from '../auto-listing/auto-listing-panel.component';
+import { DomesticProductsPanelComponent } from '../domestic-products/domestic-products-panel.component';
+import { DomesticProduct, DomesticProductApiService } from '../../core/domestic-product-api.service';
 import {
   AsinRelationshipRow,
   LogisticsOption,
@@ -60,15 +66,25 @@ interface ProductTableColumn {
   sortKey?: ProductSortKey;
 }
 
+interface DomesticSyncField {
+  key: string;
+  group: string;
+  label: string;
+  currentValue: string;
+  domesticValue: string;
+  selected: boolean;
+}
+
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent, AutoListingPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent, AutoListingPanelComponent, DomesticProductsPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
     './product-manager.pricing.css',
     './product-manager.modals.css',
     './product-manager.detail.css',
+    './product-manager.domestic-sync.css',
   ],
 })
 export class ProductManagerPage {
@@ -79,6 +95,9 @@ export class ProductManagerPage {
   readonly api = inject(ProductApiService);
   readonly authApi = inject(AuthApiService);
   private readonly inventoryApi = inject(InventoryApiService);
+  private readonly labelPrinting = inject(LabelPrintingApiService);
+  private readonly bidProductApi = inject(LiveStreamBidProductApiService);
+  private readonly domesticProductApi = inject(DomesticProductApiService);
   private readonly productColumnStorageKey = 'lpm-product-table-column-widths-v1';
   private readonly productDraftStorageKey = 'lpm-add-product-draft-v1';
   private readonly productDraftDbName = 'lpm-product-drafts';
@@ -100,11 +119,19 @@ export class ProductManagerPage {
 
   readonly currentUser = signal<CurrentUser | null>(null);
   readonly products = signal<ProductListItem[]>([]);
-  readonly productSortKey = signal<ProductSortKey | null>(null);
+  readonly productSortKey = signal<ProductSortKey | null>('inventoryId');
   readonly productSortDirection = signal<ProductSortDirection>('asc');
   readonly marketingProducts = signal<ProductListItem[]>([]);
   readonly selectedProduct = signal<ProductDetail | null>(null);
   readonly detailLocations = signal<ProductScannerLocation[]>([]);
+  readonly detailLocationOptions = signal<ProductScannerLocation[]>([]);
+  detailMoveSourceKey = '';
+  detailMoveTargetKey = '';
+  detailMoveSourceRow = '';
+  detailMoveTargetRow = '';
+  detailMoveSourceRack = '';
+  detailMoveTargetRack = '';
+  detailMoveQuantity = 1;
   readonly search = signal('');
   readonly marketingSearch = signal('');
   readonly marketingProductFilter = signal<MarketingProductFilter>('family-one');
@@ -113,6 +140,9 @@ export class ProductManagerPage {
   readonly mobileMenuOpen = signal(false);
   readonly loading = signal(false);
   readonly wizardOpen = signal(false);
+  readonly pieceEstimatorOpen = signal(false);
+  pieceEstimatorUnitWeight: number | null = null;
+  pieceEstimatorBagWeight: number | null = null;
   readonly pendingBinTarget = signal<{ levelId: number; binNumber: number; locationCode: string } | null>(null);
   readonly createdBinProduct = signal<ProductListItem | null>(null);
   readonly createdBinLocation = signal('');
@@ -120,8 +150,25 @@ export class ProductManagerPage {
   readonly printPresetTarget = signal<'created' | 'detail' | null>(null);
   readonly savedPrintPresets = signal<SavedLabelPreset[]>([]);
   readonly importOpen = signal(false);
+  readonly dataExportOpen = signal(false);
   readonly unitConverterOpen = signal(false);
   readonly detailOpen = signal(false);
+  readonly domesticCostLookupOpen = signal(false);
+  readonly domesticCostLookupLoading = signal(false);
+  readonly domesticCostLookupResults = signal<DomesticProduct[]>([]);
+  readonly domesticCostLookupTotal = signal(0);
+  readonly domesticCostLookupError = signal('');
+  readonly domesticLookupPurpose = signal<'cost' | 'sync'>('cost');
+  readonly domesticSyncReviewOpen = signal(false);
+  readonly domesticSyncSaving = signal(false);
+  readonly domesticSyncProduct = signal<DomesticProduct | null>(null);
+  readonly domesticSyncRecord = signal<ProductExtendedData | null>(null);
+  readonly domesticSyncFields = signal<DomesticSyncField[]>([]);
+  readonly domesticSyncMessage = signal('');
+  domesticSourcePackQuantity: number | null = null;
+  domesticLocalPackQuantity: number | null = null;
+  readonly detailMoveOpen = signal(false);
+  readonly detailMoveStep = signal(1);
   private detailReturnsToInventory = false;
   readonly wizardStep = signal(1);
   readonly notice = signal('');
@@ -172,6 +219,7 @@ export class ProductManagerPage {
     { value: 'KIT', label: 'KIT' },
     { value: 'BEAD', label: 'BEAD' },
     { value: 'BROOCH', label: 'BROOCH' },
+    { value: 'CABOCHON', label: 'CABOCHON' },
     { value: 'UNKNOWN', label: 'UNKNOWN' },
     { value: 'BAG', label: 'BAG' },
     { value: 'PACKAGE', label: 'PACKAGE' },
@@ -492,6 +540,8 @@ export class ProductManagerPage {
     return this.productSortDirection() === 'asc' ? '↑' : '↓';
   }
 
+  productCategoryNumber(product: ProductListItem): string { return productCategoryNumber(product); }
+
   private compareProducts(left: ProductListItem, right: ProductListItem, sortKey: ProductSortKey): number {
     const value = (product: ProductListItem): string => {
       switch (sortKey) {
@@ -588,6 +638,53 @@ export class ProductManagerPage {
       URL.revokeObjectURL(url);
       this.showNotice('Product Excel exported.');
     });
+  }
+
+  async exportAllLocalProductData(): Promise<void> {
+    await this.perform(async () => {
+      const products = this.flattenProducts(await this.api.search());
+      const records = await Promise.all(products.map(async product => {
+        const [detail, extendedData] = await Promise.all([
+          this.api.getProduct(product.id),
+          this.api.getExtendedData(product.id),
+        ]);
+        return this.withoutImages({ ...detail, extendedData });
+      }));
+      this.downloadJson(`local-products-all-data-${this.exportTimestamp()}.json`, {
+        exportedAt: new Date().toISOString(), productCount: records.length, products: records,
+      });
+      this.showNotice('All local product data exported without images.');
+    });
+  }
+
+  async exportAllBidProductData(): Promise<void> {
+    await this.perform(async () => {
+      const products = (await this.bidProductApi.list()).map(product => this.withoutImages(product));
+      this.downloadJson(`bid-products-all-data-${this.exportTimestamp()}.json`, {
+        exportedAt: new Date().toISOString(), productCount: products.length, products,
+      });
+      this.showNotice('All BID product data exported without images.');
+    });
+  }
+
+  private withoutImages<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(item => this.withoutImages(item)) as T;
+    if (value === null || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !key.toLowerCase().includes('image'))
+      .map(([key, item]) => [key, this.withoutImages(item)])) as T;
+  }
+
+  private downloadJson(fileName: string, value: unknown): void {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   storeLink(platform: Platform): StoreLink | undefined {
@@ -697,6 +794,7 @@ export class ProductManagerPage {
   pageEyebrow(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Catalog',
+      domesticProducts: 'China-side catalog',
       autoListing: 'Automated commerce',
       bidProducts: 'Live commerce',
       inventory: 'Warehouse operations',
@@ -716,6 +814,7 @@ export class ProductManagerPage {
   pageTitle(): string {
     const labels: Record<ViewMode, string> = {
       products: 'Product management',
+      domesticProducts: 'Domestic Product Information',
       autoListing: 'Auto Listing',
       bidProducts: 'Live Stream Bid Products',
       inventory: 'Inventory Manager',
@@ -1031,9 +1130,43 @@ export class ProductManagerPage {
   }
 
   closeWizard(): void {
+    this.pieceEstimatorOpen.set(false);
     this.saveWizardDraft();
     this.wizardOpen.set(false);
     this.pendingBinTarget.set(null);
+  }
+
+  openPieceEstimator(): void {
+    this.pieceEstimatorOpen.set(true);
+  }
+
+  closePieceEstimator(): void {
+    this.pieceEstimatorOpen.set(false);
+  }
+
+  pieceEstimatorRawCount(): number | null {
+    const unitWeight = Number(this.pieceEstimatorUnitWeight);
+    const bagWeight = Number(this.pieceEstimatorBagWeight);
+    if (!Number.isFinite(unitWeight) || !Number.isFinite(bagWeight) || unitWeight <= 0 || bagWeight <= 0)
+      return null;
+    return bagWeight / unitWeight;
+  }
+
+  pieceEstimatorRoundedCount(): number | null {
+    const raw = this.pieceEstimatorRawCount();
+    return raw === null ? null : Math.max(5, Math.round(raw / 5) * 5);
+  }
+
+  applyPieceEstimateToProductName(): void {
+    const count = this.pieceEstimatorRoundedCount();
+    if (count === null) {
+      this.showNotice('Enter a unit weight and total bag weight greater than zero.');
+      return;
+    }
+    const baseName = this.createForm.productName.trim().replace(/\s+\d+\s*pcs\s*$/i, '').trim();
+    this.createForm.productName = `${baseName}${baseName ? ' ' : ''}${count}pcs`;
+    this.pieceEstimatorOpen.set(false);
+    this.saveWizardDraft();
   }
 
   saveWizardDraft(): void {
@@ -1206,6 +1339,8 @@ export class ProductManagerPage {
   async finishCreate(): Promise<void> {
     await this.perform(async () => {
       if (!await this.checkCreateSkuDuplicate()) return;
+      const binTarget = this.pendingBinTarget();
+      const requestedQuantity = Math.max(1, Math.floor(Number(this.createForm.qty) || 0));
       const product = await this.api.createProduct({
         localInventoryId: this.createForm.localInventoryId || null,
         sku: this.createForm.sku,
@@ -1215,7 +1350,10 @@ export class ProductManagerPage {
         cost: this.costInputToRmb(this.createForm.cost, this.createForm.costCurrency),
         originalCost: this.createForm.originalCost,
         salePrice: this.createForm.salePrice,
-        qty: this.createForm.qty,
+        // A bin assignment is written through InventoryWriteService, which also
+        // updates the product total. Start at zero here so the quantity is not
+        // counted once during product creation and a second time for the bin.
+        qty: binTarget ? 0 : this.createForm.qty,
         weight: this.createForm.weight,
         length: this.createForm.length,
         width: this.createForm.width,
@@ -1245,13 +1383,11 @@ export class ProductManagerPage {
         });
       }
 
-      const binTarget = this.pendingBinTarget();
       if (binTarget) {
-        const quantity = Math.max(1, Math.floor(Number(this.createForm.qty) || 0));
         await this.inventoryApi.setInventory(
           binTarget.levelId,
           product.id,
-          quantity,
+          requestedQuantity,
           binTarget.binNumber,
         );
         this.pendingBinTarget.set(null);
@@ -1260,7 +1396,7 @@ export class ProductManagerPage {
         await this.inventoryPanel?.refreshAfterProductAdded(binTarget.levelId, product.id);
         this.createdBinProduct.set(product);
         this.createdBinLocation.set(binTarget.locationCode);
-        this.createdBinQuantity.set(quantity);
+        this.createdBinQuantity.set(requestedQuantity);
         await this.clearWizardDraft();
         setTimeout(() => this.renderCreatedBarcode());
         if (imageUploadWarning) this.showNotice(`Product created, but image upload failed: ${imageUploadWarning}`);
@@ -1308,6 +1444,24 @@ export class ProductManagerPage {
     setTimeout(() => this.printProductLabelWithSettings(target, settings));
   }
 
+  async printProductLabelWithBarTender(): Promise<void> {
+    const target = this.printPresetTarget();
+    const product = target === 'created' ? this.createdBinProduct() : this.selectedProduct();
+    if (!target || !product) return;
+
+    await this.perform(async () => {
+      const result = await this.labelPrinting.printInventory([{
+        recordType: 'inventory-product',
+        recordId: this.createdBarcodeValue(product),
+        title: product.productName,
+        sku: product.sku,
+        copies: 1,
+      }]);
+      this.closePrintPresetSelector();
+      this.showNotice(result.message);
+    });
+  }
+
   private printProductLabelWithSettings(target: 'created' | 'detail', settings: LabelSettings): void {
     const product = target === 'created' ? this.createdBinProduct() : this.selectedProduct();
     const svg = target === 'created' ? this.createdBarcode?.nativeElement : this.detailBarcode?.nativeElement;
@@ -1318,7 +1472,7 @@ export class ProductManagerPage {
     const pageWidth = settings.widthMm;
     const pageHeight = settings.heightMm;
     const inventoryId = product.localInventoryId || `INV-${product.id}`;
-    const categoryId = product.categoryInventoryId || 'UNKNOWN';
+    const categoryId = productCategoryNumber(product);
     const content = [
       settings.showName ? `<strong class="product-name">${this.escapeHtml(product.productName)}</strong>` : '',
       `<div class="barcode">${qrMarkup}</div>`,
@@ -1367,7 +1521,7 @@ export class ProductManagerPage {
       strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
       svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
     </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
-      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(product.categoryInventoryId || 'UNKNOWN')}</code>
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(productCategoryNumber(product))}</code>
       <small>${this.escapeHtml(product.sku)} · ${this.escapeHtml(this.createdBinLocation())}</small></div></body></html>`);
     doc.close();
     setTimeout(() => {
@@ -1415,7 +1569,7 @@ export class ProductManagerPage {
       strong{display:block;max-width:46mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
       svg{width:15mm;height:15mm}code{font-size:9px;font-weight:700}small{font-size:7px}
     </style></head><body><div class="label"><strong>${this.escapeHtml(product.productName)}</strong>${qrMarkup}
-      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(product.categoryInventoryId || 'UNKNOWN')}</code>
+      <code>${this.escapeHtml(product.localInventoryId || `INV-${product.id}`)} · ${this.escapeHtml(productCategoryNumber(product))}</code>
       <small>${this.escapeHtml(product.sku)}</small></div></body></html>`);
     doc.close();
     setTimeout(() => {
@@ -1454,7 +1608,17 @@ export class ProductManagerPage {
         this.inventoryApi.productLocations(productId),
       ]);
       this.selectedProduct.set(product);
+      this.detailLocationOptions.set(locations);
       this.detailLocations.set(locations.filter(location => location.qty > 0));
+      this.detailMoveSourceKey = this.detailUnassignedQty(product, locations) > 0 ? 'unassigned' : locations.find(location => location.qty > 0)?.key ?? '';
+      this.detailMoveTargetKey = '';
+      this.detailMoveSourceRack = this.detailMoveSourceKey === 'unassigned' ? 'unassigned'
+        : this.locationRackKey(locations.find(location => location.key === this.detailMoveSourceKey));
+      this.detailMoveSourceRow = this.detailMoveSourceKey === 'unassigned' ? 'unassigned'
+        : this.locationRowKey(locations.find(location => location.key === this.detailMoveSourceKey));
+      this.detailMoveTargetRow = '';
+      this.detailMoveTargetRack = '';
+      this.detailMoveQuantity = 1;
       this.editForm.localInventoryId = product.localInventoryId ?? '';
       this.editForm.sku = product.sku;
       this.editForm.productName = product.productName;
@@ -1486,8 +1650,12 @@ export class ProductManagerPage {
   }
 
   async closeDetail(): Promise<void> {
+    this.closeDomesticCostLookup();
+    this.closeDomesticSyncReview();
+    this.detailMoveOpen.set(false);
     this.detailOpen.set(false);
     this.detailLocations.set([]);
+    this.detailLocationOptions.set([]);
     this.detailProductImages.set([]);
     if (this.detailReturnsToInventory) {
       this.detailReturnsToInventory = false;
@@ -1495,9 +1663,506 @@ export class ProductManagerPage {
     }
   }
 
+  async searchDomesticCost(): Promise<void> {
+    this.domesticLookupPurpose.set('cost');
+    await this.searchDomesticProducts();
+  }
+
+  async startDomesticSync(): Promise<void> {
+    this.domesticLookupPurpose.set('sync');
+    await this.searchDomesticProducts();
+  }
+
+  private async searchDomesticProducts(): Promise<void> {
+    const sku = this.editForm.sku.trim();
+    if (!sku || this.domesticCostLookupLoading()) return;
+    this.domesticCostLookupOpen.set(true);
+    this.domesticCostLookupLoading.set(true);
+    this.domesticCostLookupError.set('');
+    this.domesticCostLookupResults.set([]);
+    try {
+      const result = await this.domesticProductApi.search(sku, 'asc', 1, 100);
+      this.domesticCostLookupResults.set(result.items);
+      this.domesticCostLookupTotal.set(result.total);
+    } catch {
+      this.domesticCostLookupError.set('Could not search the domestic product database.');
+    } finally {
+      this.domesticCostLookupLoading.set(false);
+    }
+  }
+
+  closeDomesticCostLookup(): void {
+    this.domesticCostLookupOpen.set(false);
+    this.domesticCostLookupLoading.set(false);
+    this.domesticCostLookupResults.set([]);
+    this.domesticCostLookupTotal.set(0);
+    this.domesticCostLookupError.set('');
+  }
+
+  useDomesticCost(product: DomesticProduct): void {
+    if (product.costRmb === null) return;
+    this.editForm.costCurrency = 'rmb';
+    this.editForm.cost = product.costRmb;
+    this.closeDomesticCostLookup();
+  }
+
+  async reviewDomesticProduct(item: DomesticProduct): Promise<void> {
+    const product = this.selectedProduct();
+    if (!product) return;
+    this.domesticCostLookupLoading.set(true);
+    this.domesticCostLookupError.set('');
+    try {
+      const record = await this.api.getExtendedData(product.id);
+      this.domesticSyncProduct.set(item);
+      this.domesticSyncRecord.set(record);
+      this.domesticSyncFields.set(this.buildDomesticSyncFields(item, record));
+      this.domesticSourcePackQuantity = null;
+      this.domesticLocalPackQuantity = null;
+      this.domesticSyncMessage.set('');
+      this.domesticCostLookupOpen.set(false);
+      this.domesticSyncReviewOpen.set(true);
+    } catch {
+      this.domesticCostLookupError.set('Could not load the product fields for review.');
+    } finally {
+      this.domesticCostLookupLoading.set(false);
+    }
+  }
+
+  toggleDomesticSyncField(key: string, selected: boolean): void {
+    this.domesticSyncFields.update(fields => fields.map(field => field.key === key ? { ...field, selected } : field));
+  }
+
+  selectAllDomesticSyncFields(selected: boolean): void {
+    this.domesticSyncFields.update(fields => fields.map(field => ({ ...field, selected })));
+  }
+
+  closeDomesticSyncReview(): void {
+    this.domesticSyncReviewOpen.set(false);
+    this.domesticSyncProduct.set(null);
+    this.domesticSyncRecord.set(null);
+    this.domesticSyncFields.set([]);
+    this.domesticSyncMessage.set('');
+    this.domesticSourcePackQuantity = null;
+    this.domesticLocalPackQuantity = null;
+  }
+
+  recalculateDomesticPackageValues(): void {
+    const domestic = this.domesticSyncProduct();
+    const sourceQty = Number(this.domesticSourcePackQuantity);
+    const localQty = Number(this.domesticLocalPackQuantity);
+    if (!domestic || !Number.isFinite(sourceQty) || !Number.isFinite(localQty) || sourceQty <= 0 || localQty <= 0)
+      return;
+
+    const ratio = localQty / sourceQty;
+    this.domesticSyncFields.update(fields => fields.map(field => {
+      if (field.key === 'cost' && domestic.costRmb !== null)
+        return { ...field, domesticValue: (domestic.costRmb * ratio).toFixed(1), selected: true };
+      if (field.key === 'weight' && domestic.weightGrams !== null)
+        return { ...field, domesticValue: `${(domestic.weightGrams * ratio).toFixed(1)} g`, selected: true };
+      return field;
+    }));
+  }
+
+  async applyDomesticSync(): Promise<void> {
+    const product = this.selectedProduct();
+    const sourceDomestic = this.domesticSyncProduct();
+    const record = this.domesticSyncRecord();
+    if (!product || !sourceDomestic || !record || this.domesticSyncSaving()) return;
+    const selected = new Set(this.domesticSyncFields().filter(field => field.selected).map(field => field.key));
+    if (!selected.size) return;
+    const domestic = this.reviewedDomesticProduct(sourceDomestic);
+    this.domesticSyncSaving.set(true);
+    this.domesticSyncMessage.set('');
+    try {
+      this.applyDomesticExtendedFields(domestic, record, selected);
+      if (selected.has('cost') && domestic.costRmb !== null) { this.editForm.costCurrency = 'rmb'; this.editForm.cost = domestic.costRmb; }
+      if (selected.has('weight') && domestic.weightGrams !== null) this.editForm.weight = domestic.weightGrams / 28.349523125;
+      if (selected.has('salePrice')) this.editForm.salePrice = this.domesticNumber(domestic, 'SKU Retail Price (USD)') ?? this.domesticNumber(domestic, 'Retail Price (USD)') ?? domestic.minimumSalePriceUsd;
+      if (selected.has('productName') && domestic.productName) this.editForm.productName = domestic.productName;
+
+      await Promise.all([
+        this.api.saveExtendedData(product.id, record),
+        this.api.updateProduct(product.id, {
+          localInventoryId: this.editForm.localInventoryId || product.localInventoryId,
+          sku: this.editForm.sku, productName: this.editForm.productName,
+          category: this.editForm.category || null, inventoryCategory: this.editForm.inventoryCategory,
+          cost: this.costInputToRmb(this.editForm.cost, this.editForm.costCurrency),
+          originalCost: this.editForm.originalCost, salePrice: this.editForm.salePrice,
+          qty: this.editForm.qty, weight: this.editForm.weight, length: this.editForm.length,
+          width: this.editForm.width, height: this.editForm.height,
+          imagePath: this.editForm.imagePath || null, imageSource: this.imageSourceFor(this.editForm.imagePath),
+        }),
+      ]);
+      await this.loadProducts();
+      await this.openDetail(product.id);
+      const refreshedRecord = await this.api.getExtendedData(product.id);
+      this.domesticSyncRecord.set(refreshedRecord);
+      this.domesticSyncProduct.set(domestic);
+      this.domesticSyncFields.set(this.buildDomesticSyncFields(domestic, refreshedRecord).map(field => ({ ...field, selected: false })));
+      this.domesticSyncMessage.set('Saved. You can continue editing values and synchronize again.');
+      this.showNotice('Selected domestic product fields were synchronized.');
+    } catch {
+      this.domesticSyncMessage.set('Synchronization failed. Review the values and try again.');
+      this.showNotice('Domestic product synchronization failed. Review the product before retrying.');
+    } finally {
+      this.domesticSyncSaving.set(false);
+    }
+  }
+
+  private reviewedDomesticProduct(source: DomesticProduct): DomesticProduct {
+    const item: DomesticProduct = { ...source, details: { ...source.details } };
+    const values = new Map(this.domesticSyncFields().map(field => [field.key, field.domesticValue.trim()]));
+    const value = (key: string): string => values.get(key) ?? '';
+    const detailKeys: Record<string, string> = {
+      variantName: 'Product Attributes', unit: 'Unit', style: 'Style', description: 'Description', developmentDate: 'Development Date',
+      upc: 'UPC', itemNumber: 'Item Number', procurementChannel: 'Procurement Channel', buyer: 'Buyer',
+      purchasePrice: 'Minimum Purchase Unit Price', moq: 'Minimum Order Quantity', countryOfOrigin: 'Country of Origin',
+      hsCode: 'Customs Code', declaredValue: 'Declared Value (USD)', containsBattery: 'Contains Battery', containsPowder: 'Is Powder',
+      containsLiquid: 'Is Liquid', containsMagnet: 'Contains Magnet', shippingMethod: 'Shipping Method', expirationDate: 'Product Expiration Date',
+      packQuantity: 'Minimum Pack Quantity', packageLength: 'Inner Box Length (cm)', packageWidth: 'Inner Box Width (cm)',
+      packageHeight: 'Inner Box Height (cm)', packageWeight: 'Package Specification Weight (g)', cartonWeight: 'Outer Carton Gross Weight',
+      packagingCost: 'Inner Packaging Cost', packagingDifficulty: 'Packaging Difficulty Factor', labelRequirements: 'SKU Label Notes',
+      salePrice: 'SKU Retail Price (USD)',
+    };
+    for (const [fieldKey, detailKey] of Object.entries(detailKeys)) if (values.has(fieldKey)) item.details[detailKey] = value(fieldKey);
+    if (values.has('cost')) item.costRmb = this.looseNumber(value('cost'));
+    if (values.has('weight')) item.weightGrams = this.looseNumber(value('weight'));
+    if (values.has('salePrice')) item.minimumSalePriceUsd = this.looseNumber(value('salePrice'));
+    if (values.has('productName')) item.productName = value('productName') || null;
+    if (values.has('externalProductCode')) item.productCode = value('externalProductCode') || null;
+    if (values.has('material')) item.material = value('material') || null;
+    if (values.has('specification')) item.specification = value('specification') || null;
+    if (values.has('chinaSku')) item.sku = value('chinaSku') || source.sku;
+    if (values.has('supplier')) item.supplierName = value('supplier') || null;
+    if (values.has('declarationName')) item.englishDeclarationName = value('declarationName') || null;
+    if (values.has('procurementLinks')) {
+      const links = value('procurementLinks').split(/\r?\n/).map(link => link.trim()).filter(Boolean);
+      for (let index = 1; index <= 6; index++) item.details[`Procurement URL ${index}`] = links[index - 1] ?? '';
+    }
+    return item;
+  }
+
+  private looseNumber(value: string): number | null {
+    const match = value.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const result = Number(match[0]);
+    return Number.isFinite(result) ? result : null;
+  }
+
+  private buildDomesticSyncFields(item: DomesticProduct, record: ProductExtendedData): DomesticSyncField[] {
+    const rows: Omit<DomesticSyncField, 'selected'>[] = [];
+    const add = (key: string, group: string, label: string, domesticValue: unknown, currentValue: unknown): void => {
+      const source = this.displaySyncValue(domesticValue);
+      if (!source) return;
+      const current = this.displaySyncValue(currentValue);
+      rows.push({ key, group, label, domesticValue: source, currentValue: current || '—' });
+    };
+    add('cost', 'Main product', 'Cost (RMB)', item.costRmb, this.editForm.cost);
+    add('weight', 'Main product', 'Weight', item.weightGrams === null ? null : `${item.weightGrams} g`, this.editForm.weight === null ? null : `${this.editForm.weight} oz`);
+    add('salePrice', 'Main product', 'Retail price (USD)', this.domesticString(item, 'SKU Retail Price (USD)') || this.domesticString(item, 'Retail Price (USD)'), this.editForm.salePrice);
+    add('productName', 'Main product', 'Product name', item.productName, this.editForm.productName);
+    add('externalProductCode', 'Product details', 'External product code', item.productCode, record.details.externalProductCode);
+    add('variantName', 'Product details', 'Variant', this.domesticString(item, 'Product Attributes') || this.domesticString(item, 'Style'), record.details.variantName);
+    add('material', 'Product details', 'Material', item.material, record.details.material);
+    add('specification', 'Product details', 'Specification', item.specification, record.details.specification);
+    add('unit', 'Product details', 'Unit', this.domesticString(item, 'Unit'), record.details.unit);
+    add('style', 'Product details', 'Style', this.domesticString(item, 'Style'), record.details.style);
+    add('description', 'Product details', 'Description', this.domesticString(item, 'Description'), record.details.description);
+    add('developmentDate', 'Product details', 'Development date', this.domesticString(item, 'Development Date'), record.details.developmentDate);
+    add('upc', 'Identifiers', 'UPC', this.domesticString(item, 'UPC'), record.identifiers.find(value => value.identifierType === 'UPC')?.value);
+    add('chinaSku', 'Identifiers', 'China SKU', item.sku, record.identifiers.find(value => value.identifierType === 'China SKU')?.value);
+    add('itemNumber', 'Identifiers', 'Item number', this.domesticString(item, 'Item Number'), record.identifiers.find(value => value.identifierType === 'Item number')?.value);
+    add('supplier', 'Procurement', 'Supplier', item.supplierName, record.suppliers[0]?.name);
+    add('procurementChannel', 'Procurement', 'Procurement channel', this.domesticString(item, 'Procurement Channel'), record.suppliers[0]?.procurementChannel);
+    add('buyer', 'Procurement', 'Buyer', this.domesticString(item, 'Buyer'), record.suppliers[0]?.buyer);
+    add('purchasePrice', 'Procurement', 'Minimum purchase price', this.domesticString(item, 'Minimum Purchase Unit Price'), record.suppliers[0]?.minimumPurchasePrice);
+    add('moq', 'Procurement', 'Minimum order quantity', this.domesticString(item, 'Minimum Order Quantity'), record.suppliers[0]?.minimumOrderQuantity);
+    add('procurementLinks', 'Procurement', 'Procurement links', [1,2,3,4,5,6].map(index => this.domesticString(item, `Procurement URL ${index}`)).filter(Boolean).join('\n'), record.suppliers[0]?.procurementLinks.map(link => link.url).join('\n'));
+    add('declarationName', 'Compliance', 'English declaration name', item.englishDeclarationName || item.chineseDeclarationName, record.compliance.declarationName);
+    add('countryOfOrigin', 'Compliance', 'Country of origin', this.domesticString(item, 'Country of Origin'), record.compliance.countryOfOrigin);
+    add('hsCode', 'Compliance', 'HS/customs code', this.domesticString(item, 'Customs Code'), record.compliance.hsCode);
+    add('declaredValue', 'Compliance', 'Declared value (USD)', this.domesticString(item, 'Declared Value (USD)'), record.compliance.declaredValue);
+    add('containsBattery', 'Compliance', 'Contains battery', this.domesticYesNo(item, 'Contains Battery'), this.yesNo(record.compliance.containsBattery));
+    add('containsPowder', 'Compliance', 'Contains powder', this.domesticYesNo(item, 'Is Powder'), this.yesNo(record.compliance.containsPowder));
+    add('containsLiquid', 'Compliance', 'Contains liquid', this.domesticYesNo(item, 'Is Liquid'), this.yesNo(record.compliance.containsLiquid));
+    add('containsMagnet', 'Compliance', 'Contains magnet', this.domesticYesNo(item, 'Contains Magnet'), this.yesNo(record.compliance.containsMagnet));
+    add('shippingMethod', 'Compliance', 'Shipping method', this.domesticString(item, 'Shipping Method'), record.compliance.shippingMethod);
+    add('expirationDate', 'Compliance', 'Expiration date', this.domesticString(item, 'Product Expiration Date'), record.compliance.expirationDate);
+    add('packQuantity', 'Packaging', 'Pack quantity', this.domesticString(item, 'Minimum Pack Quantity'), record.packaging.packQuantity);
+    add('packageLength', 'Packaging', 'Package length (cm)', this.domesticString(item, 'Inner Box Length (cm)'), record.packaging.packageLength);
+    add('packageWidth', 'Packaging', 'Package width (cm)', this.domesticString(item, 'Inner Box Width (cm)'), record.packaging.packageWidth);
+    add('packageHeight', 'Packaging', 'Package height (cm)', this.domesticString(item, 'Inner Box Height (cm)'), record.packaging.packageHeight);
+    add('packageWeight', 'Packaging', 'Package weight (g)', this.domesticString(item, 'Package Specification Weight (g)') || item.weightGrams, record.packaging.packageWeight);
+    add('cartonWeight', 'Packaging', 'Carton gross weight (g)', this.domesticString(item, 'Outer Carton Gross Weight'), record.packaging.cartonWeight);
+    add('packagingCost', 'Packaging', 'Packaging cost (RMB)', this.domesticString(item, 'Inner Packaging Cost') || this.domesticString(item, 'Outer Packaging Cost'), record.packaging.packagingCost);
+    add('packagingDifficulty', 'Packaging', 'Packaging difficulty', this.domesticString(item, 'Packaging Difficulty Factor'), record.packaging.packagingDifficulty);
+    add('labelRequirements', 'Packaging', 'Label requirements', this.domesticString(item, 'SKU Label Notes'), record.packaging.labelRequirements);
+    return rows.map(row => ({ ...row, selected: row.currentValue === '—' }));
+  }
+
+  private applyDomesticExtendedFields(item: DomesticProduct, record: ProductExtendedData, selected: Set<string>): void {
+    const setDetail = (key: keyof ProductExtendedData['details'], value: string | null): void => { if (selected.has(key) && value) record.details[key] = value as never; };
+    setDetail('externalProductCode', item.productCode);
+    setDetail('variantName', this.domesticString(item, 'Product Attributes') || this.domesticString(item, 'Style'));
+    setDetail('material', item.material);
+    setDetail('specification', item.specification);
+    setDetail('unit', this.domesticString(item, 'Unit'));
+    setDetail('style', this.domesticString(item, 'Style'));
+    setDetail('description', this.domesticString(item, 'Description'));
+    setDetail('developmentDate', this.domesticString(item, 'Development Date'));
+    this.upsertDomesticIdentifier(record, selected, 'upc', 'UPC', this.domesticString(item, 'UPC'));
+    this.upsertDomesticIdentifier(record, selected, 'chinaSku', 'China SKU', item.sku);
+    this.upsertDomesticIdentifier(record, selected, 'itemNumber', 'Item number', this.domesticString(item, 'Item Number'));
+
+    if (['supplier','procurementChannel','buyer','purchasePrice','moq','procurementLinks'].some(key => selected.has(key))) {
+      let supplier = record.suppliers.find(value => value.name === item.supplierName) ?? record.suppliers[0];
+      if (!supplier) { supplier = { name: item.supplierName || 'Domestic supplier', contactName: null, contactDetails: null, procurementChannel: '1688', buyer: null, minimumPurchasePrice: null, minimumOrderQuantity: null, currency: 'CNY', isPreferred: false, provenance: 'Domestic product XLSX', procurementLinks: [] }; record.suppliers.push(supplier); }
+      if (selected.has('supplier') && item.supplierName) supplier.name = item.supplierName;
+      if (selected.has('procurementChannel')) supplier.procurementChannel = this.domesticString(item, 'Procurement Channel');
+      if (selected.has('buyer')) supplier.buyer = this.domesticString(item, 'Buyer');
+      if (selected.has('purchasePrice')) supplier.minimumPurchasePrice = this.domesticNumber(item, 'Minimum Purchase Unit Price');
+      if (selected.has('moq')) supplier.minimumOrderQuantity = this.domesticInteger(item, 'Minimum Order Quantity');
+      if (selected.has('procurementLinks')) supplier.procurementLinks = [1,2,3,4,5,6].map(index => this.domesticString(item, `Procurement URL ${index}`)).filter((url): url is string => Boolean(url)).map((url, index) => ({ url, sortOrder: index, source: 'Domestic product XLSX' }));
+    }
+    const compliance = record.compliance;
+    if (selected.has('declarationName')) compliance.declarationName = item.englishDeclarationName || item.chineseDeclarationName;
+    if (selected.has('countryOfOrigin')) compliance.countryOfOrigin = this.domesticString(item, 'Country of Origin');
+    if (selected.has('hsCode')) compliance.hsCode = this.domesticString(item, 'Customs Code');
+    if (selected.has('declaredValue')) { compliance.declaredValue = this.domesticNumber(item, 'Declared Value (USD)'); compliance.declaredValueCurrency = 'USD'; }
+    if (selected.has('containsBattery')) compliance.containsBattery = this.domesticBool(item, 'Contains Battery');
+    if (selected.has('containsPowder')) compliance.containsPowder = this.domesticBool(item, 'Is Powder');
+    if (selected.has('containsLiquid')) compliance.containsLiquid = this.domesticBool(item, 'Is Liquid');
+    if (selected.has('containsMagnet')) compliance.containsMagnet = this.domesticBool(item, 'Contains Magnet');
+    if (selected.has('shippingMethod')) compliance.shippingMethod = this.domesticString(item, 'Shipping Method');
+    if (selected.has('expirationDate')) compliance.expirationDate = this.domesticString(item, 'Product Expiration Date');
+    const packaging = record.packaging;
+    if (selected.has('packQuantity')) packaging.packQuantity = this.domesticInteger(item, 'Minimum Pack Quantity');
+    if (selected.has('packageLength')) packaging.packageLength = this.domesticNumber(item, 'Inner Box Length (cm)');
+    if (selected.has('packageWidth')) packaging.packageWidth = this.domesticNumber(item, 'Inner Box Width (cm)');
+    if (selected.has('packageHeight')) packaging.packageHeight = this.domesticNumber(item, 'Inner Box Height (cm)');
+    if (selected.has('packageLength') || selected.has('packageWidth') || selected.has('packageHeight')) packaging.dimensionUnit = 'cm';
+    if (selected.has('packageWeight')) packaging.packageWeight = this.domesticNumber(item, 'Package Specification Weight (g)') ?? item.weightGrams;
+    if (selected.has('cartonWeight')) packaging.cartonWeight = this.domesticNumber(item, 'Outer Carton Gross Weight');
+    if (selected.has('packageWeight') || selected.has('cartonWeight')) packaging.weightUnit = 'g';
+    if (selected.has('packagingCost')) { packaging.packagingCost = this.domesticNumber(item, 'Inner Packaging Cost') ?? this.domesticNumber(item, 'Outer Packaging Cost'); packaging.packagingCostCurrency = 'CNY'; }
+    if (selected.has('packagingDifficulty')) packaging.packagingDifficulty = this.domesticString(item, 'Packaging Difficulty Factor');
+    if (selected.has('labelRequirements')) packaging.labelRequirements = this.domesticString(item, 'SKU Label Notes');
+  }
+
+  private upsertDomesticIdentifier(record: ProductExtendedData, selected: Set<string>, key: string, type: string, value: string | null): void {
+    if (!selected.has(key) || !value) return;
+    const existing = record.identifiers.find(identifier => identifier.identifierType === type);
+    if (existing) existing.value = value;
+    else record.identifiers.push({ identifierType: type, value, isPrimary: false, notes: 'Synchronized from domestic product XLSX' });
+  }
+
+  private domesticString(item: DomesticProduct, key: string): string | null { return item.details[key]?.trim() || null; }
+  private domesticNumber(item: DomesticProduct, key: string): number | null { const raw = this.domesticString(item, key); if (raw === null) return null; const value = Number(raw); return Number.isFinite(value) ? value : null; }
+  private domesticInteger(item: DomesticProduct, key: string): number | null { const value = this.domesticNumber(item, key); return value === null ? null : Math.trunc(value); }
+  private domesticBool(item: DomesticProduct, key: string): boolean | null { const value = this.domesticString(item, key)?.toLowerCase(); return value === '1' || value === 'true' || value === 'yes' ? true : value === '0' || value === 'false' || value === 'no' ? false : null; }
+  private domesticYesNo(item: DomesticProduct, key: string): string { return this.yesNo(this.domesticBool(item, key)); }
+  private yesNo(value: boolean | null): string { return value === null ? '' : value ? 'Yes' : 'No'; }
+  private displaySyncValue(value: unknown): string { return value === null || value === undefined ? '' : String(value).trim(); }
+
+  openDetailMove(): void {
+    this.detailMoveStep.set(1);
+    this.detailMoveOpen.set(true);
+  }
+
+  closeDetailMove(): void {
+    this.detailMoveOpen.set(false);
+  }
+
+  previousDetailMoveStep(): void {
+    this.detailMoveStep.update(step => Math.max(1, step - 1));
+  }
+
+  nextDetailMoveStep(): void {
+    const step = this.detailMoveStep();
+    if (step === 1 && !this.detailMoveSourceKey) {
+      this.showNotice('Choose the source location first.');
+      return;
+    }
+    if (step === 2 && !this.detailMoveTargetKey) {
+      this.showNotice('Choose the destination location first.');
+      return;
+    }
+    this.detailMoveStep.set(Math.min(4, step + 1));
+  }
+
+  detailMoveTargets(): ProductScannerLocation[] {
+    return this.detailLocationOptions().filter(location => location.key !== this.detailMoveSourceKey);
+  }
+
+  locationRackKey(location?: ProductScannerLocation): string {
+    if (!location) return '';
+    const match = location.description.match(/Row\s+(\d+)\s*·\s*Rack\s+(\d+)/i);
+    return match ? `row-${match[1]}-rack-${match[2]}` : location.code.replace(/-L\d+-B\d+$/i, '');
+  }
+
+  locationRowKey(location?: ProductScannerLocation): string {
+    if (!location) return '';
+    const match = location.description.match(/Row\s+(\d+)/i);
+    return match ? `row-${match[1]}` : this.locationRackKey(location).replace(/-rack-.+$/i, '');
+  }
+
+  locationRowLabel(location?: ProductScannerLocation): string {
+    if (!location) return '';
+    const match = location.description.match(/Row\s+(\d+)/i);
+    return match ? `Row ${Number(match[1])}` : this.locationRowKey(location);
+  }
+
+  locationRackLabel(location?: ProductScannerLocation): string {
+    if (!location) return '';
+    const match = location.description.match(/Row\s+(\d+)\s*·\s*Rack\s+(\d+)/i);
+    return match ? `Row ${Number(match[1])} · Rack ${Number(match[2])}` : this.locationRackKey(location);
+  }
+
+  locationLevelBinLabel(location: ProductScannerLocation): string {
+    const match = location.description.match(/Level\s+(\d+)\s*·\s*Bin\s+(\d+)/i);
+    return match ? `Level ${Number(match[1])} · Bin ${Number(match[2])}` : location.code;
+  }
+
+  detailSourceRacks(): ProductScannerLocation[] {
+    return this.uniqueRackRepresentatives(this.detailLocations().filter(location => this.locationRowKey(location) === this.detailMoveSourceRow));
+  }
+
+  detailTargetRacks(): ProductScannerLocation[] {
+    return this.uniqueRackRepresentatives(this.detailMoveTargets().filter(location => this.locationRowKey(location) === this.detailMoveTargetRow));
+  }
+
+  detailSourceRows(): ProductScannerLocation[] {
+    return this.uniqueRowRepresentatives(this.detailLocations());
+  }
+
+  detailTargetRows(): ProductScannerLocation[] {
+    return this.uniqueRowRepresentatives(this.detailMoveTargets());
+  }
+
+  detailSourcePositions(): ProductScannerLocation[] {
+    return this.detailLocations().filter(location => this.locationRackKey(location) === this.detailMoveSourceRack);
+  }
+
+  detailTargetPositions(): ProductScannerLocation[] {
+    return this.detailMoveTargets().filter(location => this.locationRackKey(location) === this.detailMoveTargetRack);
+  }
+
+  selectDetailSourceRack(rack: string): void {
+    this.detailMoveSourceRack = rack;
+    if (rack === 'unassigned') {
+      this.selectDetailMoveSource('unassigned');
+      return;
+    }
+    if (this.locationRackKey(this.detailLocations().find(location => location.key === this.detailMoveSourceKey)) !== rack)
+      this.detailMoveSourceKey = '';
+  }
+
+  selectDetailSourceRow(row: string): void {
+    this.detailMoveSourceRow = row;
+    this.detailMoveSourceRack = '';
+    this.detailMoveSourceKey = '';
+    if (row === 'unassigned') {
+      this.detailMoveSourceRack = 'unassigned';
+      this.selectDetailMoveSource('unassigned');
+    }
+  }
+
+  selectDetailTargetRow(row: string): void {
+    this.detailMoveTargetRow = row;
+    this.detailMoveTargetRack = '';
+    this.detailMoveTargetKey = '';
+  }
+
+  selectDetailTargetRack(rack: string): void {
+    this.detailMoveTargetRack = rack;
+    if (this.locationRackKey(this.detailMoveTargets().find(location => location.key === this.detailMoveTargetKey)) !== rack)
+      this.detailMoveTargetKey = '';
+  }
+
+  private uniqueRackRepresentatives(locations: ProductScannerLocation[]): ProductScannerLocation[] {
+    return [...new Map(locations.map(location => [this.locationRackKey(location), location])).values()];
+  }
+
+  private uniqueRowRepresentatives(locations: ProductScannerLocation[]): ProductScannerLocation[] {
+    return [...new Map(locations.map(location => [this.locationRowKey(location), location])).values()];
+  }
+
+  selectDetailMoveSource(key: string): void {
+    this.detailMoveSourceKey = key;
+    if (this.detailMoveTargetKey === key) this.detailMoveTargetKey = '';
+    const available = this.detailMoveAvailableQty();
+    if (this.detailMoveQuantity > available) this.detailMoveQuantity = Math.max(1, available);
+  }
+
+  detailMoveAvailableQty(): number {
+    if (this.detailMoveSourceKey === 'unassigned') return this.detailUnassignedQty();
+    return this.detailLocations().find(location => location.key === this.detailMoveSourceKey)?.qty ?? 0;
+  }
+
+  selectAllDetailMoveQuantity(): void {
+    const available = this.detailMoveAvailableQty();
+    if (available > 0) this.detailMoveQuantity = available;
+  }
+
+  detailUnassignedQty(product = this.selectedProduct(), locations = this.detailLocationOptions()): number {
+    if (!product) return 0;
+    return Math.max(0, product.qty - locations.reduce((total, location) => total + location.qty, 0));
+  }
+
+  detailLocatedQty(locations = this.detailLocationOptions()): number {
+    return locations.reduce((total, location) => total + location.qty, 0);
+  }
+
+  detailEditedUnassignedQty(): number {
+    return Math.max(0, Math.trunc(Number(this.editForm.qty) || 0) - this.detailLocatedQty());
+  }
+
+  async moveDetailInventory(): Promise<void> {
+    const product = this.selectedProduct();
+    const unassigned = this.detailMoveSourceKey === 'unassigned';
+    const source = unassigned ? null : this.detailLocations().find(location => location.key === this.detailMoveSourceKey);
+    const target = this.detailLocationOptions().find(location => location.key === this.detailMoveTargetKey);
+    const quantity = Math.trunc(Number(this.detailMoveQuantity));
+    const available = unassigned ? this.detailUnassignedQty() : source?.qty ?? 0;
+    if (!product || !target || (!unassigned && !source) || quantity < 1 || quantity > available) {
+      this.showNotice(`Choose source and target locations, with a quantity from 1 to ${available}.`);
+      return;
+    }
+    await this.perform(async () => {
+      const locations = await this.inventoryApi.moveProduct(product.id, {
+        sourceLevelId: source?.levelId ?? null,
+        sourceBinNumber: source?.binNumber ?? null,
+        targetLevelId: target.levelId,
+        targetBinNumber: target.binNumber,
+        quantity,
+      });
+      this.detailLocationOptions.set(locations);
+      this.detailLocations.set(locations.filter(location => location.qty > 0));
+      this.detailMoveSourceKey = this.detailUnassignedQty(product, locations) > 0 ? 'unassigned'
+        : locations.find(location => location.key === source?.key && location.qty > 0)?.key
+          ?? locations.find(location => location.qty > 0)?.key ?? '';
+      this.detailMoveTargetKey = '';
+      this.detailMoveSourceRack = this.detailMoveSourceKey === 'unassigned' ? 'unassigned'
+        : this.locationRackKey(locations.find(location => location.key === this.detailMoveSourceKey));
+      this.detailMoveSourceRow = this.detailMoveSourceKey === 'unassigned' ? 'unassigned'
+        : this.locationRowKey(locations.find(location => location.key === this.detailMoveSourceKey));
+      this.detailMoveTargetRow = '';
+      this.detailMoveTargetRack = '';
+      this.detailMoveQuantity = 1;
+      this.showNotice(`Moved ${quantity} unit${quantity === 1 ? '' : 's'} from ${source?.code ?? 'unassigned stock'} to ${target.code}.`);
+      this.detailMoveOpen.set(false);
+    });
+  }
+
   async updateProduct(): Promise<void> {
     const product = this.selectedProduct();
     if (!product) return;
+    const editedQty = Math.max(0, Math.trunc(Number(this.editForm.qty) || 0));
+    const locatedQty = this.detailLocatedQty();
+    if (editedQty < locatedQty) {
+      this.showNotice(`Total inventory cannot be below the ${locatedQty} units currently assigned to warehouse locations.`);
+      return;
+    }
     await this.perform(async () => {
       const duplicate = await this.api.checkDuplicateSku(this.editForm.sku, product.id);
       if (duplicate.exactSkuExists) {

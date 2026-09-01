@@ -313,6 +313,30 @@ public sealed class InventoryController(
         return Ok(ToDto(updated));
     }
 
+    [HttpPost("products/{productId:int}/move")]
+    public async Task<ActionResult<IReadOnlyList<ScannerLocationDto>>> MoveProductInventory(
+        int productId, MoveProductInventoryRequest request, CancellationToken cancellationToken)
+    {
+        if (request.SourceLevelId.HasValue != request.SourceBinNumber.HasValue)
+            return BadRequest("Source level and bin must both be supplied, or both omitted for unassigned stock.");
+        if (request.SourceBinNumber.HasValue && request.SourceBinNumber is < 1 or > 2 || request.TargetBinNumber is < 1 or > 2)
+            return BadRequest("Bin number must be 1 or 2.");
+        if (request.Quantity < 1)
+            return BadRequest("Move quantity must be greater than 0.");
+        if (request.SourceLevelId == request.TargetLevelId && request.SourceBinNumber == request.TargetBinNumber)
+            return BadRequest("Choose a different target location.");
+        var levelIds = new[] { request.SourceLevelId, request.TargetLevelId }.Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
+        if (await db.ShelfLevels.CountAsync(item => levelIds.Contains(item.Id), cancellationToken) != levelIds.Length
+            || !await db.Products.AnyAsync(item => item.Id == productId, cancellationToken))
+            return NotFound();
+
+        var actor = await InventoryActorAsync(cancellationToken);
+        if (!await inventoryWrites.MoveAsync(productId, request.SourceLevelId, request.SourceBinNumber,
+                request.TargetLevelId, request.TargetBinNumber, request.Quantity, actor, cancellationToken))
+            return Conflict("The source location does not have enough inventory, or the target is unchanged.");
+        return await GetProductLocations(productId, cancellationToken);
+    }
+
     private async Task<InventoryAuditActor> InventoryActorAsync(CancellationToken cancellationToken)
     {
         var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);

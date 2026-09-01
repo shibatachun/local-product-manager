@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Auction Product Monitor",
+  "version": "0.9.2",
+  "description": "Detect Whatnot sale notices and forward buyer/product information to the local monitor.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://www.whatnot.com/*",
+    "http://127.0.0.1:17891/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.whatnot.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Auction Product Monitor"
+  }
+}

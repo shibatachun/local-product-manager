@@ -11,6 +11,7 @@ export interface LiveStreamBidProduct {
   actualSku: string | null;
   requiresLocalLabel: boolean;
   whatnotAuctionSafePrice: number | null;
+  itemCode: string | null;
   uuid: string;
   title: string;
   quantity: number;
@@ -29,7 +30,7 @@ export interface LiveStreamBidProduct {
 }
 
 export interface LiveStreamBidDraftRow {
-  sourceProductId: number | null; externalUuid: string | null; actualSku: string | null; title: string; quantity: number; inventory: number;
+  sourceProductId: number | null; externalUuid: string | null; actualSku: string | null; title: string; quantity: number; expectedInventory: number; actualInventory: number;
   unitPrice: number; weightGrams: number | null; weightOunces: number | null;
   material: string | null; totalCost: number | null; whatnotAuctionSafePrice: number | null;
   priceType: 'per-unit' | 'per-package';
@@ -40,6 +41,24 @@ export interface LiveStreamBidImportResult {
   updated: number;
   skipped: number;
   totalRows: number;
+  conflicts: LiveStreamBidImportConflict[];
+  regeneratedUuids: LiveStreamBidRegeneratedUuid[];
+}
+
+export interface LiveStreamBidRegeneratedUuid {
+  rowNumber: number;
+  productId: number;
+  originalUuid: string;
+  newUuid: string;
+  title: string;
+}
+
+export interface LiveStreamBidImportConflict {
+  rowNumber: number;
+  uuid: string | null;
+  actualSku: string | null;
+  title: string;
+  reasons: string[];
 }
 
 export interface LiveStreamBidSale {
@@ -129,12 +148,12 @@ export class LiveStreamBidProductApiService {
     return firstValueFrom(this.http.post<LiveStreamBidProduct>(`${this.baseUrl}/live-stream-bid-products/move-from-inventory`, body));
   }
 
-  createBatch(rows: LiveStreamBidDraftRow[]): Promise<{ batchNumber: string; products: LiveStreamBidProduct[] }> {
-    return firstValueFrom(this.http.post<{ batchNumber: string; products: LiveStreamBidProduct[] }>(`${this.baseUrl}/live-stream-bid-products/batches`, { rows }));
+  createBatch(rows: LiveStreamBidDraftRow[]): Promise<{ batchNumber: string; products: LiveStreamBidProduct[]; regeneratedUuids: LiveStreamBidRegeneratedUuid[] }> {
+    return firstValueFrom(this.http.post<{ batchNumber: string; products: LiveStreamBidProduct[]; regeneratedUuids: LiveStreamBidRegeneratedUuid[] }>(`${this.baseUrl}/live-stream-bid-products/batches`, { rows }));
   }
 
-  addBatchProducts(batchNumber: string, rows: LiveStreamBidDraftRow[]): Promise<{ batchNumber: string; products: LiveStreamBidProduct[] }> {
-    return firstValueFrom(this.http.post<{ batchNumber: string; products: LiveStreamBidProduct[] }>(`${this.baseUrl}/live-stream-bid-products/batches/${encodeURIComponent(batchNumber)}/products`, { rows }));
+  addBatchProducts(batchNumber: string, rows: LiveStreamBidDraftRow[]): Promise<{ batchNumber: string; products: LiveStreamBidProduct[]; regeneratedUuids: LiveStreamBidRegeneratedUuid[] }> {
+    return firstValueFrom(this.http.post<{ batchNumber: string; products: LiveStreamBidProduct[]; regeneratedUuids: LiveStreamBidRegeneratedUuid[] }>(`${this.baseUrl}/live-stream-bid-products/batches/${encodeURIComponent(batchNumber)}/products`, { rows }));
   }
 
   async exportBatch(batchNumber: string): Promise<void> {
@@ -145,6 +164,10 @@ export class LiveStreamBidProductApiService {
 
   deleteProduct(id: number): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/live-stream-bid-products/${id}`));
+  }
+
+  deleteBatch(batchNumber: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/live-stream-bid-products/batches/${encodeURIComponent(batchNumber)}`));
   }
 
   updateProduct(id: number, row: LiveStreamBidDraftRow): Promise<LiveStreamBidProduct> {

@@ -1,0 +1,48 @@
+<section class="domestic-page">
+  <header class="panel-header">
+    <div><small>China-side product reference</small><h2>Domestic Product Information</h2><p>Search supplier product details and pricing imported from the domestic XLSX catalog.</p></div>
+    <div class="record-count"><strong>{{ total() | number }}</strong><span>products</span></div>
+  </header>
+
+  <section class="toolbar">
+    <label class="search-box"><span>⌕</span><input [ngModel]="query()" (ngModelChange)="onSearch($event)" placeholder="Search SKU, product code, name, declaration, material, or supplier" autocomplete="off" /></label>
+    <div class="import-box" *ngIf="canImport">
+      <label class="file-picker"><span>{{ selectedFile?.name || 'Choose domestic product XLSX' }}</span><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="selectFile($event)" /></label>
+      <button class="primary" type="button" [disabled]="!selectedFile || loading()" (click)="importXlsx()">{{ loading() && selectedFile ? 'Importing…' : 'Import / update' }}</button>
+    </div>
+  </section>
+
+  <p class="notice success" *ngIf="message()">{{ message() }}</p>
+  <p class="notice error" *ngIf="error()">{{ error() }}</p>
+
+  <section class="results-card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th><button class="sort-button" type="button" (click)="toggleSkuSort()">SKU {{ skuSort() === 'asc' ? '↑' : '↓' }}</button></th>
+          <th>Product Code</th><th>Product Name</th><th>Material</th><th>Specification</th>
+          <th>Cost (RMB)</th><th>Minimum Sale</th><th>Inventory</th><th>English Declaration</th><th>Weight</th><th></th>
+        </tr></thead>
+        <tbody>
+          <ng-container *ngFor="let item of products()">
+            <tr class="product-row" (click)="toggleDetails(item)">
+              <td><code>{{ item.sku }}</code></td><td>{{ item.productCode || '—' }}</td><td class="product-name">{{ item.productName || '—' }}</td>
+              <td>{{ item.material || '—' }}</td><td>{{ item.specification || '—' }}</td>
+              <td>{{ item.costRmb === null ? '—' : '¥' + (item.costRmb | number:'1.2-4') }}</td>
+              <td>{{ item.minimumSalePriceUsd === null ? '—' : '$' + (item.minimumSalePriceUsd | number:'1.2-2') }}</td>
+              <td>{{ item.warehouseInventory ?? '—' }}</td><td>{{ item.englishDeclarationName || '—' }}</td>
+              <td>{{ item.weightGrams === null ? '—' : (item.weightGrams | number:'1.0-2') + ' g' }}</td>
+              <td class="expand-indicator">{{ expandedId() === item.id ? '▾' : '▸' }}</td>
+            </tr>
+            <tr class="detail-row" *ngIf="expandedId() === item.id"><td colspan="11">
+              <div class="detail-heading"><strong>{{ item.sku }}</strong><span>Imported from {{ item.sourceFileName || 'XLSX' }} · {{ item.updatedAt | date:'medium' }}</span></div>
+              <div class="detail-grid"><div *ngFor="let detail of detailEntries(item)"><small>{{ detail.key }}</small><span>{{ detail.value }}</span></div></div>
+            </td></tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty" *ngIf="!products().length && !loading()">No matching domestic products.</div>
+    <footer><span>Page {{ page() }} of {{ pageCount() }}</span><div><button type="button" (click)="changePage(-1)" [disabled]="page() <= 1 || loading()">Previous</button><button type="button" (click)="changePage(1)" [disabled]="page() >= pageCount() || loading()">Next</button></div></footer>
+  </section>
+</section>

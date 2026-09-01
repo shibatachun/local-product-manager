@@ -13,6 +13,7 @@
 
     <nav aria-label="Main navigation" [class.mobile-open]="mobileMenuOpen()">
       <button [class.active]="view() === 'products'" (click)="changeView('products')"><span>▦</span> Products</button>
+      <button [class.active]="view() === 'domesticProducts'" (click)="changeView('domesticProducts')"><span>CN</span> Domestic Products</button>
       <button [class.active]="view() === 'autoListing'" (click)="changeView('autoListing')"><span>AI</span> Auto Listing</button>
       <button [class.active]="view() === 'bidProducts'" (click)="changeView('bidProducts')"><span>BP</span> Live Stream Bid Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
@@ -44,7 +45,8 @@
         <p class="eyebrow">{{ pageEyebrow() }}</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
-      <div class="header-actions" *ngIf="view() !== 'bidProducts' && view() !== 'storage' && view() !== 'pricing' && view() !== 'unitConverter' && view() !== 'videoTrend' && view() !== 'sceneEditor' && view() !== 'apiDocs'">
+      <div class="header-actions">
+        <button type="button" (click)="dataExportOpen.set(true)">Export all data</button>
         <a class="secondary-action" routerLink="/social-accounts" *ngIf="view() === 'marketing'">Social Accounts</a>
         <button type="button" *ngIf="view() === 'products'" (click)="exportProducts()">Export Excel</button>
         <button type="button" *ngIf="view() === 'products' && canImportData()" (click)="openImport()">Import</button>
@@ -52,7 +54,7 @@
       </div>
     </header>
 
-    <ng-container *ngIf="view() === 'products'; else autoListingView">
+    <ng-container *ngIf="view() === 'products'; else domesticProductsView">
       <section class="store-band">
         <div class="store-card" *ngFor="let option of listingOptions">
           <a [class.disabled]="!storeLink(option.value)?.url" [href]="storeLink(option.value)?.url || '#'" target="_blank" rel="noreferrer">{{ option.label }}</a>
@@ -117,7 +119,7 @@
                 </button>
               </td>
               <td><code>{{ product.localInventoryId || ('INV-' + product.id) }}</code></td>
-              <td><code>{{ product.categoryInventoryId || 'UNKNOWN' }}</code></td>
+              <td><code>{{ productCategoryNumber(product) }}</code></td>
               <td><code>{{ product.sku }}</code><small class="sku-caption" *ngIf="product.productType === 'parent'">Parent</small></td>
               <td>{{ product.qty }}</td>
               <td>{{ product.cost === null ? '—' : ('¥' + (product.cost | number:'1.2-2')) }}</td>
@@ -136,7 +138,7 @@
                 </button>
               </td>
               <td><code>{{ child.localInventoryId || ('INV-' + child.id) }}</code></td>
-              <td><code>{{ child.categoryInventoryId || 'UNKNOWN' }}</code></td>
+              <td><code>{{ productCategoryNumber(child) }}</code></td>
               <td><code>{{ child.sku }}</code><small class="sku-caption" *ngIf="child.skuBase">Base {{ child.skuBase }}</small></td>
               <td>{{ child.qty }}</td>
               <td>{{ child.cost === null ? '—' : ('¥' + (child.cost | number:'1.2-2')) }}</td>
@@ -155,6 +157,9 @@
       </section>
     </ng-container>
 
+    <ng-template #domesticProductsView>
+      <app-domestic-products-panel *ngIf="view() === 'domesticProducts'; else autoListingView" [canImport]="canImportData()"></app-domestic-products-panel>
+    </ng-template>
     <ng-template #autoListingView>
       <app-auto-listing-panel *ngIf="view() === 'autoListing'; else bidProductsView"></app-auto-listing-panel>
     </ng-template>
@@ -435,6 +440,27 @@
   </main>
 </div>
 
+<div class="backdrop" *ngIf="dataExportOpen()" (click)="dataExportOpen.set(false)"></div>
+<section class="modal data-export-modal" *ngIf="dataExportOpen()" role="dialog" aria-modal="true" aria-labelledby="data-export-title">
+  <header>
+    <div><p class="eyebrow">Complete data export</p><h2 id="data-export-title">Export product information</h2></div>
+    <button class="icon-button" type="button" title="Close" (click)="dataExportOpen.set(false)">×</button>
+  </header>
+  <div class="modal-body data-export-options">
+    <section class="data-export-option">
+      <span class="data-export-icon">INV</span>
+      <div><h3>Local products</h3><p>Exports all local product details, listings, ASINs, attribution data, and extended product information. Images and image fields are excluded.</p></div>
+      <button class="primary" type="button" [disabled]="loading()" (click)="exportAllLocalProductData()">{{ loading() ? 'Preparing…' : 'Export local products' }}</button>
+    </section>
+    <section class="data-export-option">
+      <span class="data-export-icon bid">BID</span>
+      <div><h3>BID products</h3><p>Exports every BID product field in a separate file. Images and image fields are excluded.</p></div>
+      <button class="primary" type="button" [disabled]="loading()" (click)="exportAllBidProductData()">{{ loading() ? 'Preparing…' : 'Export BID products' }}</button>
+    </section>
+  </div>
+  <footer class="modal-footer"><span>Files are exported as structured JSON.</span><button type="button" (click)="dataExportOpen.set(false)">Close</button></footer>
+</section>
+
 <section class="unit-converter-popover" *ngIf="unitConverterOpen()" role="dialog" aria-modal="false">
   <header>
     <div><p class="eyebrow">Measurement tools</p><h2>Converter</h2></div>
@@ -493,7 +519,7 @@
       <strong>{{ product.productName }}</strong>
       <svg #createdBarcode class="created-qr" [attr.data-value]="createdBarcodeValue(product)"></svg>
       <code>{{ product.localInventoryId || ('INV-' + product.id) }}</code>
-      <code>{{ product.categoryInventoryId || 'UNKNOWN' }}</code>
+      <code>{{ productCategoryNumber(product) }}</code>
       <small>{{ product.sku }} · {{ createdBinLocation() }}</small>
     </div>
   </div>
@@ -510,6 +536,11 @@
         <span><strong>{{ preset.name }}</strong><small *ngIf="preset.settings as settings">{{ settings.widthMm }} × {{ settings.heightMm }} mm · {{ settings.columns === 2 ? 'Double column' : 'Single column' }}</small></span><b>Print</b>
       </button>
     </div>
+    <div class="print-preset-list bartender-print-list">
+      <button type="button" class="bartender-print-option" (click)="printProductLabelWithBarTender()" [disabled]="loading()">
+        <span><strong>Print with BarTender</strong><small>Send this inventory QR label directly to the configured inventory BarTender Integration.</small></span><b>BarTender</b>
+      </button>
+    </div>
     <ng-template #noSavedPrintPresets><div class="no-print-presets"><strong>No product label presets saved</strong><span>Open Label Maker, configure a product label, and save it in a preset slot first.</span></div></ng-template>
   </div>
   <footer class="modal-footer"><button type="button" (click)="closePrintPresetSelector()">Cancel</button></footer>
@@ -524,7 +555,9 @@
     <div class="form-grid">
       <label>Inventory ID<input [(ngModel)]="createForm.localInventoryId" placeholder="Auto: INV-{id}" /></label>
       <label>SKU number (optional)<input [(ngModel)]="createForm.sku" placeholder="Auto: LPM-000001" /></label>
-      <label>Product name<input [(ngModel)]="createForm.productName" placeholder="Product display name" /></label>
+      <label>Product name
+        <span class="input-action"><input [(ngModel)]="createForm.productName" placeholder="Product display name" /><button type="button" (click)="openPieceEstimator()">Estimate pcs</button></span>
+      </label>
       <label>Inventory category
         <select [(ngModel)]="createForm.inventoryCategory">
           <option *ngFor="let option of inventoryCategoryOptions" [value]="option.value">{{ option.label }}</option>
@@ -577,6 +610,25 @@
   <footer class="modal-footer"><button (click)="previousWizardStep()" [disabled]="wizardStep() === 1">Back</button><div><button (click)="closeWizard()">Cancel</button><button class="primary" (click)="wizardStep() === 3 ? finishCreate() : nextWizardStep()" [disabled]="loading()">{{ wizardStep() === 3 ? 'Create product' : wizardStep() === 2 && !platformChoices[0].selected ? 'Create product' : 'Continue' }}</button></div></footer>
 </section>
 
+<div class="backdrop piece-estimator-backdrop" *ngIf="pieceEstimatorOpen()" (click)="closePieceEstimator()"></div>
+<section class="modal piece-estimator-modal" *ngIf="pieceEstimatorOpen()" role="dialog" aria-modal="true" aria-labelledby="piece-estimator-title">
+  <header><div><p class="eyebrow">QUANTITY ESTIMATOR</p><h2 id="piece-estimator-title">Estimate pieces by weight</h2></div><button class="icon-button" type="button" title="Close" (click)="closePieceEstimator()">×</button></header>
+  <div class="piece-estimator-body">
+    <p>Use the same weight unit for both values. The estimate is rounded to the nearest 5 pieces.</p>
+    <div>
+      <label>One charm weight<input type="number" min="0" step="0.001" inputmode="decimal" [(ngModel)]="pieceEstimatorUnitWeight" placeholder="Example: 1.25" /></label>
+      <label>Whole bag weight<input type="number" min="0" step="0.01" inputmode="decimal" [(ngModel)]="pieceEstimatorBagWeight" placeholder="Example: 55" /></label>
+    </div>
+    <div class="piece-estimator-result">
+      <span>Raw estimate<strong>{{ pieceEstimatorRawCount() === null ? '—' : (pieceEstimatorRawCount() | number:'1.1-1') }}</strong></span>
+      <b>→</b>
+      <span>Product-name count<strong>{{ pieceEstimatorRoundedCount() === null ? '—' : pieceEstimatorRoundedCount() + 'pcs' }}</strong></span>
+    </div>
+    <small>Examples: 41 → 40pcs · 44 → 45pcs · 46 → 45pcs · 49 → 50pcs</small>
+  </div>
+  <footer class="modal-footer"><button type="button" (click)="closePieceEstimator()">Cancel</button><button class="primary" type="button" [disabled]="pieceEstimatorRoundedCount() === null" (click)="applyPieceEstimateToProductName()">Add to product name</button></footer>
+</section>
+
 <div class="backdrop detail-backdrop" *ngIf="detailOpen()" (click)="closeDetail()"></div>
 <aside class="drawer" *ngIf="detailOpen() && selectedProduct() as product">
   <div class="drawer-asin-banner" *ngIf="product.amazonAsins.length">ASIN: {{ product.amazonAsins[0].asin }}</div>
@@ -586,6 +638,7 @@
       <div class="section-heading">
         <div><h3>Basic information</h3></div>
         <div class="section-actions">
+          <button *ngIf="currentUser()?.canEditProductDetails" type="button" (click)="startDomesticSync()">Sync domestic product</button>
           <button type="button" (click)="updateProduct()">Save</button>
         </div>
       </div>
@@ -593,7 +646,7 @@
         <div>
           <strong>Product QR label</strong>
           <code>{{ product.localInventoryId || ('INV-' + product.id) }}</code>
-          <code>{{ product.categoryInventoryId || 'UNKNOWN' }}</code>
+          <code>{{ productCategoryNumber(product) }}</code>
           <small>{{ product.sku }}</small>
           <button type="button" (click)="printDetailProductLabel()">Print QR label</button>
         </div>
@@ -611,13 +664,14 @@
           </div>
         </div>
         <ng-template #noDetailLocations><p class="detail-location-empty">No storage location assigned.</p></ng-template>
+        <button class="open-move-wizard" type="button" *ngIf="detailLocations().length || detailUnassignedQty() > 0" (click)="openDetailMove()">Move inventory</button>
       </div>
       <div class="detail-image-panel">
         <div class="detail-image-toolbar">
           <span><strong>Product image</strong><small>Choose a local image, enter a network URL, or take a photo.</small></span>
           <button
             type="button"
-            *ngIf="currentUser()?.isAdmin && currentUser()?.isHost"
+            *ngIf="currentUser()?.isAdmin"
             (click)="openDetailImageFolder()">Open local folder</button>
         </div>
         <div class="detail-image-preview" *ngIf="editForm.imagePath; else noDetailImage">
@@ -663,16 +717,20 @@
           </select>
         </label>
         <label class="cost-input">Cost
-          <span>
+          <span class="cost-lookup-control">
             <select [ngModel]="editForm.costCurrency" (ngModelChange)="onEditCostCurrencyChanged($event)">
               <option *ngFor="let option of productCostCurrencyOptions" [ngValue]="option.value">{{ option.label }}</option>
             </select>
             <input type="number" step="0.01" [(ngModel)]="editForm.cost" />
+            <button type="button" title="Search this SKU in Domestic Product Information" (click)="searchDomesticCost()" [disabled]="!editForm.sku.trim() || domesticCostLookupLoading()">Search SKU</button>
           </span>
         </label>
         <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
         <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="editForm.salePrice" /></label>
-        <label>Qty<input type="number" min="0" step="1" [(ngModel)]="editForm.qty" /></label>
+        <label class="total-inventory-field">Total inventory
+          <input type="number" [min]="detailLocatedQty()" step="1" [(ngModel)]="editForm.qty" />
+          <span><b>{{ detailEditedUnassignedQty() }}</b> unassigned · {{ detailLocatedQty() }} in locations</span>
+        </label>
         <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>
@@ -706,6 +764,89 @@
     <button class="delete-product" (click)="deleteProduct()">Delete product</button>
   </div>
 </aside>
+
+<div class="backdrop domestic-cost-backdrop" *ngIf="domesticCostLookupOpen()" (click)="closeDomesticCostLookup()"></div>
+<section class="modal domestic-cost-modal" *ngIf="domesticCostLookupOpen()">
+  <header>
+    <div><small>{{ domesticLookupPurpose() === 'sync' ? 'SYNC DOMESTIC PRODUCT' : 'DOMESTIC PRODUCT COST' }}</small><h2>SKU {{ editForm.sku }}</h2></div>
+    <button class="icon-button" type="button" (click)="closeDomesticCostLookup()">×</button>
+  </header>
+  <div class="domestic-cost-body">
+    <p *ngIf="domesticCostLookupLoading()">Searching the domestic product database…</p>
+    <p class="notice error" *ngIf="domesticCostLookupError()">{{ domesticCostLookupError() }}</p>
+    <p class="domestic-cost-summary" *ngIf="!domesticCostLookupLoading() && !domesticCostLookupError()">
+      {{ domesticCostLookupTotal() }} matching product{{ domesticCostLookupTotal() === 1 ? '' : 's' }}. Showing at most 100.
+    </p>
+    <div class="domestic-cost-results" *ngIf="domesticCostLookupResults().length">
+      <article *ngFor="let item of domesticCostLookupResults()">
+        <div><code>{{ item.sku }}</code><strong>{{ item.productName || item.productCode || 'Unnamed product' }}</strong><small>{{ item.material || 'Material unavailable' }}<ng-container *ngIf="item.specification"> · {{ item.specification }}</ng-container></small></div>
+        <span><small>Domestic cost</small><b>{{ item.costRmb === null ? '—' : ('¥' + (item.costRmb | number:'1.2-4')) }}</b></span>
+        <button *ngIf="domesticLookupPurpose() === 'cost'" type="button" [disabled]="item.costRmb === null" (click)="useDomesticCost(item)">Use cost</button>
+        <button *ngIf="domesticLookupPurpose() === 'sync'" type="button" (click)="reviewDomesticProduct(item)">Review fields</button>
+      </article>
+    </div>
+    <p class="domestic-cost-empty" *ngIf="!domesticCostLookupLoading() && !domesticCostLookupError() && !domesticCostLookupResults().length">No domestic product matched this SKU.</p>
+  </div>
+</section>
+
+<div class="backdrop domestic-sync-backdrop" *ngIf="domesticSyncReviewOpen()" (click)="closeDomesticSyncReview()"></div>
+<section class="modal domestic-sync-modal" *ngIf="domesticSyncReviewOpen() && domesticSyncProduct() as domestic">
+  <header>
+    <div><small>REVIEW BEFORE SYNC</small><h2>{{ domestic.sku }}</h2><p>Choose exactly which domestic values should update this local product.</p></div>
+    <button class="icon-button" type="button" (click)="closeDomesticSyncReview()">×</button>
+  </header>
+  <div class="domestic-sync-toolbar"><span>{{ domesticSyncFields().length }} usable fields found</span><div><button type="button" (click)="selectAllDomesticSyncFields(true)">Select all</button><button type="button" (click)="selectAllDomesticSyncFields(false)">Clear</button></div></div>
+  <p class="domestic-sync-message" *ngIf="domesticSyncMessage()">{{ domesticSyncMessage() }}</p>
+  <div class="domestic-sync-fields">
+    <div class="domestic-sync-field" *ngFor="let field of domesticSyncFields()" [class.selected]="field.selected">
+      <input type="checkbox" [ngModel]="field.selected" (ngModelChange)="toggleDomesticSyncField(field.key, $event)" />
+      <span><small>{{ field.group }}</small><strong>{{ field.label }}</strong></span>
+      <span><small>Current local value</small><b>{{ field.currentValue }}</b></span>
+      <label>
+        <small>Value to synchronize</small>
+        <div class="domestic-pack-calculator" *ngIf="field.key === 'cost' || field.key === 'weight'">
+          <span><small>Domestic pack</small><input type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="20 pcs" [(ngModel)]="domesticSourcePackQuantity" (ngModelChange)="recalculateDomesticPackageValues()" /></span>
+          <span><small>Local pack</small><input type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="50 pcs" [(ngModel)]="domesticLocalPackQuantity" (ngModelChange)="recalculateDomesticPackageValues()" /></span>
+        </div>
+        <textarea rows="2" [(ngModel)]="field.domesticValue"></textarea>
+      </label>
+    </div>
+  </div>
+  <footer class="modal-footer"><button type="button" (click)="closeDomesticSyncReview()">Cancel</button><button class="primary" type="button" [disabled]="domesticSyncSaving() || !domesticSyncFields().length" (click)="applyDomesticSync()">{{ domesticSyncSaving() ? 'Synchronizing…' : 'Synchronize selected fields' }}</button></footer>
+</section>
+
+<div class="move-wizard" *ngIf="detailMoveOpen() && selectedProduct() as product">
+  <header><button type="button" (click)="closeDetailMove()">×</button><div><small>MOVE INVENTORY</small><h2>{{ product.productName }}</h2></div><span>Step {{ detailMoveStep() }} of 4</span></header>
+  <nav><i *ngFor="let step of [1,2,3,4]" [class.active]="step <= detailMoveStep()"></i></nav>
+  <main>
+    <section *ngIf="detailMoveStep() === 1">
+      <p class="eyebrow">STEP 1</p><h3>Where is the inventory now?</h3><p>Choose the source Row, Rack, then Level and Bin.</p>
+      <div class="wizard-cascade">
+        <label>Row<select [ngModel]="detailMoveSourceRow" (ngModelChange)="selectDetailSourceRow($event)"><option value="">Choose row</option><option *ngIf="detailUnassignedQty() > 0" value="unassigned">Unassigned · {{ detailUnassignedQty() }} available</option><option *ngFor="let row of detailSourceRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
+        <label>Rack<select [ngModel]="detailMoveSourceRack" (ngModelChange)="selectDetailSourceRack($event)" [disabled]="!detailMoveSourceRow || detailMoveSourceRow === 'unassigned'"><option value="">Choose rack</option><option *ngFor="let rack of detailSourceRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
+        <label>Level + Bin<select [(ngModel)]="detailMoveSourceKey" [disabled]="!detailMoveSourceRack || detailMoveSourceRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailSourcePositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} available</option></select></label>
+      </div>
+    </section>
+    <section *ngIf="detailMoveStep() === 2">
+      <p class="eyebrow">STEP 2</p><h3>Where should it go?</h3><p>Choose the destination Row, Rack, then Level and Bin.</p>
+      <div class="wizard-cascade">
+        <label>Row<select [ngModel]="detailMoveTargetRow" (ngModelChange)="selectDetailTargetRow($event)"><option value="">Choose row</option><option *ngFor="let row of detailTargetRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
+        <label>Rack<select [ngModel]="detailMoveTargetRack" (ngModelChange)="selectDetailTargetRack($event)" [disabled]="!detailMoveTargetRow"><option value="">Choose rack</option><option *ngFor="let rack of detailTargetRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
+        <label>Level + Bin<select [(ngModel)]="detailMoveTargetKey" [disabled]="!detailMoveTargetRack"><option value="">Choose level and bin</option><option *ngFor="let location of detailTargetPositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} currently</option></select></label>
+      </div>
+    </section>
+    <section *ngIf="detailMoveStep() === 3">
+      <p class="eyebrow">STEP 3</p><h3>How many units?</h3><p>{{ detailMoveAvailableQty() }} units are available at the selected source position.</p>
+      <div class="wizard-quantity"><button type="button" (click)="detailMoveQuantity = 1" [class.selected]="detailMoveQuantity === 1">1 unit</button><button type="button" (click)="selectAllDetailMoveQuantity()" [class.selected]="detailMoveQuantity === detailMoveAvailableQty()">All at this position · {{ detailMoveAvailableQty() }}</button><label>Custom quantity<input type="number" min="1" [max]="detailMoveAvailableQty()" [(ngModel)]="detailMoveQuantity" /></label></div>
+    </section>
+    <section *ngIf="detailMoveStep() === 4" class="move-review">
+      <p class="eyebrow">STEP 4</p><h3>Confirm inventory move</h3>
+      <dl><div><dt>From</dt><dd>{{ detailMoveSourceKey === 'unassigned' ? 'Unassigned inventory' : detailMoveSourceKey }}</dd></div><div><dt>To</dt><dd>{{ detailMoveTargetKey }}</dd></div><div><dt>Quantity</dt><dd>{{ detailMoveQuantity }}</dd></div></dl>
+      <p>The warehouse History Log will record this movement.</p>
+    </section>
+  </main>
+  <footer><button type="button" (click)="detailMoveStep() === 1 ? closeDetailMove() : previousDetailMoveStep()">{{ detailMoveStep() === 1 ? 'Cancel' : 'Back' }}</button><button class="primary" type="button" [disabled]="loading()" (click)="detailMoveStep() === 4 ? moveDetailInventory() : nextDetailMoveStep()">{{ detailMoveStep() === 4 ? 'Complete move' : 'Continue' }}</button></footer>
+</div>
 
 <div class="toast" *ngIf="notice()">{{ notice() }}</div>
 

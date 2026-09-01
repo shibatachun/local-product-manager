@@ -85,7 +85,18 @@ export class InventoryManagerPanelComponent {
   }
 
   historyAction(entry: InventoryHistoryEntry): string {
+    if (entry.source.startsWith('move_out:')) return 'Move out';
+    if (entry.source.startsWith('move_in:')) return 'Move in';
     return entry.operation === 'stock_in' ? 'Stock in' : 'Stock out';
+  }
+
+  historySource(entry: InventoryHistoryEntry): string {
+    if (entry.source.startsWith('move_out:')) return 'Warehouse transfer · source';
+    if (entry.source.startsWith('move_in:')) return 'Warehouse transfer · destination';
+    if (entry.source === 'place_unassigned') return 'Assigned previously unlocated stock';
+    if (entry.source === 'adjust') return 'Incremental adjustment';
+    if (entry.source === 'bid_transfer') return 'Transferred to BID inventory';
+    return 'Quantity set';
   }
 
   async refreshAfterProductAdded(levelId: number, productId: number): Promise<void> {

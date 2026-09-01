@@ -34,6 +34,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ProductPrice> ProductPrices => Set<ProductPrice>();
     public DbSet<LiveStreamBidProduct> LiveStreamBidProducts => Set<LiveStreamBidProduct>();
     public DbSet<LiveStreamBidSale> LiveStreamBidSales => Set<LiveStreamBidSale>();
+    public DbSet<DomesticProductInfo> DomesticProductInfos => Set<DomesticProductInfo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -81,7 +82,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(item => item.Code).IsUnique();
             entity.Property(item => item.Code).HasMaxLength(64).IsRequired();
             entity.Property(item => item.ZoneCode).HasMaxLength(8).IsRequired();
-            entity.Property(item => item.RowNumber).HasColumnName("AisleNumber");
             entity.HasOne(item => item.Warehouse).WithMany(item => item.Shelves)
                 .HasForeignKey(item => item.WarehouseId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -158,6 +158,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.BatchNumber).HasMaxLength(20);
             entity.Property(item => item.ActualSku).HasMaxLength(200);
             entity.Property(item => item.WhatnotAuctionSafePrice).HasPrecision(12, 2);
+            entity.Property(item => item.ItemCode).HasMaxLength(20);
             entity.Property(item => item.Title).HasMaxLength(1000).IsRequired();
             entity.Property(item => item.UnitPrice).HasPrecision(12, 2);
             entity.Property(item => item.WeightGrams).HasPrecision(12, 4);
@@ -165,6 +166,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.Material).HasMaxLength(300);
             entity.Property(item => item.TotalCost).HasPrecision(12, 2);
             entity.Property(item => item.ImportedFileName).HasMaxLength(260);
+        });
+
+        modelBuilder.Entity<DomesticProductInfo>(entity =>
+        {
+            entity.ToTable("domestic_product_infos");
+            entity.HasIndex(item => item.Sku).IsUnique();
+            entity.HasIndex(item => item.ProductCode);
+            entity.HasIndex(item => item.ProductName);
+            entity.Property(item => item.Sku).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.ProductCode).HasMaxLength(300);
+            entity.Property(item => item.ProductName).HasMaxLength(2000);
+            entity.Property(item => item.Material).HasMaxLength(500);
+            entity.Property(item => item.Specification).HasMaxLength(500);
+            entity.Property(item => item.CostRmb).HasPrecision(14, 4);
+            entity.Property(item => item.MinimumSalePriceUsd).HasPrecision(14, 4);
+            entity.Property(item => item.WeightGrams).HasPrecision(14, 4);
+            entity.Property(item => item.SupplierName).HasMaxLength(500);
+            entity.Property(item => item.ChineseDeclarationName).HasMaxLength(1000);
+            entity.Property(item => item.EnglishDeclarationName).HasMaxLength(1000);
+            entity.Property(item => item.ImagePath).HasMaxLength(2000);
+            entity.Property(item => item.SourceFileName).HasMaxLength(260);
         });
 
         modelBuilder.Entity<LiveStreamBidSale>(entity =>

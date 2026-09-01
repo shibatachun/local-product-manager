@@ -62,7 +62,7 @@
       <thead><tr><th>Time</th><th>Operation</th><th>Product</th><th>Location</th><th>Quantity</th><th>Operator</th><th>Request details</th></tr></thead>
       <tbody><tr *ngFor="let entry of history()">
         <td><strong>{{ entry.createdAt | date:'MMM d, y' }}</strong><small>{{ entry.createdAt | date:'h:mm:ss a' }}</small></td>
-        <td><span class="history-operation" [class.stock-in]="entry.operation === 'stock_in'" [class.stock-out]="entry.operation === 'stock_out'">{{ historyAction(entry) }}</span><small>{{ entry.source === 'adjust' ? 'Incremental adjustment' : 'Quantity set' }}</small></td>
+        <td><span class="history-operation" [class.stock-in]="entry.operation === 'stock_in'" [class.stock-out]="entry.operation === 'stock_out'">{{ historyAction(entry) }}</span><small>{{ historySource(entry) }}</small></td>
         <td><button type="button" class="history-product" (click)="showProductDetail(entry.productId)"><strong>{{ entry.productName }}</strong><code>{{ entry.sku }}</code><small>{{ entry.localInventoryId || ('Product #' + entry.productId) }}</small></button></td>
         <td><strong>{{ entry.locationDescription }}</strong><code>{{ entry.locationCode }}</code><small>Level #{{ entry.shelfLevelId }} · Bin {{ entry.binNumber }}</small></td>
         <td><strong class="history-delta" [class.positive]="entry.delta > 0">{{ entry.delta > 0 ? '+' : '' }}{{ entry.delta }}</strong><small>{{ entry.beforeQty }} → {{ entry.afterQty }}</small></td>

@@ -57,23 +57,32 @@
         <code>{{ currentHost.path }}</code>
         <span>{{ currentHost.folders.length }} folder(s) - {{ files(currentHost).length }} file(s)</span>
       </div>
-      <div class="host-folder-grid" *ngIf="currentHost.folders.length">
-        <button type="button" *ngFor="let folder of currentHost.folders" (click)="openFolder(folder.path)">
-          <span>Folder</span>
-          <strong>{{ folder.name }}</strong>
-          <small>{{ folder.modifiedAt | date:'MMM d, y, h:mm a' }}</small>
-        </button>
+      <div class="file-tree" *ngIf="treeNodes().length">
+        <ng-container *ngTemplateOutlet="treeTemplate; context: { $implicit: treeNodes(), depth: 0 }"></ng-container>
       </div>
-      <div class="host-image-grid" *ngIf="files(currentHost).length">
-        <a class="host-image-card" *ngFor="let file of files(currentHost)" [href]="downloadUrl(file.path)" [title]="file.path">
-          <img *ngIf="isImage(file); else fileIcon" [src]="previewUrl(file.path)" [alt]="file.name" (error)="hideBrokenImage($event)" />
-          <ng-template #fileIcon>
-            <span class="host-file-icon">{{ fileLabel(file) }}</span>
-          </ng-template>
-          <strong>{{ file.name }}</strong>
-          <small>{{ fileSize(file.size) }} - {{ file.modifiedAt | date:'MMM d, y' }}</small>
-        </a>
-      </div>
+      <ng-template #treeTemplate let-nodes let-depth="depth">
+        <div class="tree-node" *ngFor="let node of nodes">
+          <button *ngIf="node.kind === 'folder'" type="button" class="tree-row folder-row"
+                  [style.padding-left.px]="12 + depth * 22" (click)="toggleFolder(node)" [title]="node.entry.path">
+            <span class="tree-toggle">{{ node.loading ? '…' : node.expanded ? '▾' : '▸' }}</span>
+            <span class="tree-icon">📁</span>
+            <strong>{{ node.entry.name }}</strong>
+            <small>{{ node.entry.modifiedAt | date:'MMM d, y, h:mm a' }}</small>
+          </button>
+          <a *ngIf="node.kind === 'file'" class="tree-row file-row" [style.padding-left.px]="12 + depth * 22"
+             [href]="downloadUrl(node.entry.path)" download [title]="node.entry.path">
+            <span class="tree-toggle"></span>
+            <span class="tree-file-type">{{ fileLabel(node.entry) }}</span>
+            <strong>{{ node.entry.name }}</strong>
+            <small>{{ fileSize(node.entry.size) }} · {{ node.entry.modifiedAt | date:'MMM d, y' }}</small>
+            <span class="download-action">Download</span>
+          </a>
+          <div class="tree-children" *ngIf="node.kind === 'folder' && node.expanded && node.children">
+            <ng-container *ngTemplateOutlet="treeTemplate; context: { $implicit: node.children, depth: depth + 1 }"></ng-container>
+            <div class="tree-empty" *ngIf="!node.children.length" [style.padding-left.px]="85 + (depth + 1) * 22">Empty folder</div>
+          </div>
+        </div>
+      </ng-template>
       <div class="root-empty" *ngIf="!currentHost.folders.length && !files(currentHost).length">This folder does not contain subfolders or files.</div>
     </div>
   </div>

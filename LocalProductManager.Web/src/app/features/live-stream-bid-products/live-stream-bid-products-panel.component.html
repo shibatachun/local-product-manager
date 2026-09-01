@@ -9,6 +9,15 @@
     <article>
       <span>Total inventory value</span><strong>¥{{ totalCost() | number: '1.2-2' }}</strong>
     </article>
+    <article>
+      <span>Average cost per item (unit price)</span>
+      <strong>{{ averageUnitPrice() === null ? '—' : '¥' + (averageUnitPrice() | number: '1.2-2') }}</strong>
+    </article>
+    <article>
+      <span>Average weight per item</span>
+      <strong>{{ averageWeightGrams() === null ? '—' : (averageWeightGrams() | number: '1.1-1') + ' g' }}</strong>
+      <small *ngIf="averageWeightGrams() !== null">{{ averageWeightGrams()! / 28.349523125 | number: '1.2-2' }} oz</small>
+    </article>
   </div>
 
   <section class="history-card">
@@ -143,8 +152,8 @@
     <div>
       <strong>Import BarTender CSV</strong>
       <p>
-        Imports UUID, title, quantity, inventory, price, weight, material, and total cost. Existing
-        UUIDs are updated.
+        Imports UUID, Actual SKU, title, quantity, inventory, price, weight, material, and total
+        cost. Duplicate UUIDs are replaced automatically and shown after import so their labels can be reprinted. Conflicting SKUs are skipped and reported.
       </p>
     </div>
     <label class="file-picker"
@@ -164,6 +173,43 @@
 
   <p class="notice success" *ngIf="message()">{{ message() }}</p>
   <p class="notice error" *ngIf="error()">{{ error() }}</p>
+
+  <div class="move-backdrop" *ngIf="uuidImportConfirmation().length"></div>
+  <section class="import-conflict-modal uuid-confirm-modal" *ngIf="uuidImportConfirmation().length" role="dialog" aria-modal="true" aria-labelledby="uuid-import-confirm-title">
+    <header>
+      <div><small>Review before import</small><h2 id="uuid-import-confirm-title">Duplicate UUIDs need replacement</h2></div>
+    </header>
+    <p>Nothing has been imported yet. The products below use UUIDs that already exist. Confirm to generate new UUIDs and continue, or abandon the entire import.</p>
+    <div class="import-conflict-table"><table><thead><tr><th>CSV file</th><th>CSV row</th><th>Product</th><th>Duplicate UUID</th><th>Planned change</th></tr></thead><tbody>
+      <tr *ngFor="let item of uuidImportConfirmation()"><td>{{ item.fileName }}</td><td>{{ item.rowNumber }}</td><td>{{ item.title || '—' }}</td><td><code>BID|{{ item.originalUuid }}</code></td><td>Generate a new UUID</td></tr>
+    </tbody></table></div>
+    <footer class="uuid-confirm-actions"><button type="button" (click)="cancelUuidImport()" [disabled]="loading()">Abandon import</button><button class="primary" type="button" (click)="confirmUuidImport()" [disabled]="loading()">{{ loading() ? 'Importing…' : 'Replace UUIDs and import' }}</button></footer>
+  </section>
+
+  <div class="move-backdrop" *ngIf="(importConflicts().length || regeneratedUuids().length) && !uuidImportConfirmation().length" (click)="importConflicts.set([]); regeneratedUuids.set([])"></div>
+  <section class="import-conflict-modal" *ngIf="regeneratedUuids().length && !uuidImportConfirmation().length" role="dialog" aria-modal="true" aria-labelledby="regenerated-uuid-title">
+    <header>
+      <div><small>Import completed</small><h2 id="regenerated-uuid-title">Duplicate UUIDs replaced</h2></div>
+      <button type="button" aria-label="Close" (click)="regeneratedUuids.set([])">×</button>
+    </header>
+    <p>These products were imported with new UUIDs. Reprint their labels before using them.</p>
+    <div class="import-conflict-table"><table><thead><tr><th>CSV row</th><th>Title</th><th>Duplicate UUID</th><th>New UUID</th><th>Label</th></tr></thead><tbody>
+      <tr *ngFor="let item of regeneratedUuids()"><td>{{ item.rowNumber }}</td><td>{{ item.title }}</td><td><code>BID|{{ item.originalUuid }}</code></td><td><code>BID|{{ item.newUuid }}</code></td><td><button type="button" class="primary" (click)="printRegeneratedLabel(item)" [disabled]="loading()">Reprint label</button></td></tr>
+    </tbody></table></div>
+    <footer><button class="primary" type="button" (click)="regeneratedUuids.set([])">Done</button></footer>
+  </section>
+
+  <section class="import-conflict-modal" *ngIf="importConflicts().length && !regeneratedUuids().length && !uuidImportConfirmation().length" role="dialog" aria-modal="true" aria-labelledby="import-conflict-title">
+    <header>
+      <div><small>Partial import completed</small><h2 id="import-conflict-title">Duplicate UUID or SKU</h2></div>
+      <button type="button" aria-label="Close" (click)="importConflicts.set([])">×</button>
+    </header>
+    <p>These rows were not imported. Resolve the identifiers in the CSV or existing product data, then import them again.</p>
+    <div class="import-conflict-table"><table><thead><tr><th>CSV row</th><th>UUID</th><th>Actual SKU</th><th>Title</th><th>Conflict</th></tr></thead><tbody>
+      <tr *ngFor="let conflict of importConflicts()"><td>{{ conflict.rowNumber }}</td><td><code>{{ conflict.uuid || '—' }}</code></td><td>{{ conflict.actualSku || '—' }}</td><td>{{ conflict.title || '—' }}</td><td><span *ngFor="let reason of conflict.reasons">{{ reason }}</span></td></tr>
+    </tbody></table></div>
+    <footer><button class="primary" type="button" (click)="importConflicts.set([])">OK</button></footer>
+  </section>
 
   <section class="list-card">
     <header>
@@ -227,6 +273,14 @@
                     (click)="openAddToBatch(batch.batchNumber)"
                   >
                     + Add Product
+                  </button><button
+                    type="button"
+                    class="delete-product"
+                    *ngIf="batch.batchNumber && (canImport || canMove)"
+                    (click)="deleteBatch(batch.batchNumber, batch.products.length)"
+                    [disabled]="loading()"
+                  >
+                    Delete Batch
                   </button>
                 </div>
               </td>
@@ -246,6 +300,7 @@
                         <th>Material</th>
                         <th>Total cost</th>
                         <th class="safe-price-heading">Whatnot safe start <button type="button" class="safe-price-info" title="Show safe-price calculation" aria-label="Show Whatnot safe-price calculation" (click)="safePriceHelpOpen.set(true)">!</button></th>
+                        <th>Item Code</th>
                         <th>Expected inventory</th>
                         <th>Actual inventory</th>
                         <th>Action</th>
@@ -284,19 +339,19 @@
                               : '$' + (item.whatnotAuctionSafePrice | number: '1.2-2')
                           }}
                         </td>
+                        <td><strong>{{ item.itemCode || '—' }}</strong></td>
                         <td>{{ item.inventory }} remaining</td>
                         <td>{{ item.actualInventory }} received</td>
                         <td>
                           <div class="row-actions">
                             <button
                               type="button"
-                              *ngIf="item.requiresLocalLabel && labelPrintingSettings()?.enabled"
+                              *ngIf="labelPrintingSettings()?.enabled"
                               (click)="printBidLabel(item)"
                               [disabled]="loading()"
                             >
                               Print label</button
                             >
-                            <span class="external-label-status" *ngIf="!item.requiresLocalLabel" title="This external CSV product was labeled before import">Label already printed</span>
                             <button
                               type="button"
                               class="edit-product"
@@ -345,8 +400,8 @@
     <p class="safe-price-note">The result is rounded up to the next whole dollar. It is a break-even safety estimate, not a guaranteed profit or final selling price.</p>
   </section>
 
-  <div class="move-backdrop" *ngIf="createOpen()" (click)="closeCreateList()"></div>
-  <section class="create-modal" *ngIf="createOpen()" role="dialog" aria-modal="true">
+  <div class="move-backdrop" *ngIf="createOpen() && !uuidImportConfirmation().length" (click)="closeCreateList()"></div>
+  <section class="create-modal" *ngIf="createOpen() && !uuidImportConfirmation().length" role="dialog" aria-modal="true">
     <header>
       <div>
         <small>{{
@@ -381,10 +436,24 @@
         ><input [(ngModel)]="row.actualSku" placeholder="Enter the company SKU"
       /></label>
     </div>
+    <section class="bulk-csv-import" *ngIf="!editingProduct() && !targetBatch()">
+      <div><strong>Bulk import converted 1688 CSV</strong><small>Each CSV file creates its own new Batch Number.</small></div>
+      <label class="bulk-csv-drop" (dragover)="$event.preventDefault()" (drop)="dropBulkCsvFiles($event)">
+        <input type="file" multiple accept=".csv,text/csv" (change)="selectBulkCsvFiles($event)" />
+        <strong>Drop multiple CSV files here</strong><span>or tap to choose files</span>
+      </label>
+      <div class="bulk-csv-queue" *ngIf="bulkCsvFiles().length">
+        <div *ngFor="let file of bulkCsvFiles(); let i = index"><span><b>{{ file.name }}</b><small>{{ file.size | number }} bytes</small></span><button type="button" (click)="removeBulkCsvFile(i)" [disabled]="loading()">×</button></div>
+      </div>
+      <button class="bulk-import-button" type="button" [disabled]="!bulkCsvFiles().length || loading()" (click)="importBulkConvertedCsvs()">{{ loading() ? 'Creating batches…' : 'Import ' + bulkCsvFiles().length + ' CSV file(s) as separate batches' }}</button>
+      <div class="bulk-csv-results" *ngIf="bulkCsvResults().length">
+        <div *ngFor="let result of bulkCsvResults()" [class.failed]="result.error"><span><strong>{{ result.fileName }}</strong><small>{{ result.error || (result.products + ' products imported') }}</small></span><b>{{ result.batchNumber || 'Failed' }}</b></div>
+      </div>
+    </section>
     <div class="create-tools" *ngIf="!editingProduct()">
       <label class="file-picker"
         ><input type="file" accept=".csv,text/csv" (change)="loadDraftCsv($event)" /><span
-          >Import converted 1688 CSV</span
+          >Load one CSV into editor</span
         ></label
       ><select [(ngModel)]="draftProductId">
         <option [ngValue]="null">Choose warehouse product</option>
@@ -402,7 +471,8 @@
             <th>#</th>
             <th>Title</th>
             <th>Quantity</th>
-            <th>Inventory</th>
+            <th>Expected Inventory</th>
+            <th>Actual Inventory</th>
             <th>Unit Price</th>
             <th>Pricing</th>
             <th>Weight (g)</th>
@@ -410,6 +480,7 @@
             <th>Material</th>
             <th>Total Cost</th>
             <th>Whatnot Safe Start ($)</th>
+            <th>Item Code</th>
             <th></th>
           </tr>
         </thead>
@@ -425,7 +496,8 @@
                 (ngModelChange)="recalculate(row)"
               />
             </td>
-            <td><input type="number" min="0" [(ngModel)]="row.inventory" /></td>
+            <td><input type="number" min="0" [(ngModel)]="row.expectedInventory" /></td>
+            <td><input type="number" min="0" [(ngModel)]="row.actualInventory" /></td>
             <td>
               <input
                 type="number"
@@ -462,6 +534,7 @@
                 placeholder="0.00"
               />
             </td>
+            <td><strong>{{ itemCodeForPrice(row.whatnotAuctionSafePrice) }}</strong></td>
             <td>
               <button type="button" class="remove-row" (click)="removeDraftRow(i)">Delete</button>
             </td>

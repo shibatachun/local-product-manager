@@ -4,6 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { CurrentUser, ImageHostBrowseResult, ImageHostEntry, ImageStorageRoot } from '../../core/models';
 import { ProductApiService } from '../../core/product-api.service';
 
+type FileTreeNode = {
+  entry: ImageHostEntry;
+  kind: 'folder' | 'file';
+  expanded: boolean;
+  loading: boolean;
+  children: FileTreeNode[] | null;
+};
+
 @Component({
   selector: 'app-file-storage-panel',
   imports: [CommonModule, FormsModule],
@@ -14,6 +22,7 @@ export class FileStoragePanelComponent {
   readonly currentUser = input<CurrentUser | null>(null);
   readonly roots = signal<ImageStorageRoot[]>([]);
   readonly host = signal<ImageHostBrowseResult | null>(null);
+  readonly treeNodes = signal<FileTreeNode[]>([]);
   readonly newRoot = signal('');
   readonly hostPath = signal('');
   readonly notice = signal('');
@@ -72,6 +81,7 @@ export class FileStoragePanelComponent {
     await this.run(async () => {
       const result = await this.api.browseImageHost(trimmed);
       this.host.set(result);
+      this.treeNodes.set(this.toTreeNodes(result));
       this.hostPath.set(result.path);
       this.show(`${result.folders.length} folder(s), ${this.files(result).length} file(s) loaded.`);
     });
@@ -79,6 +89,32 @@ export class FileStoragePanelComponent {
 
   async openFolder(path: string): Promise<void> {
     await this.browse(path);
+  }
+
+  async toggleFolder(node: FileTreeNode): Promise<void> {
+    if (node.loading) return;
+    if (node.expanded) {
+      node.expanded = false;
+      this.refreshTree();
+      return;
+    }
+    if (node.children !== null) {
+      node.expanded = true;
+      this.refreshTree();
+      return;
+    }
+    node.loading = true;
+    this.refreshTree();
+    try {
+      const result = await this.api.browseImageHost(node.entry.path);
+      node.children = this.toTreeNodes(result);
+      node.expanded = true;
+    } catch (error) {
+      this.show(error instanceof Error ? error.message : 'Could not open this folder.');
+    } finally {
+      node.loading = false;
+      this.refreshTree();
+    }
   }
 
   files(host: ImageHostBrowseResult): ImageHostEntry[] {
@@ -111,6 +147,17 @@ export class FileStoragePanelComponent {
 
   hideBrokenImage(event: Event): void {
     (event.target as HTMLImageElement).style.display = 'none';
+  }
+
+  private toTreeNodes(host: ImageHostBrowseResult): FileTreeNode[] {
+    return [
+      ...host.folders.map(entry => ({ entry, kind: 'folder' as const, expanded: false, loading: false, children: null })),
+      ...this.files(host).map(entry => ({ entry, kind: 'file' as const, expanded: false, loading: false, children: null })),
+    ];
+  }
+
+  private refreshTree(): void {
+    this.treeNodes.update(nodes => [...nodes]);
   }
 
   private async run(action: () => Promise<void>): Promise<void> {

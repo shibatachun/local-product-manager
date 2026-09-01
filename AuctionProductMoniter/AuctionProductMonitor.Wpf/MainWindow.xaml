@@ -1,0 +1,107 @@
+<Window x:Class="AuctionProductMonitor.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource WindowTitle}" Height="760" Width="900"
+        MinHeight="620" MinWidth="760" Background="#F5F7FB">
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="2*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="{DynamicResource Language}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#667085"/>
+        <ComboBox x:Name="LanguageComboBox" Width="120" Padding="7,4" SelectionChanged="LanguageComboBox_SelectionChanged">
+          <ComboBoxItem Content="中文" Tag="zh-CN"/>
+          <ComboBoxItem Content="English" Tag="en-US"/>
+        </ComboBox>
+      </StackPanel>
+      <StackPanel>
+        <TextBlock Text="{DynamicResource WindowTitle}" FontSize="24" FontWeight="SemiBold" Foreground="#172033"/>
+        <TextBlock Text="{DynamicResource Subtitle}" Margin="0,4,0,0" Foreground="#667085"/>
+      </StackPanel>
+    </DockPanel>
+
+    <Border Grid.Row="1" Margin="0,16,0,12" Padding="12" CornerRadius="8" Background="#E8F7EE">
+      <StackPanel Orientation="Horizontal">
+        <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#24A148" VerticalAlignment="Center"/>
+        <TextBlock x:Name="StatusText" Text="{DynamicResource ReceiverStarting}" Margin="9,0,0,0" Foreground="#14532D"/>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Margin="0,0,0,12" Padding="12" CornerRadius="8" Background="White" BorderBrush="#D8DEE9" BorderThickness="1">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="{DynamicResource OpenScreenshotFolder}" Click="OpenScreenshotFolderButton_Click"
+                  Margin="0,0,8,0" Padding="14,9"/>
+          <Button x:Name="ToggleLiveButton" Content="{DynamicResource StartLive}" Click="ToggleLiveButton_Click"
+                  MinWidth="120" Padding="16,9" Background="#2457D6" Foreground="White" FontWeight="SemiBold"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="{DynamicResource LiveSession}" FontWeight="SemiBold" Foreground="#172033"/>
+          <TextBlock x:Name="SessionStatusText" Text="{DynamicResource NoActiveSession}" Margin="0,5,0,0" Foreground="#667085"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="3" Margin="0,0,0,12" Padding="12" CornerRadius="8" Background="White" BorderBrush="#D8DEE9" BorderThickness="1">
+      <StackPanel>
+        <TextBlock Text="{DynamicResource RelayClientTitle}" FontWeight="SemiBold" Foreground="#172033"/>
+        <DockPanel Margin="0,8,0,0">
+          <TextBox x:Name="RelayEndpointTextBox"
+                   Padding="7" VerticalContentAlignment="Center" MinWidth="430"/>
+          <Button Content="{DynamicResource TestConnection}" Click="TestRelayButton_Click" Margin="8,0,0,0" Padding="12,7"/>
+          <Button Content="{DynamicResource PrintTestLabel}" Click="PrintTestLabelButton_Click" Margin="8,0,0,0" Padding="12,7"/>
+          <Button Content="{DynamicResource PrintSelectedSale}" Click="PrintSelectedButton_Click" Margin="8,0,0,0" Padding="12,7"/>
+        </DockPanel>
+        <DockPanel Margin="0,8,0,0">
+          <Button Content="{DynamicResource SaveSettings}" Click="SaveRelaySettingsButton_Click" DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,7"/>
+          <PasswordBox x:Name="RelayApiKeyBox" Padding="7"/>
+        </DockPanel>
+        <DockPanel Margin="0,8,0,0">
+          <CheckBox x:Name="AutoPrintCheckBox" Content="{DynamicResource AutoPrint}" VerticalAlignment="Center"/>
+          <TextBlock x:Name="PrintStatusText" Margin="14,0,0,0" Foreground="#667085" Text="{DynamicResource PrintNotTested}"/>
+        </DockPanel>
+      </StackPanel>
+    </Border>
+
+    <DockPanel Grid.Row="4" Margin="0,0,0,6">
+      <Button x:Name="BackToCurrentSessionButton" DockPanel.Dock="Right" Visibility="Collapsed"
+              Content="{DynamicResource BackToCurrentSession}" Click="BackToCurrentSessionButton_Click" Padding="12,5"/>
+      <TextBlock x:Name="CurrentSalesTitle" Text="{DynamicResource CurrentSalesNotStarted}"
+                 FontSize="16" FontWeight="SemiBold" Foreground="#172033" VerticalAlignment="Center"/>
+    </DockPanel>
+
+    <DataGrid Grid.Row="5" x:Name="SalesGrid" AutoGenerateColumns="False" IsReadOnly="True"
+              HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
+              Background="White" BorderBrush="#D8DEE9">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="{DynamicResource ColumnTime}" Binding="{Binding LocalTime}" Width="180"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnBuyerName}" Binding="{Binding BuyerName}" Width="*"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnProductNumber}" Binding="{Binding ProductNumber}" Width="180"/>
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <TextBlock Grid.Row="6" Text="{DynamicResource HistoricalSessions}" Margin="0,14,0,6" FontSize="16" FontWeight="SemiBold" Foreground="#172033"/>
+
+    <DataGrid Grid.Row="7" x:Name="SessionsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+              SelectionChanged="SessionsGrid_SelectionChanged"
+              HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
+              Background="White" BorderBrush="#D8DEE9">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="{DynamicResource ColumnLiveDate}" Binding="{Binding LiveDate}" Width="140"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnSession}" Binding="{Binding Id}" Width="*"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnStart}" Binding="{Binding StartTime}" Width="110"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnEnd}" Binding="{Binding EndTime}" Width="110"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnSaleCount}" Binding="{Binding SaleCount}" Width="90"/>
+      </DataGrid.Columns>
+    </DataGrid>
+  </Grid>
+</Window>

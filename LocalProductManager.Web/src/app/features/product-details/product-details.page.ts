@@ -27,6 +27,7 @@ export class ProductDetailsPage {
   readonly saving = signal(false);
   readonly message = signal('');
   readonly canEdit = signal(false);
+  readonly canOpenLocalFolder = signal(false);
   readonly images = signal<ProductImageFile[]>([]);
 
   constructor() { void this.load(); }
@@ -35,7 +36,14 @@ export class ProductDetailsPage {
     const id = Number(this.route.snapshot.paramMap.get('productId'));
     if (!Number.isFinite(id)) { this.loading.set(false); return; }
     try {
-      try { this.canEdit.set((await this.authApi.me()).canEditProductDetails); } catch { this.canEdit.set(false); }
+      try {
+        const user = await this.authApi.me();
+        this.canEdit.set(user.canEditProductDetails);
+        this.canOpenLocalFolder.set(user.isAdmin);
+      } catch {
+        this.canEdit.set(false);
+        this.canOpenLocalFolder.set(false);
+      }
       this.product.set(await this.api.getProduct(id));
       const [recordResult, locationResult, imageResult] = await Promise.allSettled([
         this.api.getExtendedData(id),
@@ -65,6 +73,16 @@ export class ProductDetailsPage {
   back(): void { this.location.back(); }
   imageUrl(product: ProductDetail): string { return this.api.productImageUrl(product.id, false, 512); }
   folderImageUrl(productId: number, fileName: string): string { return this.api.productImageFileUrl(productId, fileName); }
+  async openLocalImageFolder(): Promise<void> {
+    const product = this.product();
+    if (!product || !this.canOpenLocalFolder()) return;
+    try {
+      await this.api.openProductImageFolder(product.id);
+      this.message.set('Product image folder opened on this computer.');
+    } catch {
+      this.message.set('Unable to open the product image folder. This action is only available to an administrator.');
+    }
+  }
   async uploadPhotos(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const product = this.product(), files = Array.from(input.files ?? []);

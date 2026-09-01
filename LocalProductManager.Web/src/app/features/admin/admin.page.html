@@ -24,9 +24,9 @@
 
   <ng-container *ngIf="currentUser()?.isAdmin">
     <section class="panel">
-      <div class="section-heading"><div><h2>Third-party label printing</h2><p>Connect BarTender or another HTTP-compatible label service. Existing browser printing remains available.</p></div></div>
+      <div class="section-heading"><div><h2>BID product label printing</h2><p>The existing BarTender connection for BID products. Existing browser inventory printing remains available.</p></div></div>
       <div class="integration-grid">
-        <label class="toggle-field"><input type="checkbox" [(ngModel)]="labelSettings.enabled" /> Enable third-party printing</label>
+        <label class="toggle-field"><input type="checkbox" [(ngModel)]="labelSettings.enabled" /> Enable BID label printing</label>
         <label>Provider<input [(ngModel)]="labelSettings.provider" placeholder="BarTender" /></label>
         <label class="wide">HTTP endpoint<input [(ngModel)]="labelSettings.endpointUrl" placeholder="http://localhost:5159/..." /></label>
         <label>Template / document<input [(ngModel)]="labelSettings.templateName" placeholder="InventoryLabel.btw" /></label>
@@ -34,7 +34,20 @@
         <label>Timeout (seconds)<input type="number" min="2" max="120" [(ngModel)]="labelSettings.timeoutSeconds" /></label>
       </div>
       <div class="maintenance-actions"><button class="primary" type="button" (click)="saveLabelSettings()" [disabled]="loading()">Save connection</button><button type="button" (click)="testLabelConnection()" [disabled]="loading()">Test connection</button></div>
-      <p class="danger-note">The endpoint is called by the inventory server. For BarTender Integration Builder, enter the deployed Web Service Integration URL rather than only the Designer application address.</p>
+      <p class="danger-note">This connection remains dedicated to BID Product labels and the bartender_bid_products database View.</p>
+    </section>
+    <section class="panel">
+      <div class="section-heading"><div><h2>Inventory BarTender printing</h2><p>Optional dedicated Integration for regular LPM inventory QR labels. Browser printing remains available alongside it.</p></div></div>
+      <div class="integration-grid">
+        <label class="toggle-field"><input type="checkbox" [(ngModel)]="inventoryLabelSettings.enabled" /> Enable inventory BarTender printing</label>
+        <label>Provider<input [(ngModel)]="inventoryLabelSettings.provider" placeholder="BarTender" /></label>
+        <label class="wide">HTTP endpoint<input [(ngModel)]="inventoryLabelSettings.endpointUrl" placeholder="http://localhost:5161/Integration/lpm-inventory-label-print/Execute" /></label>
+        <label>Template / document<input [(ngModel)]="inventoryLabelSettings.templateName" placeholder="Inventory-Product-Label.btw" /></label>
+        <label>Printer<input [(ngModel)]="inventoryLabelSettings.printerName" placeholder="PM-241 website labels" /></label>
+        <label>Timeout (seconds)<input type="number" min="2" max="120" [(ngModel)]="inventoryLabelSettings.timeoutSeconds" /></label>
+      </div>
+      <div class="maintenance-actions"><button class="primary" type="button" (click)="saveInventoryLabelSettings()" [disabled]="loading()">Save inventory connection</button><button type="button" (click)="testInventoryLabelConnection()" [disabled]="loading()">Test inventory connection</button></div>
+      <p class="danger-note">Use the bartender_inventory_products View. Configure the BarTender Query Prompt against UUID, for example LPM|INV-35.</p>
     </section>
     <section class="panel maintenance-panel">
       <div class="section-heading">

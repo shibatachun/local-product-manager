@@ -150,6 +150,7 @@ export type InventoryCategory =
   | 'KIT'
   | 'BEAD'
   | 'BROOCH'
+  | 'CABOCHON'
   | 'UNKNOWN'
   | 'BAG'
   | 'PACKAGE';

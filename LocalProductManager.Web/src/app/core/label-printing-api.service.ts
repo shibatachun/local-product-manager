@@ -36,8 +36,20 @@ export class LabelPrintingApiService {
   test(): Promise<LabelPrintResult> {
     return firstValueFrom(this.http.post<LabelPrintResult>(`${this.base}/test`, {}));
   }
+  inventorySettings(): Promise<LabelPrintingSettings> {
+    return firstValueFrom(this.http.get<LabelPrintingSettings>(`${this.base}/inventory/settings`));
+  }
+  saveInventorySettings(settings: LabelPrintingSettings): Promise<LabelPrintingSettings> {
+    return firstValueFrom(this.http.put<LabelPrintingSettings>(`${this.base}/inventory/settings`, settings));
+  }
+  testInventory(): Promise<LabelPrintResult> {
+    return firstValueFrom(this.http.post<LabelPrintResult>(`${this.base}/inventory/test`, {}));
+  }
   print(items: LabelPrintItem[]): Promise<LabelPrintResult> {
     return firstValueFrom(this.http.post<LabelPrintResult>(`${this.base}/print`, { items }));
+  }
+  printInventory(items: LabelPrintItem[]): Promise<LabelPrintResult> {
+    return firstValueFrom(this.http.post<LabelPrintResult>(`${this.base}/inventory/print`, { items }));
   }
   printBidProduct(id: number, copies: number): Promise<LabelPrintResult> {
     return firstValueFrom(this.http.post<LabelPrintResult>(`${this.base}/bid-products/${id}`, { copies }));

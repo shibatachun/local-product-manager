@@ -83,7 +83,7 @@ public sealed class DatabaseSchemaService
                 WarehouseId INTEGER NOT NULL,
                 Code TEXT NOT NULL,
                 ZoneCode TEXT NOT NULL,
-                AisleNumber INTEGER NOT NULL,
+                RowNumber INTEGER NOT NULL,
                 RackNumber INTEGER NOT NULL,
                 LevelCount INTEGER NOT NULL,
                 X TEXT NOT NULL,

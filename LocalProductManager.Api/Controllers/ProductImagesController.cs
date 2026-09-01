@@ -288,11 +288,11 @@ public sealed class ProductImagesController(
     public async Task<IActionResult> OpenFolder(int productId, CancellationToken cancellationToken)
     {
         var currentUser = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
-        if (!currentUser.IsAdmin || !currentUser.IsHost)
+        if (!currentUser.IsAdmin)
         {
             return StatusCode(
                 StatusCodes.Status403Forbidden,
-                "Opening a local product folder requires an administrator session on the host computer.");
+                "Opening a local product folder requires an administrator session.");
         }
 
         var product = await db.Products

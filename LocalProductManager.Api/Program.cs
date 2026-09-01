@@ -69,6 +69,7 @@ builder.Services.AddScoped<TikTokReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SocialDataMaintenanceService>();
 builder.Services.AddScoped<LiveStreamBidProductImportService>();
+builder.Services.AddScoped<DomesticProductImportService>();
 builder.Services.AddSingleton<ThirdPartyLabelPrintService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ProductImageFolderService>();
@@ -129,9 +130,12 @@ using (var scope = app.Services.CreateScope())
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
         db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
     }
+    await WarehouseSchema.UpgradeAsync(db);
     await ProductInventoryCategorySchema.UpgradeAsync(db);
     await ProductExtendedDataSchema.UpgradeAsync(db);
     await LiveStreamBidProductSchema.UpgradeAsync(db);
+    await DomesticProductSchema.UpgradeAsync(db);
+    await InventoryLabelSchema.UpgradeAsync(db);
     await scope.ServiceProvider.GetRequiredService<ProductImageFolderService>()
         .OrganizeExistingProductsAsync();
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();

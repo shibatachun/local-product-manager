@@ -12,7 +12,7 @@ public static class ProductInventoryCategories
 
     public static readonly string[] All =
     [
-        "KEYCHAIN", "POM", "CHARM", "EYE", "KIT", "BEAD", "BROOCH", Unknown, "BAG", "PACKAGE"
+        "KEYCHAIN", "POM", "CHARM", "EYE", "KIT", "BEAD", "BROOCH", "CABOCHON", Unknown, "BAG", "PACKAGE"
     ];
 
     public static string Normalize(string? value)
@@ -30,6 +30,7 @@ public static class ProductInventoryCategories
             "KITS" => "KIT",
             "BEADS" => "BEAD",
             "BROOCHES" => "BROOCH",
+            "CABOCHONS" => "CABOCHON",
             "BAGS" => "BAG",
             "PACK" or "PACKS" or "PACKAGING" or "PACKAGES" => "PACKAGE",
             _ => Unknown

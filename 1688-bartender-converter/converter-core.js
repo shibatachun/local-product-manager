@@ -15,6 +15,8 @@
     "Material",
     "Total Cost",
     "Whatnot Auction Safe Price",
+    "Item Code",
+    "Expected Inventory",
   ];
 
   function uniqueHeaders(rawHeaders) {
@@ -152,6 +154,18 @@
     return Math.ceil((protectedCost + fixedAndAncillaryFees) / retainedSaleRate).toFixed(2);
   }
 
+  function priceToItemCode(suggestedPrice) {
+    let value = Math.round(Number.parseFloat(suggestedPrice));
+    if (!Number.isFinite(value) || value < 1) return "";
+    let code = "";
+    while (value > 0) {
+      value -= 1;
+      code = String.fromCharCode(65 + (value % 26)) + code;
+      value = Math.floor(value / 26);
+    }
+    return code;
+  }
+
   function bytesToUuid(bytes) {
     const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
@@ -201,7 +215,8 @@
         UUID: bidCode,
         Title: source["货品标题"] || "",
         Quantity: source["数量"] || "",
-        Inventory: inventory,
+        Inventory: 0,
+        "Expected Inventory": inventory,
         "Price Type": "per-unit",
         "Unit Price": source["单价(元)"] || "",
         "Weight (g)": grams,
@@ -209,6 +224,7 @@
         Material: detectMaterial(source["货品标题"]),
         "Total Cost": calculated.totalCost,
         "Whatnot Auction Safe Price": calculated.whatnotSafePrice,
+        "Item Code": priceToItemCode(calculated.whatnotSafePrice),
       });
     }
     return {
@@ -229,15 +245,17 @@
     record["Weight (oz)"] = calculated.ounces;
     record["Total Cost"] = calculated.totalCost;
     record["Whatnot Auction Safe Price"] = calculated.whatnotSafePrice;
+    record["Item Code"] = priceToItemCode(calculated.whatnotSafePrice);
     return record;
   }
 
-  async function createBlankRecord(seed = `${Date.now()}|${Math.random()}`) {
+  async function createBlankRecord(seed = `${Date.now()}|${globalScope.crypto?.randomUUID?.() || Math.random()}`) {
     return {
       UUID: `BID|${await stableUuid(`manual|${seed}`)}`,
       Title: "",
       Quantity: 1,
-      Inventory: 1,
+      Inventory: 0,
+      "Expected Inventory": 1,
       "Price Type": "per-package",
       "Unit Price": "",
       "Weight (g)": "",
@@ -245,6 +263,7 @@
       Material: "",
       "Total Cost": "",
       "Whatnot Auction Safe Price": "",
+      "Item Code": "",
     };
   }
 
@@ -253,10 +272,24 @@
     return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
+  const TWO_DECIMAL_EXPORT_FIELDS = new Set([
+    "Unit Price",
+    "Weight (g)",
+    "Weight (oz)",
+    "Total Cost",
+    "Whatnot Auction Safe Price",
+  ]);
+
+  function formatExportValue(header, value) {
+    if (!TWO_DECIMAL_EXPORT_FIELDS.has(header) || value === "" || value === null || value === undefined) return value;
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number.toFixed(2) : value;
+  }
+
   function toCsv(data) {
     const lines = [data.headers.map(escapeCsv).join(",")];
     for (const record of data.records) {
-      lines.push(data.headers.map((header) => escapeCsv(record[header])).join(","));
+      lines.push(data.headers.map((header) => escapeCsv(formatExportValue(header, record[header]))).join(","));
     }
     return `\uFEFF${lines.join("\r\n")}`;
   }
@@ -265,11 +298,13 @@
     GRAMS_PER_OUNCE,
     SHIPPING_COST_PER_GRAM,
     DEFAULT_RMB_TO_USD_RATE,
+    EXPORT_HEADERS: [...EXPORT_HEADERS],
     flattenWorksheet,
     detectGrams,
     detectMaterial,
     calculate,
     calculateWhatnotSafePrice,
+    priceToItemCode,
     stableUuid,
     enrichRecords,
     createBlankRecord,

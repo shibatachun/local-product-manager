@@ -1,0 +1,141 @@
+﻿<IntegrationFile Version="10" ID="ac90128c-52f6-43f0-a860-afb304cd69b3">
+  <ActionGroup ID="7392829d-7be1-4510-b7bb-d5de5ff91462" RunMethod="Sequential" MessagingEnabled="false">
+    <Actions>
+      <WebRequestIntegration Name="Auction Product Monitor Label Printing" IgnoreErrors="true" ID="87ecbbfa-efb7-4e63-b683-c47c25752d28" ActionExecution="WaitForPreviousEventPrintJob" Port="5164" ServiceName="auction-product-label" ResponseFormat="Json">
+        <Description>Dedicated JSON label printing endpoint for AuctionProductMonitor.Wpf</Description>
+        <Variables>
+          <Variable Name="action" Type="System.String">
+            <Value>test</Value>
+          </Variable>
+          <Variable Name="buyerName" Type="System.String">
+            <Value>test_buyer</Value>
+          </Variable>
+          <Variable Name="copies" Type="System.String">
+            <Value>1</Value>
+          </Variable>
+          <Variable Name="detectedAt" Type="System.String">
+            <Value></Value>
+          </Variable>
+          <Variable Name="productNumber" Type="System.String">
+            <Value>1</Value>
+          </Variable>
+          <Variable Name="requestedAt" Type="System.String">
+            <Value></Value>
+          </Variable>
+          <Variable Name="sessionDate" Type="System.String">
+            <Value>2026-08-25</Value>
+          </Variable>
+          <Variable Name="sessionId" Type="System.String">
+            <Value>connection-test</Value>
+          </Variable>
+          <Variable Name="source" Type="System.String">
+            <Value>AuctionProductMonitor.Wpf</Value>
+          </Variable>
+        </Variables>
+        <ActionGroup ID="a8f08ccb-3be1-4b84-8eb3-d42e21c9b21e" RunMethod="Sequential" MessagingEnabled="false">
+          <Actions>
+            <PrintAction Name="Print Auction Product Label" RunType="UseConditionVariable" IgnoreErrors="false" ID="dbbf8e8f-50ee-4a99-8829-3fc7c80cc7cc" CloseDocumentAfterPrint="true" Printer="PM-241H (Bluetooth)" CopiesPerSerialNumber="%copies%">
+              <ConditionExpression>
+                <Expression>[%action%] = 'print'</Expression>
+                <VariableDataTypes>{"action":"Text"}</VariableDataTypes>
+              </ConditionExpression>
+              <DocumentFile Path="C:\Users\jjgqa\local-product-manager\AuctionProductMoniter\bidproductlabel.btw">
+                <FileSystem.System />
+              </DocumentFile>
+              <NamedDataSources>
+                <Field Name="BuyerName">%buyerName%</Field>
+                <Field Name="ProductNumber">%productNumber%</Field>
+                <Field Name="SessionId">%sessionId%</Field>
+              </NamedDataSources>
+              <PrintToFileFolder Path="%IntegrationFileNameWithoutExtension%">
+                <FileSystem.Temporary />
+              </PrintToFileFolder>
+            </PrintAction>
+          </Actions>
+        </ActionGroup>
+        <ContentData ContentDataType="JsonVariables" />
+        <Samples>
+          <Sample Name="Auction WPF Print Request">
+            <Variables>
+              <Variable Name="action" Type="System.String">
+                <Value>print</Value>
+              </Variable>
+              <Variable Name="buyerName" Type="System.String">
+                <Value>silentgems</Value>
+              </Variable>
+              <Variable Name="copies" Type="System.String">
+                <Value>1</Value>
+              </Variable>
+              <Variable Name="detectedAt" Type="System.String">
+                <Value>2026-08-24T16:07:37-04:00</Value>
+              </Variable>
+              <Variable Name="EventData" Type="System.String">
+                <Value>{&#xD;
+  "action": "print",&#xD;
+  "source": "AuctionProductMonitor.Wpf",&#xD;
+  "sessionId": "LIVE-20260825-160000",&#xD;
+  "sessionDate": "2026-08-25",&#xD;
+  "buyerName": "silentgems",&#xD;
+  "productNumber": "33",&#xD;
+  "copies": 1,&#xD;
+  "detectedAt": "2026-08-24T16:07:37-04:00",&#xD;
+  "requestedAt": "2026-08-24T20:07:38Z"&#xD;
+}</Value>
+              </Variable>
+              <Variable Name="productNumber" Type="System.String">
+                <Value>33</Value>
+              </Variable>
+              <Variable Name="requestedAt" Type="System.String">
+                <Value>2026-08-24T20:07:38Z</Value>
+              </Variable>
+              <Variable Name="sessionDate" Type="System.String">
+                <Value>2026-08-25</Value>
+              </Variable>
+              <Variable Name="sessionId" Type="System.String">
+                <Value>LIVE-20260825-160000</Value>
+              </Variable>
+              <Variable Name="source" Type="System.String">
+                <Value>AuctionProductMonitor.Wpf</Value>
+              </Variable>
+            </Variables>
+          </Sample>
+        </Samples>
+        <ResponseHeaders />
+        <ResponseData>
+          <Value>{&#xD;
+  "accepted": true,&#xD;
+  "message": "Auction Product Monitor request received."&#xD;
+}</Value>
+        </ResponseData>
+      </WebRequestIntegration>
+    </Actions>
+  </ActionGroup>
+  <Metadata>
+    <Properties>
+      <Properties Name="MostRecentlyUsedVariables" Type="System.String">
+        <Value>action;sessionId;sessionDate;buyerName;productNumber;copies;detectedAt;requestedAt;source;EventData</Value>
+      </Properties>
+      <Properties Name="SelectedDeploymentConfiguration" Type="System.String">
+        <Value>Production</Value>
+      </Properties>
+      <Properties Name="SelectedIntegration" Type="System.Int32">
+        <Value>0</Value>
+      </Properties>
+      <Properties Name="SelectedOptionsPage" Type="System.String">
+        <Value>1;0</Value>
+      </Properties>
+    </Properties>
+  </Metadata>
+  <SourcePath>C:\Users\jjgqa\local-product-manager\AuctionProductMoniter\AuctionProductMonitor-BarTender.btin</SourcePath>
+  <IsPrinting>false</IsPrinting>
+  <IsPrintPreview>false</IsPrintPreview>
+  <DeploymentConfigurations>
+    <DeploymentConfiguration CancelIfIntegrationFileExistsOnTargetServer="false">
+      <Name>Production</Name>
+      <TargetServers>
+        <TargetServer Name="This Computer" IsServerGroup="false" />
+      </TargetServers>
+      <DeploymentSchedule Method="Immediately" />
+    </DeploymentConfiguration>
+  </DeploymentConfigurations>
+</IntegrationFile>

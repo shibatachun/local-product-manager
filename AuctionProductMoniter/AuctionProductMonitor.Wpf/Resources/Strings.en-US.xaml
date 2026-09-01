@@ -1,0 +1,70 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+  <sys:String x:Key="WindowTitle">Auction Product Monitor</sys:String>
+  <sys:String x:Key="Subtitle">Track Whatnot buyers and product numbers by live session</sys:String>
+  <sys:String x:Key="Language">Language</sys:String>
+
+  <sys:String x:Key="ReceiverStarting">Starting the local receiver…</sys:String>
+  <sys:String x:Key="ReceiverRunning">Receiver running: {0}　Data: {1}</sys:String>
+  <sys:String x:Key="StartFailed">Startup failed: {0}</sys:String>
+  <sys:String x:Key="SaveFailed">Failed to save sessions: {0}</sys:String>
+  <sys:String x:Key="AnotherInstanceRunning">Auction Product Monitor is already running. Only one instance can run on this computer.</sys:String>
+  <sys:String x:Key="CloseWhileLiveTitle">Live Session Is Still Running</sys:String>
+  <sys:String x:Key="CloseWhileLivePrompt">Session {0} is still live.&#x0a;&#x0a;Choose Yes to end the live session and exit, No to exit while keeping the session open, or Cancel to return to the Monitor.</sys:String>
+
+  <sys:String x:Key="LiveSession">Live Session</sys:String>
+  <sys:String x:Key="StartLive">Start Live</sys:String>
+  <sys:String x:Key="OpenScreenshotFolder">Open Screenshots</sys:String>
+  <sys:String x:Key="OpenScreenshotFolderFailed">Could not open the screenshot folder: {0}</sys:String>
+  <sys:String x:Key="EndLive">End Live</sys:String>
+  <sys:String x:Key="NoActiveSession">No active session. Extension sales will not be recorded.</sys:String>
+  <sys:String x:Key="ActiveSession">Live: {0}　Started at {1}</sys:String>
+  <sys:String x:Key="IgnoredSale">Ignored #{0}: click “Start Live” first.</sys:String>
+
+  <sys:String x:Key="CurrentSalesNotStarted">Current Live Sales (Not Started)</sys:String>
+  <sys:String x:Key="CurrentSales">Current Live Sales: {0}</sys:String>
+  <sys:String x:Key="CurrentSalesCount">Current Live Sales: {0} ({1})</sys:String>
+  <sys:String x:Key="LastEndedSession">Last Ended: {0} ({1} sales)</sys:String>
+  <sys:String x:Key="HistoricalSessions">Previous Live Sessions</sys:String>
+  <sys:String x:Key="HistoricalSessionSales">Session Sales: {0} ({1})</sys:String>
+  <sys:String x:Key="BackToCurrentSession">Back to Current Live</sys:String>
+  <sys:String x:Key="LiveRunning">Live</sys:String>
+
+  <sys:String x:Key="BarTenderIntegration">BarTender Integration</sys:String>
+  <sys:String x:Key="TestConnection">Test Connection</sys:String>
+  <sys:String x:Key="PrintTestLabel">Print Test Label</sys:String>
+  <sys:String x:Key="PrintSelectedSale">Print Selected Sale</sys:String>
+  <sys:String x:Key="AutoPrint">Automatically print new sales (keep off while testing)</sys:String>
+  <sys:String x:Key="PrintNotTested">BarTender connection has not been tested.</sys:String>
+  <sys:String x:Key="SelectSaleFirst">Select a sale from the current session first.</sys:String>
+  <sys:String x:Key="TestingConnection">Testing the BarTender connection…</sys:String>
+  <sys:String x:Key="PrintingTestLabel">Sending a sample label print request…</sys:String>
+  <sys:String x:Key="TestLabelAccepted">Sample label print request accepted (SAMPLE BUYER / TEST-001).</sys:String>
+  <sys:String x:Key="PrintingProduct">Printing #{0}…</sys:String>
+  <sys:String x:Key="ConnectionSuccess">BarTender connection successful. No label was printed.</sys:String>
+  <sys:String x:Key="PrintAccepted">Print request for #{0} was accepted.</sys:String>
+  <sys:String x:Key="PrintFailed">BarTender request failed: {0}</sys:String>
+
+  <sys:String x:Key="ColumnTime">Time</sys:String>
+  <sys:String x:Key="ColumnBuyerName">Buyer</sys:String>
+  <sys:String x:Key="ColumnProductNumber">Product Number</sys:String>
+  <sys:String x:Key="ColumnLiveDate">Live Date</sys:String>
+  <sys:String x:Key="ColumnSession">Session</sys:String>
+  <sys:String x:Key="ColumnStart">Started</sys:String>
+  <sys:String x:Key="ColumnEnd">Ended</sys:String>
+  <sys:String x:Key="ColumnSaleCount">Sales</sys:String>
+  <sys:String x:Key="RelayTitle">LAN BarTender Print Relay</sys:String>
+  <sys:String x:Key="CopyAddress">Copy Address</sys:String>
+  <sys:String x:Key="CopyKey">Copy Key</sys:String>
+  <sys:String x:Key="RelayReady">Other computers can send print requests using the address and key above.</sys:String>
+  <sys:String x:Key="RelayForwarded">Forwarded #{0} ({1}) to BarTender.</sys:String>
+  <sys:String x:Key="RelayFailed">Relay failed: {0}</sys:String>
+  <sys:String x:Key="AddressCopied">Request address copied.</sys:String>
+  <sys:String x:Key="KeyCopied">Access key copied.</sys:String>
+  <sys:String x:Key="RelayClientTitle">Remote Print Relay</sys:String>
+  <sys:String x:Key="SaveSettings">Save Settings</sys:String>
+  <sys:String x:Key="SettingsSaved">Remote print settings saved.</sys:String>
+</ResourceDictionary>

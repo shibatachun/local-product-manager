@@ -6,8 +6,38 @@ namespace LocalProductManager.Api.Services;
 public sealed class ExchangeRateService(HttpClient httpClient, IConfiguration configuration)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly SemaphoreSlim CacheLock = new(1, 1);
+    private static DateOnly? cachedOn;
+    private static RmbToUsdRateDto? cachedRate;
 
     public async Task<RmbToUsdRateDto> GetRmbToUsdAsync(CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (cachedOn == today && cachedRate is not null)
+        {
+            return cachedRate;
+        }
+
+        await CacheLock.WaitAsync(cancellationToken);
+        try
+        {
+            // Another request may have populated the cache while this request waited.
+            if (cachedOn == today && cachedRate is not null)
+            {
+                return cachedRate;
+            }
+
+            cachedRate = await FetchRmbToUsdAsync(cancellationToken);
+            cachedOn = today;
+            return cachedRate;
+        }
+        finally
+        {
+            CacheLock.Release();
+        }
+    }
+
+    private async Task<RmbToUsdRateDto> FetchRmbToUsdAsync(CancellationToken cancellationToken)
     {
         var url = configuration["ExchangeRates:RmbToUsdUrl"] ??
             "https://api.frankfurter.dev/v2/rate/CNY/USD";

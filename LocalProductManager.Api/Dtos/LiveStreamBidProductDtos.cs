@@ -8,6 +8,7 @@ public sealed record LiveStreamBidProductDto(
     string? ActualSku,
     bool RequiresLocalLabel,
     decimal? WhatnotAuctionSafePrice,
+    string? ItemCode,
     string Uuid,
     string Title,
     int Quantity,
@@ -31,7 +32,8 @@ public sealed record CreateLiveStreamBidListRow(
     decimal? WhatnotAuctionSafePrice,
     string Title,
     int Quantity,
-    int Inventory,
+    int ExpectedInventory,
+    int ActualInventory,
     decimal UnitPrice,
     decimal? WeightGrams,
     decimal? WeightOunces,
@@ -45,7 +47,8 @@ public sealed record UpdateLiveStreamBidProductRequest(
     decimal? WhatnotAuctionSafePrice,
     string Title,
     int Quantity,
-    int Inventory,
+    int ExpectedInventory,
+    int ActualInventory,
     decimal UnitPrice,
     decimal? WeightGrams,
     decimal? WeightOunces,
@@ -54,13 +57,30 @@ public sealed record UpdateLiveStreamBidProductRequest(
 
 public sealed record CreateLiveStreamBidListResult(
     string BatchNumber,
-    IReadOnlyList<LiveStreamBidProductDto> Products);
+    IReadOnlyList<LiveStreamBidProductDto> Products,
+    IReadOnlyList<LiveStreamBidRegeneratedUuidDto> RegeneratedUuids);
 
 public sealed record LiveStreamBidImportResult(
     int Created,
     int Updated,
     int Skipped,
-    int TotalRows);
+    int TotalRows,
+    IReadOnlyList<LiveStreamBidImportConflictDto> Conflicts,
+    IReadOnlyList<LiveStreamBidRegeneratedUuidDto> RegeneratedUuids);
+
+public sealed record LiveStreamBidRegeneratedUuidDto(
+    int RowNumber,
+    int ProductId,
+    string OriginalUuid,
+    string NewUuid,
+    string Title);
+
+public sealed record LiveStreamBidImportConflictDto(
+    int RowNumber,
+    string? Uuid,
+    string? ActualSku,
+    string Title,
+    IReadOnlyList<string> Reasons);
 
 public sealed record MoveProductToLiveStreamBidRequest(
     int ProductId,

@@ -95,12 +95,104 @@
 }</Value>
         </ResponseData>
       </WebRequestIntegration>
+      <WebRequestIntegration Name="Local Product Manager Inventory Label Printing" IgnoreErrors="true" ID="bbf94229-193c-4fb0-a798-f86c39a5a78a" ActionExecution="WaitForPreviousEventPrintJob" Port="5162" ServiceName="lpm-inventory-label-print">
+        <Description>Print regular inventory QR labels from Local Product Manager</Description>
+        <Variables>
+          <Variable Name="action" Type="System.String">
+            <Value>print&#xD;
+</Value>
+          </Variable>
+          <Variable Name="copies" Type="System.String">
+            <Value>1</Value>
+          </Variable>
+          <Variable Name="recordId" Type="System.String">
+            <Value>LPM|INV-35</Value>
+          </Variable>
+        </Variables>
+        <ActionGroup ID="3506b196-68d5-4dcb-8999-5d4a02a8b91c" RunMethod="Sequential" MessagingEnabled="false">
+          <Actions>
+            <PrintAction Name="Print Document" RunType="UseConditionVariable" IgnoreErrors="false" ID="dad3eb7b-3d97-4c76-90d2-9bd2316876f1" CopiesPerSerialNumber="%copies%">
+              <ConditionExpression>
+                <Expression>[%action%] = 'print'</Expression>
+                <VariableDataTypes>{"action":"Text"}</VariableDataTypes>
+              </ConditionExpression>
+              <DocumentFile Path="C:\Users\jjgqa\local-product-manager\Label_format_inventory.btw">
+                <FileSystem.System />
+              </DocumentFile>
+              <QueryPrompts Name="LPM_UUID" Value="%recordId%" />
+              <PrintToFileFolder Path="%IntegrationFileNameWithoutExtension%">
+                <FileSystem.Temporary />
+              </PrintToFileFolder>
+            </PrintAction>
+          </Actions>
+        </ActionGroup>
+        <ContentData ContentDataType="JsonVariables" />
+        <Samples>
+          <Sample Name="Inventory sample">
+            <Variables>
+              <Variable Name="action" Type="System.String">
+                <Value>print</Value>
+              </Variable>
+              <Variable Name="copies" Type="System.String">
+                <Value>1</Value>
+              </Variable>
+              <Variable Name="EventData" Type="System.String">
+                <Value>{&#xD;
+  "action": "print",&#xD;
+  "provider": "BarTender",&#xD;
+  "template": "C:\\Users\\jjgqa\\local-product-manager\\inventory_product_label.btw",&#xD;
+  "printer": "PM-241-BT (Bluetooth) (Copy 1)",&#xD;
+  "recordType": "inventory-product",&#xD;
+  "recordId": "LPM|INV-35",&#xD;
+  "copies": 1,&#xD;
+  "requestedAt": "2026-08-17T12:00:00Z",&#xD;
+  "items": [&#xD;
+    {&#xD;
+      "recordType": "inventory-product",&#xD;
+      "recordId": "LPM|INV-35",&#xD;
+      "title": "Test Product",&#xD;
+      "sku": "TEST-SKU",&#xD;
+      "copies": 1&#xD;
+    }&#xD;
+  ]&#xD;
+}</Value>
+              </Variable>
+              <Variable Name="items" Type="System.String">
+                <Value>[{"recordType":"inventory-product","recordId":"LPM|INV-35","title":"Test Product","sku":"TEST-SKU","copies":1}]</Value>
+              </Variable>
+              <Variable Name="printer" Type="System.String">
+                <Value>PM-241-BT (Bluetooth)</Value>
+              </Variable>
+              <Variable Name="provider" Type="System.String">
+                <Value>BarTender</Value>
+              </Variable>
+              <Variable Name="recordId" Type="System.String">
+                <Value>LPM|INV-35</Value>
+              </Variable>
+              <Variable Name="recordType" Type="System.String">
+                <Value>inventory-product</Value>
+              </Variable>
+              <Variable Name="requestedAt" Type="System.String">
+                <Value>2026-08-17T12:00:00Z</Value>
+              </Variable>
+              <Variable Name="template" Type="System.String">
+                <Value>C:\Users\jjgqa\local-product-manager\inventory_product_label.btw</Value>
+              </Variable>
+            </Variables>
+          </Sample>
+        </Samples>
+        <ResponseHeaders />
+        <ResponseData>
+          <Value>%Response%</Value>
+        </ResponseData>
+      </WebRequestIntegration>
     </Actions>
   </ActionGroup>
   <Metadata>
     <Properties>
       <Properties Name="MostRecentlyUsedSamples" Type="System.Collections.Generic.List`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]">
         <Value>
+          <string>0</string>
           <string>0</string>
         </Value>
       </Properties>
@@ -111,10 +203,10 @@
         <Value>Custom</Value>
       </Properties>
       <Properties Name="SelectedIntegration" Type="System.Int32">
-        <Value>0</Value>
+        <Value>1</Value>
       </Properties>
       <Properties Name="SelectedOptionsPage" Type="System.String">
-        <Value>1;0</Value>
+        <Value>0;0</Value>
       </Properties>
     </Properties>
   </Metadata>

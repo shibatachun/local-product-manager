@@ -1,5 +1,7 @@
 **/bin/
 **/obj/
+**/.vs/
+**/.build-check/
 **/target/
 **/Data/*.db
 **/Data/*.db-shm
@@ -28,4 +30,10 @@ updates/*
 LocalProductManager.Web/public/PROJECT_DOCUMENTATION.md
 /.tmp/
 /outputs/
+/AuctionProductMoniter/installer/artifacts/
+/AuctionProductMoniter/installer/staging/
+/AuctionProductMoniter/installer/output/
+/AuctionProductMoniter/relay-installer/artifacts/
+/AuctionProductMoniter/relay-installer/staging/
+/AuctionProductMoniter/relay-installer/output/
 /1688-bartender-converter/*_BarTender*.csv

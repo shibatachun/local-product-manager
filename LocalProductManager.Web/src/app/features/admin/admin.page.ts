@@ -23,6 +23,7 @@ export class AdminPage {
   readonly loginForm = { userName: 'admin123', password: '' };
   readonly resetForm = { password: '' };
   labelSettings: LabelPrintingSettings = { enabled: false, provider: 'BarTender', endpointUrl: 'http://localhost:5159', templateName: '', printerName: '', timeoutSeconds: 15 };
+  inventoryLabelSettings: LabelPrintingSettings = { enabled: false, provider: 'BarTender', endpointUrl: 'http://localhost:5161/Integration/lpm-inventory-label-print/Execute', templateName: '', printerName: '', timeoutSeconds: 15 };
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -37,6 +38,7 @@ export class AdminPage {
         this.users.set(snapshot.users);
         this.sessions.set(snapshot.sessions);
         this.labelSettings = await this.labelPrinting.settings();
+        this.inventoryLabelSettings = await this.labelPrinting.inventorySettings();
       } else {
         this.users.set([]);
         this.sessions.set([]);
@@ -55,6 +57,20 @@ export class AdminPage {
     await this.run(async () => {
       this.labelSettings = await this.labelPrinting.saveSettings(this.labelSettings);
       this.show((await this.labelPrinting.test()).message);
+    });
+  }
+
+  async saveInventoryLabelSettings(): Promise<void> {
+    await this.run(async () => {
+      this.inventoryLabelSettings = await this.labelPrinting.saveInventorySettings(this.inventoryLabelSettings);
+      this.show('Inventory label printing settings saved.');
+    });
+  }
+
+  async testInventoryLabelConnection(): Promise<void> {
+    await this.run(async () => {
+      this.inventoryLabelSettings = await this.labelPrinting.saveInventorySettings(this.inventoryLabelSettings);
+      this.show((await this.labelPrinting.testInventory()).message);
     });
   }
 
