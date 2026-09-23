@@ -20,9 +20,37 @@
     </article>
   </div>
 
+  <section class="show-session-card" [class.active]="activeShow()">
+    <header>
+      <div>
+        <small>BID sale cost scanner</small>
+        <strong *ngIf="!activeShow()">No show is currently running</strong>
+        <strong *ngIf="activeShow() as show">{{ show.date | date: 'longDate' }} · Show {{ show.showNumber }}</strong>
+      </div>
+      <button class="start-show" type="button" *ngIf="!activeShow()" (click)="startShow()" [disabled]="loading()">Start cost session</button>
+      <button class="stop-show" type="button" *ngIf="activeShow()" (click)="stopShow()" [disabled]="loading()">Stop &amp; settle show</button>
+    </header>
+    <p *ngIf="!activeShow()">Start a show before scanning sold BID products. The session remains active across page refreshes until you stop and settle it.</p>
+    <ng-container *ngIf="activeShow() as show">
+      <div class="active-show-totals">
+        <span>Scans <b>{{ show.soldCount }}</b></span>
+        <span>Inventory sold <b>{{ show.inventorySold }}</b></span>
+        <span>Cost <b>{{ currencySymbol() }}{{ summaryCost(show) | number: '1.2-2' }}</b></span>
+        <span>Started <b>{{ show.startedAt | date: 'shortTime' }}</b></span>
+      </div>
+      <app-barcode-scanner
+        [embedded]="true"
+        [lockedScanMode]="'bid'"
+        [bidSalesOnly]="true"
+        [bidShowSessionId]="show.id"
+        (bidSaleRecorded)="bidSaleRecorded()"
+      ></app-barcode-scanner>
+    </ng-container>
+  </section>
+
   <section class="history-card">
     <header>
-      <div><strong>Stream live selling history</strong><small>Daily sales summaries</small></div>
+      <div><strong>Stream live selling history</strong><small>Daily totals with each show kept separate</small></div>
       <div class="currency-switch">
         <button
           type="button"
@@ -40,16 +68,19 @@
       </div>
     </header>
     <div class="day-list" *ngIf="history().length; else noHistory">
+      <ng-container *ngFor="let day of history()">
       <article
-        *ngFor="let day of history()"
+        class="day-row"
+        [class.expanded]="selectedDay()?.date === day.date"
         role="button"
         tabindex="0"
-        (click)="openDay(day.date)"
-        (keydown.enter)="openDay(day.date)"
+        [attr.aria-expanded]="selectedDay()?.date === day.date"
+        (click)="toggleDay(day.date)"
+        (keydown.enter)="toggleDay(day.date)"
       >
         <div>
           <strong>{{ day.date | date: 'longDate' }}</strong
-          ><small>{{ day.soldCount }} sales · {{ day.totalUnits }} units</small>
+          ><small>{{ day.shows.length }} show(s) · {{ day.inventorySold }} inventory sold</small>
         </div>
         <span
           >Cost <b>{{ currencySymbol() }}{{ summaryCost(day) | number: '1.2-2' }}</b></span
@@ -67,85 +98,69 @@
           (click)="deleteDay(day.date, $event)"
         >
           Delete day</button
-        ><i>›</i>
+        ><i>{{ selectedDay()?.date === day.date ? '⌄' : '›' }}</i>
       </article>
+
+      <section class="day-detail inline-day-detail" *ngIf="selectedDayFor(day.date) as summary">
+        <header>
+          <div>
+            <strong>{{ summary.date | date: 'longDate' }}</strong
+            ><small>{{ summary.shows.length }} show(s) · {{ summary.inventorySold }} inventory sold</small>
+          </div>
+          <button type="button" class="close-detail" (click)="closeDay()">Close</button>
+        </header>
+        <div class="today-totals">
+          <div>
+            <small>Cost</small
+            ><strong>{{ currencySymbol() }}{{ summaryCost(summary) | number: '1.2-2' }}</strong>
+          </div>
+          <div>
+            <small>Actual sales</small
+            ><strong>{{ currencySymbol() }}{{ summaryRevenue(summary) | number: '1.2-2' }}</strong>
+          </div>
+          <div>
+            <small>Realized profit</small
+            ><strong [class.negative]="summaryProfit(summary) < 0"
+              >{{ currencySymbol() }}{{ summaryProfit(summary) | number: '1.2-2' }}</strong
+            >
+          </div>
+        </div>
+        <div class="show-list">
+          <section class="show-summary" *ngFor="let show of summary.shows">
+            <header>
+              <div>
+                <strong>{{ show.showNumber === 0 ? 'Earlier ungrouped sales' : 'Show ' + show.showNumber }}</strong>
+                <small>
+                  {{ show.inventorySold }} inventory sold
+                  <ng-container *ngIf="show.startedAt"> · {{ show.startedAt | date: 'shortTime' }}<ng-container *ngIf="show.endedAt">–{{ show.endedAt | date: 'shortTime' }}</ng-container></ng-container>
+                </small>
+              </div>
+              <span class="show-state" [class.live]="show.isActive">{{ show.isActive ? 'ACTIVE' : 'SETTLED' }}</span>
+              <span>Cost <b>{{ currencySymbol() }}{{ summaryCost(show) | number: '1.2-2' }}</b></span>
+              <span>Sales <b>{{ currencySymbol() }}{{ summaryRevenue(show) | number: '1.2-2' }}</b></span>
+              <span>Profit <b [class.negative]="summaryProfit(show) < 0">{{ currencySymbol() }}{{ summaryProfit(show) | number: '1.2-2' }}</b></span>
+            </header>
+            <div class="sale-list" *ngIf="show.sales.length; else noShowSales">
+              <article *ngFor="let sale of show.sales">
+                <div>
+                  <strong>{{ sale.productTitle }}</strong
+                  ><code>{{ sale.productUuid }}</code
+                  ><small *ngIf="sale.exchangeRateRmbToUsd">Rate {{ sale.exchangeRateRmbToUsd | number: '1.4-4' }} CNY→USD · {{ sale.exchangeRateDate }}</small>
+                </div>
+                <span>Cost {{ displayCurrency() === 'usd' ? (sale.cost === null || sale.exchangeRateRmbToUsd === null ? '—' : '$' + (sale.cost * sale.exchangeRateRmbToUsd | number: '1.2-2')) : (sale.cost === null ? '—' : '¥' + (sale.cost | number: '1.2-2')) }}</span>
+                <span>Sale {{ displayCurrency() === 'usd' ? (sale.actualSalePriceUsd === null ? '—' : '$' + (sale.actualSalePriceUsd | number: '1.2-2')) : (sale.salePriceRmb === null ? '—' : '¥' + (sale.salePriceRmb | number: '1.2-2')) }}</span>
+                <span>Profit {{ displayCurrency() === 'usd' ? (sale.profitUsd === null ? '—' : '$' + (sale.profitUsd | number: '1.2-2')) : (sale.profitRmb === null ? '—' : '¥' + (sale.profitRmb | number: '1.2-2')) }}</span>
+                <time>{{ sale.soldAt | date: 'shortTime' }}</time>
+                <button type="button" class="delete-sale" *ngIf="isAdmin" (click)="deleteSale(sale.id)">Delete</button>
+              </article>
+            </div>
+            <ng-template #noShowSales><p class="no-show-sales">No products were recorded in this show.</p></ng-template>
+          </section>
+        </div>
+      </section>
+      </ng-container>
     </div>
     <ng-template #noHistory><p class="no-sales">No live selling history yet.</p></ng-template>
-  </section>
-
-  <section class="day-detail" *ngIf="selectedDay() as summary">
-    <header>
-      <div>
-        <strong>{{ summary.date | date: 'longDate' }}</strong
-        ><small>{{ summary.soldCount }} sales · {{ summary.totalUnits }} units</small>
-      </div>
-      <button type="button" class="close-detail" (click)="closeDay()">Close</button>
-    </header>
-    <div class="today-totals">
-      <div>
-        <small>Cost</small
-        ><strong>{{ currencySymbol() }}{{ summaryCost(summary) | number: '1.2-2' }}</strong>
-      </div>
-      <div>
-        <small>Actual sales</small
-        ><strong>{{ currencySymbol() }}{{ summaryRevenue(summary) | number: '1.2-2' }}</strong>
-      </div>
-      <div>
-        <small>Realized profit</small
-        ><strong [class.negative]="summaryProfit(summary) < 0"
-          >{{ currencySymbol() }}{{ summaryProfit(summary) | number: '1.2-2' }}</strong
-        >
-      </div>
-    </div>
-    <div class="sale-list">
-      <article *ngFor="let sale of summary.sales">
-        <div>
-          <strong>{{ sale.productTitle }}</strong
-          ><code>{{ sale.productUuid }}</code
-          ><small *ngIf="sale.exchangeRateRmbToUsd"
-            >Rate {{ sale.exchangeRateRmbToUsd | number: '1.4-4' }} CNY→USD ·
-            {{ sale.exchangeRateDate }}</small
-          >
-        </div>
-        <span
-          >Cost
-          {{
-            displayCurrency() === 'usd'
-              ? sale.cost === null || sale.exchangeRateRmbToUsd === null
-                ? '—'
-                : '$' + (sale.cost * sale.exchangeRateRmbToUsd | number: '1.2-2')
-              : sale.cost === null
-                ? '—'
-                : '¥' + (sale.cost | number: '1.2-2')
-          }}</span
-        ><span
-          >Sale
-          {{
-            displayCurrency() === 'usd'
-              ? sale.actualSalePriceUsd === null
-                ? '—'
-                : '$' + (sale.actualSalePriceUsd | number: '1.2-2')
-              : sale.salePriceRmb === null
-                ? '—'
-                : '¥' + (sale.salePriceRmb | number: '1.2-2')
-          }}</span
-        ><span
-          >Profit
-          {{
-            displayCurrency() === 'usd'
-              ? sale.profitUsd === null
-                ? '—'
-                : '$' + (sale.profitUsd | number: '1.2-2')
-              : sale.profitRmb === null
-                ? '—'
-                : '¥' + (sale.profitRmb | number: '1.2-2')
-          }}</span
-        ><time>{{ sale.soldAt | date: 'shortTime' }}</time
-        ><button type="button" class="delete-sale" *ngIf="isAdmin" (click)="deleteSale(sale.id)">
-          Delete
-        </button>
-      </article>
-    </div>
   </section>
 
   <section class="import-card" *ngIf="canImport">
@@ -219,7 +234,7 @@
       <label class="search"
         ><span>⌕</span
         ><input
-          placeholder="Search UUID, Actual SKU, title, or material"
+          placeholder="Search name, UUID, SKU, item code, batch, or price"
           [ngModel]="search()"
           (ngModelChange)="search.set($event)"
       /></label>
@@ -242,7 +257,7 @@
             <th>Products</th>
             <th>Total inventory</th>
             <th>Batch total value</th>
-            <th>Last updated</th>
+            <th>Imported</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -257,7 +272,7 @@
               <td>{{ batch.products.length }}</td>
               <td>{{ batch.inventory }}</td>
               <td>¥{{ batch.cost | number: '1.2-2' }}</td>
-              <td>{{ batch.updatedAt | date: 'short' }}</td>
+              <td>{{ batch.importedAt | date: 'short' }}</td>
               <td>
                 <div class="row-actions" (click)="$event.stopPropagation()">
                   <button
@@ -291,6 +306,7 @@
                   <table>
                     <thead>
                       <tr>
+                        <th>Photo</th>
                         <th>UUID</th>
                         <th>Actual SKU</th>
                         <th>Title</th>
@@ -307,7 +323,18 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr *ngFor="let item of batch.products">
+                      <tr
+                        *ngFor="let item of batch.products"
+                        class="bid-product-row"
+                        role="button"
+                        tabindex="0"
+                        (click)="openManualSale(item)"
+                        (keydown.enter)="openManualSale(item)"
+                      >
+                        <td class="bid-thumbnail-cell">
+                          <img *ngIf="item.imagePath" [src]="bidImageUrl(item)" [alt]="item.title" />
+                          <span *ngIf="!item.imagePath" aria-label="No photo">—</span>
+                        </td>
                         <td>
                           <small>#{{ item.batchProductNumber || '—' }}</small
                           ><code>BID|{{ item.uuid }}</code>
@@ -343,7 +370,21 @@
                         <td>{{ item.inventory }} remaining</td>
                         <td>{{ item.actualInventory }} received</td>
                         <td>
-                          <div class="row-actions">
+                          <div class="row-actions" (click)="$event.stopPropagation()">
+                            <button
+                              type="button"
+                              *ngIf="isAdmin && isHost"
+                              (click)="openProductFolder(item)"
+                            >
+                              Open folder</button
+                            >
+                            <button
+                              type="button"
+                              *ngIf="item.imagePath"
+                              (click)="downloadBidPicture(item)"
+                            >
+                              Download picture</button
+                            >
                             <button
                               type="button"
                               *ngIf="labelPrintingSettings()?.enabled"
@@ -384,6 +425,30 @@
         {{ loading() ? 'Loading bid products…' : 'No bid products imported yet.' }}
       </div></ng-template
     >
+  </section>
+
+  <div class="move-backdrop" *ngIf="saleProduct()" (click)="closeManualSale()"></div>
+  <section class="manual-sale-modal" *ngIf="saleProduct() as item" role="dialog" aria-modal="true" aria-labelledby="manual-sale-title">
+    <header>
+      <div><small>Manual BID sale</small><h2 id="manual-sale-title">Confirm product sold</h2></div>
+      <button type="button" aria-label="Close" (click)="closeManualSale()">×</button>
+    </header>
+    <div class="manual-sale-product">
+      <strong>{{ item.title }}</strong>
+      <code>BID|{{ item.uuid }}</code>
+      <dl>
+        <div><dt>Actual SKU</dt><dd>{{ item.actualSku || '—' }}</dd></div>
+        <div><dt>Expected inventory</dt><dd>{{ item.inventory }}</dd></div>
+        <div><dt>Actual inventory</dt><dd>{{ item.actualInventory }}</dd></div>
+        <div><dt>Recorded cost</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</dd></div>
+      </dl>
+      <p class="sale-unavailable" *ngIf="item.inventory <= 0 || item.actualInventory <= 0">This product has no available received inventory and cannot be sold.</p>
+      <label>Actual sale price (USD) <span>Optional</span><div><b>$</b><input type="number" min="0" step="0.01" inputmode="decimal" [(ngModel)]="manualSalePrice" placeholder="Leave blank if unknown" /></div></label>
+    </div>
+    <footer>
+      <button type="button" (click)="closeManualSale()">Cancel</button>
+      <button class="confirm-manual-sale" type="button" (click)="confirmManualSale()" [disabled]="loading() || item.inventory <= 0 || item.actualInventory <= 0">{{ loading() ? 'Recording…' : 'Confirm sold' }}</button>
+    </footer>
   </section>
 
   <div class="safe-price-help-backdrop" *ngIf="safePriceHelpOpen()" (click)="safePriceHelpOpen.set(false)"></div>
@@ -437,6 +502,10 @@
       /></label>
     </div>
     <section class="bulk-csv-import" *ngIf="!editingProduct() && !targetBatch()">
+      <div><strong>Import final CSV from cloud server</strong><small>Previously imported file names are disabled; SHA-256 is verified again when importing.</small></div>
+      <div class="cloud-csv-controls" [class.token-saved]="!cloudTokenRequired()"><input *ngIf="cloudTokenRequired()" type="password" [(ngModel)]="cloudToken" placeholder="Cloud upload token" autocomplete="off" /><button type="button" (click)="loadCloudCsvFiles()" [disabled]="!cloudToken.trim() || loading()">Refresh cloud files</button></div>
+      <div class="bulk-csv-results" *ngIf="cloudCsvFiles().length"><div *ngFor="let item of cloudCsvFiles()" [class.failed]="item.alreadyImported"><span><strong>{{ item.fileName }}</strong><small>{{ item.alreadyImported ? 'Already imported' : item.remotePath }}</small><small class="cloud-import-error" *ngIf="cloudImportError()?.path === item.remotePath">{{ cloudImportError()?.message }}</small></span><button type="button" (click)="importCloudCsv(item)" [disabled]="item.alreadyImported || loading()">{{ item.alreadyImported ? 'Imported' : 'Import batch' }}</button></div></div>
+      <hr />
       <div><strong>Bulk import converted 1688 CSV</strong><small>Each CSV file creates its own new Batch Number.</small></div>
       <label class="bulk-csv-drop" (dragover)="$event.preventDefault()" (drop)="dropBulkCsvFiles($event)">
         <input type="file" multiple accept=".csv,text/csv" (change)="selectBulkCsvFiles($event)" />

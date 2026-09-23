@@ -20,29 +20,15 @@ builder.Logging.AddOpenTelemetry(options =>
     options.AddOtlpExporter();
 });
 
-var databaseProvider = builder.Configuration["DatabaseProvider"] ?? "Sqlite";
-var usePostgres = databaseProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase)
-    || databaseProvider.Equals("Postgres", StringComparison.OrdinalIgnoreCase);
 var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Data Source=Data/local-product-manager.db";
-var connectionString = usePostgres
-    ? configuredConnectionString
-    : AddSqliteWriteSettings(ResolveSqliteConnectionString(
-        configuredConnectionString,
-        builder.Environment.ContentRootPath));
-var dbPath = usePostgres ? null : GetSqlitePath(connectionString);
-if (!usePostgres && dbPath is not null)
-{
-    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-}
+    ?? "Host=localhost;Port=5432;Database=local_product_manager;Username=postgres";
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+if (!builder.Environment.IsEnvironment("Testing"))
 {
-    if (usePostgres)
-        options.UseNpgsql(connectionString, postgres => postgres.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
-    else
-        options.UseSqlite(connectionString, sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
-});
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(configuredConnectionString,
+            postgres => postgres.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+}
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("inventory-api"))
@@ -124,18 +110,25 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
-    if (db.Database.IsSqlite())
+    if (!app.Environment.IsEnvironment("Testing"))
     {
-        DatabaseSchemaService.Upgrade(db);
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL");
-        db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=10000");
+        await WarehouseSchema.UpgradeAsync(db);
+        await ProductInventoryCategorySchema.UpgradeAsync(db);
+        await ProductExtendedDataSchema.UpgradeAsync(db);
+        await ProductListingPriceSchema.UpgradeAsync(db);
+        await LiveStreamBidProductSchema.UpgradeAsync(db);
+        await DomesticProductSchema.UpgradeAsync(db);
+        await InventoryLabelSchema.UpgradeAsync(db);
     }
-    await WarehouseSchema.UpgradeAsync(db);
-    await ProductInventoryCategorySchema.UpgradeAsync(db);
-    await ProductExtendedDataSchema.UpgradeAsync(db);
-    await LiveStreamBidProductSchema.UpgradeAsync(db);
-    await DomesticProductSchema.UpgradeAsync(db);
-    await InventoryLabelSchema.UpgradeAsync(db);
+    else
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS product_category_sequences (
+                "Category" varchar(16) PRIMARY KEY,
+                "LastNumber" integer NOT NULL
+            )
+            """);
+    }
     await scope.ServiceProvider.GetRequiredService<ProductImageFolderService>()
         .OrganizeExistingProductsAsync();
     await scope.ServiceProvider.GetRequiredService<AuthService>().SeedAdminAsync();
@@ -179,63 +172,5 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 });
 
 app.Run();
-
-static string? GetSqlitePath(string connectionString)
-{
-    const string prefix = "Data Source=";
-    var part = connectionString
-        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .FirstOrDefault(value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-
-    if (part is null)
-    {
-        return null;
-    }
-
-    var path = part[prefix.Length..].Trim();
-    return Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
-}
-
-static string ResolveSqliteConnectionString(string connectionString, string contentRootPath)
-{
-    const string prefix = "Data Source=";
-    var parts = connectionString
-        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .ToList();
-    var dataSourceIndex = parts.FindIndex(value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-
-    if (dataSourceIndex < 0)
-    {
-        return connectionString;
-    }
-
-    var path = parts[dataSourceIndex][prefix.Length..].Trim();
-    if (!Path.IsPathRooted(path))
-    {
-        path = Path.GetFullPath(Path.Combine(contentRootPath, path));
-        parts[dataSourceIndex] = $"{prefix}{path}";
-    }
-
-    return string.Join(';', parts);
-}
-
-static string AddSqliteWriteSettings(string connectionString)
-{
-    var parts = connectionString
-        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .ToList();
-
-    if (!parts.Any(value => value.StartsWith("Default Timeout=", StringComparison.OrdinalIgnoreCase)))
-    {
-        parts.Add("Default Timeout=10");
-    }
-
-    if (!parts.Any(value => value.StartsWith("Pooling=", StringComparison.OrdinalIgnoreCase)))
-    {
-        parts.Add("Pooling=True");
-    }
-
-    return string.Join(';', parts);
-}
 
 public partial class Program;

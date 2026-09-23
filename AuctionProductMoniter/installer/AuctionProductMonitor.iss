@@ -1,5 +1,5 @@
 #define MyAppName "Auction Product Monitor"
-#define MyAppVersion "1.2.3"
+#define MyAppVersion "1.2.7"
 #define MyAppPublisher "Auction Product Monitor"
 #define MyAppExeName "AuctionProductMonitor.Wpf.exe"
 

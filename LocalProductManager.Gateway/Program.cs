@@ -136,7 +136,12 @@ app.MapWhen(context => IsApiRequest(context.Request.Path), api =>
         var targetUri = new Uri(
             $"{apiBaseUrl}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}");
         using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), targetUri);
-        if (context.Request.ContentLength > 0 || context.Request.Headers.ContainsKey("Transfer-Encoding"))
+        // HTTP/2 uploads commonly omit both Content-Length and Transfer-Encoding.
+        // A multipart Content-Type still means the request has a body that must be
+        // proxied; otherwise mobile camera uploads reach the API as an empty request.
+        if (context.Request.ContentLength > 0
+            || context.Request.Headers.ContainsKey("Transfer-Encoding")
+            || !string.IsNullOrWhiteSpace(context.Request.ContentType))
         {
             request.Content = new StreamContent(context.Request.Body);
         }

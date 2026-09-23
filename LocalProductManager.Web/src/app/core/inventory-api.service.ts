@@ -30,7 +30,7 @@ export interface InventoryHistoryEntry {
   userRole: string;
   remoteIp: string | null;
   userAgent: string | null;
-  source: 'set' | 'adjust' | 'bid_transfer' | 'place_unassigned' | `move_out:${number}:${number}` | `move_in:${number}:${number}`;
+  source: 'set' | 'adjust' | 'bid_transfer' | 'place_unassigned' | 'move_to_unassigned' | `move_out:${number}:${number}` | `move_in:${number}:${number}`;
   createdAt: string;
 }
 import { apiBaseUrl } from './api-base';
@@ -71,7 +71,7 @@ export class InventoryApiService {
   }
 
   moveProduct(productId: number, body: {
-    sourceLevelId: number | null; sourceBinNumber: number | null; targetLevelId: number; targetBinNumber: number; quantity: number;
+    sourceLevelId: number | null; sourceBinNumber: number | null; targetLevelId: number | null; targetBinNumber: number | null; quantity: number;
   }): Promise<ProductScannerLocation[]> {
     return firstValueFrom(this.http.post<ProductScannerLocation[]>(
       `${this.baseUrl}/inventory/products/${productId}/move`, body));

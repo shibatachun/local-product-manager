@@ -171,6 +171,8 @@ public sealed class ProductService(AppDbContext db)
             OriginalCost = request.OriginalCost,
             SalePrice = request.SalePrice,
             Qty = Math.Max(0, request.Qty),
+            ReadyToList = request.ReadyToList ?? false,
+            Note = NormalizeOptional(request.Note),
             Weight = request.Weight,
             Length = request.Length,
             Width = request.Width,
@@ -240,6 +242,11 @@ public sealed class ProductService(AppDbContext db)
         product.OriginalCost = request.OriginalCost;
         product.SalePrice = request.SalePrice;
         product.Qty = Math.Max(0, request.Qty);
+        if (request.ReadyToList.HasValue)
+        {
+            product.ReadyToList = request.ReadyToList.Value;
+        }
+        product.Note = NormalizeOptional(request.Note);
         product.Weight = request.Weight;
         product.Length = request.Length;
         product.Width = request.Width;

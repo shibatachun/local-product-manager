@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>1688 → BarTender CSV</title>
-  <link rel="stylesheet" href="./styles.css?v=9">
+  <link rel="stylesheet" href="./styles.css?v=10">
 </head>
 <body>
   <main class="app-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">LOCAL CONVERSION TOOL <span class="version-badge">v1.4.1</span></p>
+        <p class="eyebrow">LOCAL CONVERSION TOOL <span class="version-badge">v1.6.1</span></p>
         <h1>1688 → BarTender CSV</h1>
         <p class="hero-copy">展开订单中的合并单元格，补充二维码唯一码、重量和成本，然后导出可供 BarTender 使用的 CSV。</p>
       </div>
       <div class="privacy-badge">
         <span class="privacy-dot"></span>
-        文件仅在本机处理
+        默认本机处理 · 最终版可上传
       </div>
     </header>
 
@@ -124,8 +124,31 @@
     <section class="message hidden" id="message" role="alert"></section>
   </main>
 
+  <dialog class="export-dialog" id="export-dialog" aria-labelledby="export-dialog-title">
+    <form method="dialog" class="export-dialog-card">
+      <div class="export-dialog-heading">
+        <div>
+          <p class="eyebrow">EXPORT CSV</p>
+          <h2 id="export-dialog-title">这份 CSV 是最终版吗？</h2>
+        </div>
+        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭">×</button>
+      </div>
+      <p>最终版会先上传到云服务器，然后同一份文件也会下载到这台电脑。测试版只下载到本机。</p>
+      <label class="token-field" id="upload-token-field">
+        <span>服务器上传令牌</span>
+        <input id="upload-token-input" type="password" autocomplete="off" placeholder="首次上传时输入，成功后保存在当前浏览器">
+      </label>
+      <div class="dialog-status hidden" id="export-dialog-status" role="alert"></div>
+      <div class="export-dialog-actions">
+        <button class="secondary-button" id="test-download-button" value="cancel" type="button">测试版 · 仅下载</button>
+        <button class="primary-button" id="final-upload-button" value="cancel" type="button">最终版 · 上传并下载</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="./vendor/xlsx.full.min.js"></script>
-  <script src="./converter-core.js?v=14"></script>
-  <script src="./app.js?v=14"></script>
+  <script src="./upload-config.js?v=2"></script>
+  <script src="./converter-core.js?v=15"></script>
+  <script src="./app.js?v=18"></script>
 </body>
 </html>

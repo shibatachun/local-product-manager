@@ -34,7 +34,6 @@ builder.AddProject<Projects.LocalProductManager_Api>(
         launchProfileName: null)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
     .WithEnvironment("ASPNETCORE_URLS", apiListenUrls)
-    .WithEnvironment("DatabaseProvider", deployment.Database.Provider)
     .WithEnvironment("ConnectionStrings__DefaultConnection", databaseConnectionString)
     .WithEnvironment("YouTube__RedirectUri", youtubeRedirectUrl)
     .WithEnvironment("Pinterest__RedirectUri", pinterestRedirectUrl)

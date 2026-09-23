@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 namespace AuctionProductMonitor.Wpf;
 
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private readonly RemotePrinterSettings _printerSettings;
     private LiveSession? _activeSession;
     private LiveSession? _viewedHistoricalSession;
+    private bool _printingAll;
     private static string ScreenshotRoot => Path.Combine(AppContext.BaseDirectory, "Screenshots");
 
     public MainWindow()
@@ -110,7 +112,7 @@ public partial class MainWindow : Window
         if (SessionsGrid.SelectedItem is not LiveSession session) return;
         _viewedHistoricalSession = session;
         _currentSales.Clear();
-        foreach (var sale in session.Sales.OrderByDescending(item => item.DetectedAt))
+        foreach (var sale in OrderedSales(session))
             _currentSales.Add(sale);
         CurrentSalesTitle.Text = LanguageManager.Get("HistoricalSessionSales", session.Id, session.SaleCount);
         BackToCurrentSessionButton.Visibility = Visibility.Visible;
@@ -120,6 +122,92 @@ public partial class MainWindow : Window
     {
         ShowCurrentSessionSales();
     }
+
+    private void ImportShowReportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeSession is not null)
+        {
+            MessageBox.Show(LanguageManager.Get("EndLiveBeforeImport"), LanguageManager.Get("ImportShowReport"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new OpenFileDialog
+        {
+            Title = LanguageManager.Get("ImportShowReport"),
+            Filter = "Whatnot show report (*.csv)|*.csv|All files (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var report = WhatnotShowReportImporter.Read(dialog.FileName);
+            var existing = _sessions.FirstOrDefault(session => session.ShowReportSha256 == report.Sha256);
+            if (existing is not null)
+            {
+                ShowSession(existing);
+                StatusText.Text = LanguageManager.Get("ShowAlreadyImported", existing.Id);
+                return;
+            }
+            var importedIds = _sessions.Where(session => session.Source == "show-report")
+                .SelectMany(session => session.Sales).Select(sale => sale.OrderId)
+                .Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var repeated = report.Sales.Where(sale => importedIds.Contains(sale.OrderId)).ToArray();
+            if (repeated.Length > 0)
+                throw new InvalidDataException(LanguageManager.Get("ShowOrderOverlap", repeated.Length));
+
+            var labelCount = report.Sales.Sum(sale => sale.Quantity);
+            var confirmation = LanguageManager.Get("ConfirmShowImport", report.ShowDate, report.Sales.Count, labelCount, report.IgnoredRows);
+            if (report.UnnumberedOrders.Count > 0)
+            {
+                var unnumberedList = string.Join(Environment.NewLine, report.UnnumberedOrders.Take(10)
+                    .Select(row => $"CSV row {row.RowNumber}: {row.Title} ({row.Buyer})"));
+                if (report.UnnumberedOrders.Count > 10) unnumberedList += Environment.NewLine + "…";
+                confirmation += Environment.NewLine + Environment.NewLine +
+                    LanguageManager.Get("UnnumberedShowOrdersWarning", report.UnnumberedOrders.Count, unnumberedList);
+            }
+            var decision = MessageBox.Show(
+                confirmation,
+                LanguageManager.Get("ImportShowReport"), MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (decision != MessageBoxResult.Yes) return;
+            var now = DateTimeOffset.Now;
+            var session = new LiveSession
+            {
+                Id = $"SHOW-{report.ShowDate.Replace("-", "")}-{report.Sha256[..8]}",
+                StartedAt = now,
+                EndedAt = now,
+                Source = "show-report",
+                ShowReportSha256 = report.Sha256,
+                ShowDate = report.ShowDate,
+                Sales = report.Sales.ToList()
+            };
+            foreach (var sale in session.Sales) sale.SessionId = session.Id;
+            _sessions.Add(session);
+            try { _store.Save(_sessions); }
+            catch { _sessions.Remove(session); throw; }
+            _completedSessions.Insert(0, session);
+            ShowSession(session);
+            StatusText.Text = LanguageManager.Get("ShowImported", session.Id, report.Sales.Count, labelCount) +
+                (report.UnnumberedOrders.Count == 0 ? "" : " " + LanguageManager.Get("UnnumberedShowOrdersSkipped", report.UnnumberedOrders.Count));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, LanguageManager.Get("ImportShowReport"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ShowSession(LiveSession session)
+    {
+        _viewedHistoricalSession = session;
+        SessionsGrid.SelectedItem = session;
+        _currentSales.Clear();
+        foreach (var sale in OrderedSales(session)) _currentSales.Add(sale);
+        CurrentSalesTitle.Text = LanguageManager.Get("HistoricalSessionSales", session.Id, session.SaleCount);
+        BackToCurrentSessionButton.Visibility = Visibility.Visible;
+    }
+
+    private static IEnumerable<SaleEvent> OrderedSales(LiveSession session) => session.Source == "show-report"
+        ? session.Sales.OrderBy(sale => sale.ReportRowNumber)
+        : session.Sales.OrderByDescending(sale => sale.DetectedAt);
 
     private void ShowCurrentSessionSales()
     {
@@ -229,16 +317,18 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SaveSessions()
+    private bool SaveSessions()
     {
         try
         {
             _store.Save(_sessions);
+            return true;
         }
         catch (Exception ex)
         {
             StatusDot.Fill = Brushes.IndianRed;
             StatusText.Text = LanguageManager.Get("SaveFailed", ex.Message);
+            return false;
         }
     }
 
@@ -269,15 +359,99 @@ public partial class MainWindow : Window
 
     private async void PrintSelectedButton_Click(object sender, RoutedEventArgs e)
     {
-        if (SalesGrid.SelectedItem is not SaleEvent sale)
+        if (_printingAll) return;
+        var selected = SalesGrid.SelectedItems.Cast<SaleEvent>().ToHashSet();
+        var sales = _currentSales.Where(selected.Contains).ToArray();
+        if (sales.Length == 0)
         {
             PrintStatusText.Text = LanguageManager.Get("SelectSaleFirst");
             return;
         }
-        await PrintSaleAsync(sale);
+        if (sales.Length == 1)
+        {
+            await PrintSaleAsync(sales[0]);
+            return;
+        }
+        var labelCount = sales.Sum(sale => sale.Quantity);
+        if (MessageBox.Show(LanguageManager.Get("ConfirmPrintSelected", sales.Length, labelCount),
+                LanguageManager.Get("PrintSelectedSale"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+        await PrintBatchAsync(sales);
     }
 
-    private Task PrintSaleAsync(SaleEvent sale) => SendToRelayAsync(sale, false);
+    private async void PrintAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_printingAll) return;
+        var session = _viewedHistoricalSession ?? _activeSession;
+        if (session is null)
+        {
+            PrintStatusText.Text = LanguageManager.Get("SelectShowFirst");
+            return;
+        }
+        var remaining = OrderedSales(session).Where(sale => !sale.PrintedAt.HasValue).ToArray();
+        if (remaining.Length == 0)
+        {
+            PrintStatusText.Text = LanguageManager.Get("AllAlreadyPrinted");
+            return;
+        }
+        var labelCount = remaining.Sum(sale => sale.Quantity);
+        if (MessageBox.Show(LanguageManager.Get("ConfirmPrintAll", session.Id, remaining.Length, labelCount),
+                LanguageManager.Get("PrintAllUnprinted"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+        await PrintBatchAsync(remaining);
+    }
+
+    private async Task PrintBatchAsync(SaleEvent[] sales)
+    {
+        _printingAll = true;
+        PrintSelectedButton.IsEnabled = false;
+        PrintAllButton.IsEnabled = false;
+        try
+        {
+            var labelCount = sales.Sum(sale => sale.Quantity);
+            PrintStatusText.Text = LanguageManager.Get("PrintingBatch", sales.Length, labelCount);
+            await _remotePrinter.SendBatchAsync(RelayEndpointTextBox.Text, RelayApiKeyBox.Password, sales);
+            var printedAt = DateTimeOffset.Now;
+            foreach (var sale in sales) sale.PrintedAt = printedAt;
+            SalesGrid.Items.Refresh();
+            PrintStatusText.Text = SaveSessions()
+                ? LanguageManager.Get("PrintBatchResult", sales.Length, labelCount)
+                : LanguageManager.Get("BatchPrintedButNotSaved", sales.Length, labelCount);
+        }
+        catch (Exception ex)
+        {
+            PrintStatusText.Text = LanguageManager.Get("PrintFailed", ex.Message);
+        }
+        finally
+        {
+            _printingAll = false;
+            PrintSelectedButton.IsEnabled = true;
+            PrintAllButton.IsEnabled = true;
+        }
+    }
+
+    private async Task<bool> PrintSaleAsync(SaleEvent sale)
+    {
+        try
+        {
+            PrintStatusText.Text = LanguageManager.Get("PrintingProduct", sale.ProductNumber);
+            await _remotePrinter.SendAsync(RelayEndpointTextBox.Text, RelayApiKeyBox.Password, sale, false, sale.Quantity);
+            sale.PrintedAt = DateTimeOffset.Now;
+            SalesGrid.Items.Refresh();
+            if (!SaveSessions())
+            {
+                PrintStatusText.Text = LanguageManager.Get("PrintedButNotSaved", sale.ProductNumber);
+                return false;
+            }
+            PrintStatusText.Text = LanguageManager.Get("PrintAccepted", sale.ProductNumber);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PrintStatusText.Text = LanguageManager.Get("PrintFailed", ex.Message);
+            return false;
+        }
+    }
 
     private async Task SendToRelayAsync(SaleEvent? sale, bool test)
     {

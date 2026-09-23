@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     private void CopyKey_Click(object sender, RoutedEventArgs e) { Clipboard.SetText(KeyBox.Text); StatusText.Text = "访问密钥已复制。"; }
     private async void SaveTest_Click(object sender, RoutedEventArgs e)
     {
-        try { _settings.BarTenderEndpoint = EndpointBox.Text.Trim(); _settings.Save(); await _barTender.SendAsync(_settings.BarTenderEndpoint, new() { BuyerName="connection_test", ProductNumber="0", SessionId="connection-test", Test=true }); StatusText.Text="BarTender 连接成功。"; }
+        try { _settings.BarTenderEndpoint = EndpointBox.Text.Trim(); _settings.Save(); await _barTender.ProbeAsync(_settings.BarTenderEndpoint); StatusText.Text="BarTender 端口连接成功（未打印）。"; }
         catch (Exception ex) { StatusText.Text="BarTender 测试失败："+ex.Message; }
     }
     private async void OnClosed(object? sender, EventArgs e) { if (_server is not null) { _server.Logged -= OnLogged; await _server.DisposeAsync(); } }

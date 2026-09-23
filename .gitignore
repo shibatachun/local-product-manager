@@ -12,9 +12,13 @@
 **/Data/youtube-oauth-token.json
 **/Data/youtube-client-secret.json
 **/Data/product-images/
+**/Data/live-stream-bid-product-images/
 **/Data/image-thumbnails/
+**/__pycache__/
+*.pyc
 **/ai-reports/
 **/logging/*.jsonl
+.codex/secrets/
 .codex/
 *.log
 *.user

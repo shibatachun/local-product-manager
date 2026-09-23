@@ -33,6 +33,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ProductPackaging> ProductPackaging => Set<ProductPackaging>();
     public DbSet<ProductPrice> ProductPrices => Set<ProductPrice>();
     public DbSet<LiveStreamBidProduct> LiveStreamBidProducts => Set<LiveStreamBidProduct>();
+    public DbSet<ImportedBidBatch> ImportedBidBatches => Set<ImportedBidBatch>();
+    public DbSet<LiveStreamBidShowSession> LiveStreamBidShowSessions => Set<LiveStreamBidShowSession>();
     public DbSet<LiveStreamBidSale> LiveStreamBidSales => Set<LiveStreamBidSale>();
     public DbSet<DomesticProductInfo> DomesticProductInfos => Set<DomesticProductInfo>();
 
@@ -46,6 +48,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(product => product.LocalInventoryId).HasMaxLength(64);
             entity.Property(product => product.Sku).HasMaxLength(128).IsRequired();
             entity.Property(product => product.ProductName).HasMaxLength(256).IsRequired();
+            entity.Property(product => product.Note).HasMaxLength(4000);
             entity.Property(product => product.Category).HasMaxLength(80);
             entity.Property(product => product.InventoryCategory).HasMaxLength(16).IsRequired();
             entity.Property(product => product.CategoryInventoryId).HasMaxLength(32);
@@ -111,6 +114,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(listing => new { listing.ProductId, listing.Platform }).IsUnique();
             entity.Property(listing => listing.Platform).HasMaxLength(32).IsRequired();
             entity.Property(listing => listing.ListingUrl).HasMaxLength(2048);
+            entity.Property(listing => listing.RetailPrice).HasPrecision(10, 2);
             entity.HasOne(listing => listing.Product)
                 .WithMany(product => product.Listings)
                 .HasForeignKey(listing => listing.ProductId)
@@ -155,7 +159,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(item => new { item.BatchNumber, item.BatchProductNumber }).IsUnique();
             entity.HasOne(item => item.SourceProduct).WithMany().HasForeignKey(item => item.SourceProductId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(item => item.Uuid).HasMaxLength(64).IsRequired();
-            entity.Property(item => item.BatchNumber).HasMaxLength(20);
+            entity.Property(item => item.ImagePath).HasMaxLength(2000);
+            entity.Property(item => item.BatchNumber).HasMaxLength(240);
             entity.Property(item => item.ActualSku).HasMaxLength(200);
             entity.Property(item => item.WhatnotAuctionSafePrice).HasPrecision(12, 2);
             entity.Property(item => item.ItemCode).HasMaxLength(20);
@@ -166,6 +171,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.Material).HasMaxLength(300);
             entity.Property(item => item.TotalCost).HasPrecision(12, 2);
             entity.Property(item => item.ImportedFileName).HasMaxLength(260);
+            entity.Property(item => item.ImportedFileSha256).HasMaxLength(64);
+            entity.HasIndex(item => item.ImportedFileSha256);
         });
 
         modelBuilder.Entity<DomesticProductInfo>(entity =>
@@ -187,12 +194,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.EnglishDeclarationName).HasMaxLength(1000);
             entity.Property(item => item.ImagePath).HasMaxLength(2000);
             entity.Property(item => item.SourceFileName).HasMaxLength(260);
+            if (Database.IsNpgsql())
+                entity.Property<string>("SearchText").HasComputedColumnSql(
+                    "lower(\"Sku\" || ' ' || coalesce(\"ProductCode\", '') || ' ' || " +
+                    "coalesce(\"ProductName\", '') || ' ' || coalesce(\"Material\", '') || ' ' || " +
+                    "coalesce(\"Specification\", '') || ' ' || coalesce(\"ChineseDeclarationName\", '') || ' ' || " +
+                    "coalesce(\"EnglishDeclarationName\", '') || ' ' || coalesce(\"SupplierName\", ''))",
+                    stored: true);
+        });
+
+        modelBuilder.Entity<ImportedBidBatch>(entity =>
+        {
+            entity.ToTable("imported_bid_batches");
+            entity.HasIndex(item => item.FileName).IsUnique();
+            entity.HasIndex(item => item.Sha256).IsUnique();
+            entity.HasIndex(item => item.BatchNumber).IsUnique();
+            entity.Property(item => item.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.BatchNumber).HasMaxLength(240).IsRequired();
+        });
+
+        modelBuilder.Entity<LiveStreamBidShowSession>(entity =>
+        {
+            entity.ToTable("live_stream_bid_show_sessions");
+            entity.HasIndex(item => new { item.ShowDate, item.ShowNumber }).IsUnique();
+            entity.HasIndex(item => item.EndedAt);
+            entity.Property(item => item.StartedBy).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.EndedBy).HasMaxLength(80);
         });
 
         modelBuilder.Entity<LiveStreamBidSale>(entity =>
         {
             entity.ToTable("live_stream_bid_sales");
             entity.HasIndex(item => item.BidProductId);
+            entity.HasIndex(item => item.ShowSessionId);
             entity.HasIndex(item => item.SaleDate);
             entity.Property(item => item.ProductUuid).HasMaxLength(64).IsRequired();
             entity.Property(item => item.ProductTitle).HasMaxLength(1000).IsRequired();
@@ -204,6 +239,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.ProfitUsd).HasPrecision(12, 2);
             entity.Property(item => item.SoldBy).HasMaxLength(80).IsRequired();
             entity.HasOne(item => item.BidProduct).WithMany().HasForeignKey(item => item.BidProductId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ShowSession).WithMany(item => item.Sales).HasForeignKey(item => item.ShowSessionId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ProductDetailProfile>(entity =>

@@ -8,6 +8,38 @@
     <a href="/PROJECT_DOCUMENTATION.md" target="_blank" rel="noreferrer">Open full project document</a>
   </div>
 
+  <section class="ebay-api-guide">
+    <div class="ebay-api-guide-head">
+      <div><p class="eyebrow">LAN INTEGRATION</p><h3>Build an eBay listing from another computer</h3></div>
+      <p>Use the website/API host shown above. Do not connect the other computer directly to PostgreSQL.</p>
+    </div>
+    <ol class="api-workflow">
+      <li><b>Find the product</b><span>Exact lookup accepts either an Inventory ID such as INV-66 or the product SKU.</span><pre><code>GET {{ apiBaseUrl }}/products/lookup?code=INV-66</code></pre></li>
+      <li><b>Read the main product record</b><span>Use the returned <code>id</code> to obtain name, SKU, cost, quantity, weight, dimensions, category, listings, and ASIN data.</span><pre><code>GET {{ apiBaseUrl }}/products/&#123;productId&#125;</code></pre></li>
+      <li><b>Read eBay-supporting fields</b><span>This includes material, specification, description, country of origin, HS code, safety flags, packaging, identifiers, supplier data, and stored prices.</span><pre><code>GET {{ apiBaseUrl }}/products/&#123;productId&#125;/extended-data</code></pre></li>
+      <li><b>Download product media</b><span>Download photos only or all photos/videos as ZIP, or list and request individual encoded file names.</span><pre><code>GET {{ apiBaseUrl }}/products/&#123;productId&#125;/image/files/download-all
+GET {{ apiBaseUrl }}/products/&#123;productId&#125;/image/files/download-all-media
+GET {{ apiBaseUrl }}/products/&#123;productId&#125;/image/files
+GET {{ apiBaseUrl }}/products/&#123;productId&#125;/image/files/&#123;encodedFileName&#125;
+GET {{ apiBaseUrl }}/products/&#123;productId&#125;/image?thumbnail=512</code></pre></li>
+    </ol>
+    <div class="api-example-grid">
+      <article><h4>PowerShell</h4><pre><code>$base = "{{ apiBaseUrl }}"
+$product = Invoke-RestMethod "$base/products/lookup?code=INV-66"
+$detail = Invoke-RestMethod "$base/products/$($product.id)"
+$extra = Invoke-RestMethod "$base/products/$($product.id)/extended-data"
+$images = Invoke-RestMethod "$base/products/$($product.id)/image/files"</code></pre></article>
+      <article><h4>C# HttpClient</h4><pre><code>var baseUrl = "{{ apiBaseUrl }}";
+var product = await http.GetFromJsonAsync&lt;Product&gt;(
+    $"&#123;baseUrl&#125;/products/lookup?code=&#123;Uri.EscapeDataString("INV-66")&#125;");
+var detail = await http.GetFromJsonAsync&lt;ProductDetail&gt;(
+    $"&#123;baseUrl&#125;/products/&#123;product!.Id&#125;");
+var extra = await http.GetFromJsonAsync&lt;ProductExtendedData&gt;(
+    $"&#123;baseUrl&#125;/products/&#123;product.Id&#125;/extended-data");</code></pre></article>
+    </div>
+    <div class="api-access-note"><strong>Access:</strong> Product and image GET endpoints are read-only and work as a guest on the LAN. For protected write endpoints, call <code>POST {{ apiBaseUrl }}/auth/login</code>, keep the returned <code>lpm_session</code> cookie, and send it on later requests.</div>
+  </section>
+
   <div class="api-docs-grid">
     <article class="api-doc-card" *ngFor="let section of sections">
       <div>

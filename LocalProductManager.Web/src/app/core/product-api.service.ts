@@ -22,10 +22,12 @@ import {
   InventoryCategory,
 } from './models';
 import { apiBaseUrl } from './api-base';
+import { MediaUploadService } from './media-upload.service';
 
 @Injectable({ providedIn: 'root' })
 export class ProductApiService {
   private readonly http = inject(HttpClient);
+  private readonly mediaUpload = inject(MediaUploadService);
   readonly baseUrl = apiBaseUrl();
 
   search(keyword = '', platform = '', hasAmazon?: boolean): Promise<ProductListItem[]> {
@@ -89,6 +91,8 @@ export class ProductApiService {
     originalCost?: number | null;
     salePrice?: number | null;
     qty: number;
+    readyToList?: boolean;
+    note?: string | null;
     weight?: number | null;
     length?: number | null;
     width?: number | null;
@@ -109,6 +113,8 @@ export class ProductApiService {
     originalCost?: number | null;
     salePrice?: number | null;
     qty: number;
+    readyToList?: boolean;
+    note?: string | null;
     weight?: number | null;
     length?: number | null;
     width?: number | null;
@@ -128,13 +134,14 @@ export class ProductApiService {
     ));
   }
 
-  uploadProductImages(productId: number, files: File[]): Promise<{ imagePath: string; imagePaths: string[]; count: number }> {
-    const data = new FormData();
-    for (const file of files) data.append('files', file, file.name);
-    return firstValueFrom(this.http.post<{ imagePath: string; imagePaths: string[]; count: number }>(
-      `${this.baseUrl}/products/${productId}/image/upload-many`,
-      data,
-    ));
+  uploadProductImages(productId: number, files: File[]): Promise<ProductMediaUploadResult> {
+    return this.mediaUpload.uploadMultipart<ProductMediaUploadResult>(
+      `${this.baseUrl}/products/${productId}/image/upload-many`, files);
+  }
+
+  async uploadCapturedProductVideo(productId: number, file: File): Promise<ProductMediaUploadResult> {
+    return this.mediaUpload.uploadCapturedVideo<ProductMediaUploadResult>(
+      `${this.baseUrl}/products/${productId}/image/upload-capture`, file);
   }
 
   productImageFiles(productId: number): Promise<ProductImageFile[]> {
@@ -143,6 +150,16 @@ export class ProductApiService {
 
   productImageFileUrl(productId: number, fileName: string): string {
     return `${this.baseUrl}/products/${productId}/image/files/${encodeURIComponent(fileName)}`;
+  }
+
+  deleteProductMedia(productId: number, fileName: string): Promise<{ deleted: string; primaryCleared: boolean }> {
+    return firstValueFrom(this.http.delete<{ deleted: string; primaryCleared: boolean }>(
+      `${this.baseUrl}/products/${productId}/image/files/${encodeURIComponent(fileName)}`,
+    ));
+  }
+
+  productMediaDownloadUrl(productId: number): string {
+    return `${this.baseUrl}/products/${productId}/image/files/download-all-media`;
   }
 
   setPrimaryProductImage(productId: number, fileName: string): Promise<{ imagePath: string }> {
@@ -163,7 +180,7 @@ export class ProductApiService {
     return firstValueFrom(this.http.delete(`${this.baseUrl}/products/${id}`));
   }
 
-  saveListing(productId: number, body: { platform: Platform; listingUrl: string | null }): Promise<ProductListing> {
+  saveListing(productId: number, body: { platform: Platform; listingUrl: string | null; retailPrice?: number | null }): Promise<ProductListing> {
     return firstValueFrom(this.http.post<ProductListing>(`${this.baseUrl}/products/${productId}/listings`, body));
   }
 
@@ -313,6 +330,17 @@ export class ProductApiService {
 
 export interface ProductImageFile {
   fileName: string;
+  mediaType: 'image' | 'video';
+  isVideo: boolean;
   isPrimary: boolean;
   updatedAt: string;
+}
+
+export interface ProductMediaUploadResult {
+  imagePath: string | null;
+  imagePaths: string[];
+  mediaPaths: string[];
+  imageCount: number;
+  videoCount: number;
+  count: number;
 }

@@ -18,10 +18,81 @@
     exportButton: document.querySelector("#export-button"),
     addRowButton: document.querySelector("#add-row-button"),
     message: document.querySelector("#message"),
+    exportDialog: document.querySelector("#export-dialog"),
+    exportDialogStatus: document.querySelector("#export-dialog-status"),
+    testDownloadButton: document.querySelector("#test-download-button"),
+    finalUploadButton: document.querySelector("#final-upload-button"),
+    uploadTokenField: document.querySelector("#upload-token-field"),
+    uploadTokenInput: document.querySelector("#upload-token-input"),
   };
 
   let convertedData = null;
   let sourceName = "1688-order";
+  const savedTokenKey = "1688-converter-upload-token";
+  const vaultDatabaseName = "1688-converter-secret-vault";
+
+  function openVaultDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(vaultDatabaseName, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("keys");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function vaultKey(create) {
+    const database = await openVaultDatabase();
+    const existing = await new Promise((resolve, reject) => {
+      const request = database.transaction("keys").objectStore("keys").get(savedTokenKey);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    if (existing || !create) { database.close(); return existing || null; }
+    const generated = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    await new Promise((resolve, reject) => {
+      const request = database.transaction("keys", "readwrite").objectStore("keys").put(generated, savedTokenKey);
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return generated;
+  }
+
+  function toBase64(value) {
+    let binary = "";
+    value.forEach((byte) => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  }
+
+  function fromBase64(value) {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  }
+
+  async function saveEncryptedToken(token) {
+    const key = await vaultKey(true);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(token));
+    localStorage.setItem(savedTokenKey, JSON.stringify({ iv: toBase64(iv), data: toBase64(new Uint8Array(encrypted)) }));
+  }
+
+  async function clearEncryptedToken() {
+    localStorage.removeItem(savedTokenKey);
+  }
+
+  async function loadEncryptedToken() {
+    const stored = localStorage.getItem(savedTokenKey);
+    if (!stored) return "";
+    try {
+      const payload = JSON.parse(stored);
+      const key = await vaultKey(false);
+      if (!key) return "";
+      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64(payload.iv) }, key, fromBase64(payload.data));
+      return new TextDecoder().decode(decrypted);
+    } catch {
+      await clearEncryptedToken();
+      return "";
+    }
+  }
 
   function setMessage(message = "") {
     elements.message.textContent = message;
@@ -303,23 +374,129 @@
     renderRecords();
   }
 
-  function downloadCsv() {
-    if (!convertedData) return;
+  function createTimestampFileName(date = new Date()) {
+    const pad = (value) => String(value).padStart(2, "0");
+    const datePart = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+    const timePart = `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+    return `${datePart}_${timePart}_BarTender.csv`;
+  }
+
+  function createCsvExport() {
     const csv = ConverterCore.toCsv(convertedData);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    return { blob, fileName: createTimestampFileName() };
+  }
+
+  function downloadBlob(blob, fileName) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${sourceName}_BarTender.csv`;
+    link.download = fileName;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   }
 
+  function setExportStatus(message = "", type = "error") {
+    elements.exportDialogStatus.textContent = message;
+    elements.exportDialogStatus.classList.toggle("hidden", !message);
+    elements.exportDialogStatus.classList.toggle("success", type === "success");
+  }
+
+  async function openExportDialog() {
+    if (!convertedData) return;
+    setMessage();
+    setExportStatus();
+    const configuredToken = String(window.CONVERTER_UPLOAD_CONFIG?.authorizationToken || "").trim();
+    let savedToken = "";
+    if (!configuredToken) {
+      savedToken = await loadEncryptedToken();
+      elements.uploadTokenInput.value = savedToken;
+    }
+    elements.uploadTokenField.classList.toggle("hidden", Boolean(configuredToken || savedToken));
+    elements.exportDialog.showModal();
+  }
+
+  function downloadTestCsv() {
+    const { blob, fileName } = createCsvExport();
+    downloadBlob(blob, fileName);
+    elements.exportDialog.close();
+    setMessage(`测试版已下载：${fileName}`);
+  }
+
+  async function uploadFinalCsv() {
+    const config = window.CONVERTER_UPLOAD_CONFIG || {};
+    const endpoint = String(config.endpoint || "").trim();
+    if (!endpoint) {
+      setExportStatus("云服务器上传接口尚未配置。请先在 upload-config.js 中填写 endpoint；也可以先选择“测试版 · 仅下载”。");
+      return;
+    }
+
+    const { blob, fileName } = createCsvExport();
+    const formData = new FormData();
+    formData.append("file", blob, fileName);
+    formData.append("sourceName", sourceName);
+    formData.append("uploadedAt", new Date().toISOString());
+
+    const headers = {};
+    const token = String(config.authorizationToken || elements.uploadTokenInput.value || "").trim();
+    if (!token) {
+      setExportStatus("请输入服务器上传令牌。测试版下载不需要令牌。");
+      elements.uploadTokenInput.focus();
+      return;
+    }
+    headers.Authorization = `Bearer ${token}`;
+
+    elements.finalUploadButton.disabled = true;
+    elements.testDownloadButton.disabled = true;
+    elements.finalUploadButton.textContent = "正在上传…";
+    setExportStatus();
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+      if (!response.ok) {
+        const detail = (await response.text()).trim();
+        const failure = new Error(detail || `服务器返回 ${response.status}`);
+        failure.status = response.status;
+        throw failure;
+      }
+      if (!config.authorizationToken) {
+        await saveEncryptedToken(token);
+        elements.uploadTokenField.classList.add("hidden");
+      }
+      downloadBlob(blob, fileName);
+      elements.exportDialog.close();
+      setMessage(`最终版已上传到云服务器，并已下载到本机：${fileName}`);
+    } catch (error) {
+      console.error(error);
+      if (error.status === 401) {
+        await clearEncryptedToken();
+        elements.uploadTokenInput.value = "";
+        if (!config.authorizationToken) {
+          elements.uploadTokenField.classList.remove("hidden");
+          elements.uploadTokenInput.focus();
+        }
+        setExportStatus("上传令牌已失效或输入错误，请重新输入。");
+      } else {
+        setExportStatus(`上传失败，尚未下载最终版：${error.message || error}`);
+      }
+    } finally {
+      elements.finalUploadButton.disabled = false;
+      elements.testDownloadButton.disabled = false;
+      elements.finalUploadButton.textContent = "最终版 · 上传并下载";
+    }
+  }
+
   elements.fileInput.addEventListener("change", () => processFile(elements.fileInput.files[0]));
   elements.searchInput.addEventListener("input", renderRecords);
-  elements.exportButton.addEventListener("click", downloadCsv);
+  elements.exportButton.addEventListener("click", openExportDialog);
+  elements.testDownloadButton.addEventListener("click", downloadTestCsv);
+  elements.finalUploadButton.addEventListener("click", uploadFinalCsv);
   elements.createButton.addEventListener("click", createBlankTemplate);
   elements.addRowButton.addEventListener("click", addBlankRow);
 

@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Local Product Manager 运行时架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1395, 760],
+    "views": [
+      {
+        "id": "web-request",
+        "label": "网页请求主链路",
+        "focus": ["operators", "angular-web", "gateway", "api", "postgres"],
+        "note": "从仓库人员的浏览器操作追踪到持久化数据。"
+      },
+      {
+        "id": "media-flow",
+        "label": "产品媒体链路",
+        "focus": ["operators", "angular-web", "gateway", "api", "media-storage"],
+        "note": "图片和视频通过 API 进入按 INV 编号组织的产品目录。"
+      },
+      {
+        "id": "external-integrations",
+        "label": "外部平台集成",
+        "focus": ["api", "marketplaces", "automation-tools", "auction-monitor"],
+        "note": "查看市场平台、打印自动化与直播辅助程序的边界。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "operators",
+      "type": "external",
+      "label": "仓库与运营人员",
+      "sublabel": "Desktop / Mobile / Scanner",
+      "pos": [40, 300],
+      "size": [180, 72]
+    },
+    {
+      "id": "app-host",
+      "type": "cloud",
+      "label": "Aspire AppHost",
+      "sublabel": "本地服务编排与配置",
+      "pos": [590, 80],
+      "size": [190, 72]
+    },
+    {
+      "id": "angular-web",
+      "type": "frontend",
+      "label": "Angular Web UI",
+      "sublabel": "产品、库存、扫码与管理界面",
+      "pos": [300, 300],
+      "size": [210, 80]
+    },
+    {
+      "id": "gateway",
+      "type": "security",
+      "label": "HTTPS Gateway",
+      "sublabel": "托管前端、LAN 入口与 API 代理",
+      "pos": [590, 300],
+      "size": [190, 80]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": ".NET Web API",
+      "sublabel": "业务规则与 REST endpoints",
+      "pos": [870, 300],
+      "size": [210, 80]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "本地权限系统",
+      "sublabel": "Session / Roles / Permissions",
+      "pos": [870, 100],
+      "size": [190, 72]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "产品、库存与业务记录",
+      "pos": [1160, 270],
+      "size": [190, 80]
+    },
+    {
+      "id": "media-storage",
+      "type": "database",
+      "label": "产品媒体目录",
+      "sublabel": "Data/product-images/INV-xx",
+      "pos": [1160, 440],
+      "size": [190, 80]
+    },
+    {
+      "id": "marketplaces",
+      "type": "external",
+      "label": "Marketplace 服务",
+      "sublabel": "Amazon / eBay / Walmart",
+      "pos": [870, 530],
+      "size": [210, 76]
+    },
+    {
+      "id": "automation-tools",
+      "type": "external",
+      "label": "打印与自动化",
+      "sublabel": "BarTender / Label Integration",
+      "pos": [590, 530],
+      "size": [210, 76]
+    },
+    {
+      "id": "auction-monitor",
+      "type": "backend",
+      "label": "Auction Product Monitor",
+      "sublabel": "Chrome 扩展 + WPF 辅助程序",
+      "pos": [300, 530],
+      "size": [210, 76]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Local Product Manager 主应用",
+      "wraps": ["app-host", "angular-web", "gateway", "api", "auth", "postgres", "media-storage"]
+    },
+    {
+      "kind": "security-group",
+      "label": "API 权限边界",
+      "wraps": ["gateway", "api", "auth"]
+    }
+  ],
+  "connections": [
+    { "id": "operator-ui", "from": "operators", "to": "angular-web", "label": "HTTPS 操作", "variant": "emphasis" },
+    { "id": "ui-gateway", "from": "angular-web", "to": "gateway", "label": "REST / JSON", "labelAt": [550, 286], "variant": "emphasis" },
+    { "id": "gateway-api", "from": "gateway", "to": "api", "label": "反向代理", "variant": "emphasis" },
+    { "id": "gateway-web", "from": "gateway", "to": "angular-web", "label": "静态文件托管", "labelAt": [550, 404], "variant": "dashed" },
+    { "id": "host-gateway", "from": "app-host", "to": "gateway", "fromSide": "bottom", "toSide": "top", "label": "启动与配置", "labelAt": [685, 205], "variant": "dashed" },
+    { "id": "host-api", "from": "app-host", "to": "api", "fromSide": "right", "toSide": "top", "via": [[820, 116], [820, 250], [975, 250]], "label": "服务编排", "labelAt": [820, 196], "variant": "dashed" },
+    { "id": "api-auth", "from": "api", "to": "auth", "fromSide": "top", "toSide": "bottom", "label": "会话与权限检查", "labelAt": [1080, 220], "variant": "security" },
+    { "id": "api-db", "from": "api", "to": "postgres", "label": "EF Core / SQL" },
+    { "id": "api-media", "from": "api", "to": "media-storage", "label": "图片与视频文件" },
+    { "id": "api-marketplaces", "from": "api", "to": "marketplaces", "label": "商品与营销数据", "labelAt": [975, 450], "variant": "dashed" },
+    { "id": "api-print", "from": "api", "to": "automation-tools", "label": "标签请求", "variant": "dashed" },
+    { "id": "monitor-print", "from": "auction-monitor", "to": "automation-tools", "label": "成交标签请求", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "主请求链路",
+      "items": ["Angular 通过 HTTPS Gateway 调用 .NET API", "API 集中执行产品与库存业务规则"]
+    },
+    {
+      "dot": "emerald",
+      "title": "持久化",
+      "items": ["PostgreSQL 保存结构化业务数据", "产品图片与视频按 INV 目录保存"]
+    },
+    {
+      "dot": "amber",
+      "title": "外部边界",
+      "items": ["Marketplace 数据通过专用服务访问", "打印与直播工具保持独立进程"]
+    }
+  ]
+}

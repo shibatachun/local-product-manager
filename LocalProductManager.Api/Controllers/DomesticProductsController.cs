@@ -27,42 +27,21 @@ public sealed class DomesticProductsController(
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             var normalizedKeyword = keyword.ToLowerInvariant();
-            var tokens = SearchTokens(keyword);
-            var coreTokens = tokens.Where(token => !IsVariantDetailToken(token)).ToArray();
-            if (coreTokens.Length == 0) coreTokens = tokens;
+            var primaryToken = PrimarySearchToken(normalizedKeyword);
+            if (!db.Database.IsNpgsql())
+                return Problem("Domestic fuzzy search requires PostgreSQL pg_trgm.", statusCode: 501);
 
-            // Build the candidate set in PostgreSQL. Union produces DISTINCT SQL,
-            // so even broad searches never require loading the catalog into memory.
-            IQueryable<DomesticProductInfo>? candidates = null;
-            foreach (var token in tokens)
-            {
-                var tokenMatches = MatchingToken(token);
-                candidates = candidates is null ? tokenMatches : candidates.Union(tokenMatches);
-            }
-            rows = candidates ?? rows.Where(_ => false);
-
-            var allCoreMatches = db.DomesticProductInfos.AsNoTracking();
-            foreach (var token in coreTokens) allCoreMatches = FilterByToken(allCoreMatches, token);
-            var allTokenMatches = db.DomesticProductInfos.AsNoTracking();
-            foreach (var token in tokens) allTokenMatches = FilterByToken(allTokenMatches, token);
-            var allCoreSkuMatches = db.DomesticProductInfos.AsNoTracking();
-            foreach (var token in coreTokens) allCoreSkuMatches = FilterSkuByToken(allCoreSkuMatches, token);
-            var allTokenSkuMatches = db.DomesticProductInfos.AsNoTracking();
-            foreach (var token in tokens) allTokenSkuMatches = FilterSkuByToken(allTokenSkuMatches, token);
-            var coreAndSizeSkuMatches = allCoreSkuMatches;
-            foreach (var token in tokens.Where(IsSizeToken).Select(VariantNumber))
-                coreAndSizeSkuMatches = FilterSkuByToken(coreAndSizeSkuMatches, token);
-
-            // Google-style relevance bands: exact SKU, full SKU prefix, every
-            // token, every core token, then partial matches. SKU breaks ties.
             rows = rows
-                .OrderByDescending(item => item.Sku.ToLower() == normalizedKeyword)
-                .ThenByDescending(item => item.Sku.ToLower().StartsWith(normalizedKeyword))
-                .ThenByDescending(item => allTokenSkuMatches.Select(match => match.Id).Contains(item.Id))
-                .ThenByDescending(item => coreAndSizeSkuMatches.Select(match => match.Id).Contains(item.Id))
-                .ThenByDescending(item => allCoreSkuMatches.Select(match => match.Id).Contains(item.Id))
-                .ThenByDescending(item => allTokenMatches.Select(match => match.Id).Contains(item.Id))
-                .ThenByDescending(item => allCoreMatches.Select(match => match.Id).Contains(item.Id));
+                .Where(item => item.Sku.ToLower().StartsWith(primaryToken)
+                    || item.ProductCode != null && item.ProductCode.ToLower().StartsWith(primaryToken)
+                    || EF.Functions.TrigramsAreWordSimilar(
+                        normalizedKeyword, EF.Property<string>(item, "SearchText")))
+                .OrderByDescending(item => item.Sku.ToLower() == primaryToken
+                    || item.ProductCode != null && item.ProductCode.ToLower() == primaryToken)
+                .ThenByDescending(item => item.Sku.ToLower().StartsWith(primaryToken)
+                    || item.ProductCode != null && item.ProductCode.ToLower().StartsWith(primaryToken))
+                .ThenBy(item => EF.Functions.TrigramsWordSimilarityDistance(
+                    normalizedKeyword, EF.Property<string>(item, "SearchText")));
         }
 
         var descending = skuSort.Equals("desc", StringComparison.OrdinalIgnoreCase);
@@ -76,41 +55,22 @@ public sealed class DomesticProductsController(
         return Ok(new DomesticProductSearchResult(items.Select(ToDto).ToArray(), total, page, pageSize, descending ? "desc" : "asc"));
     }
 
-    private IQueryable<DomesticProductInfo> MatchingToken(string token) =>
-        FilterByToken(db.DomesticProductInfos.AsNoTracking(), token);
+    private static string PrimarySearchToken(string normalizedQuery)
+    {
+        var parts = Regex.Matches(normalizedQuery, @"[\p{L}\p{N}]+")
+            .Select(match => match.Value)
+            .ToArray();
+        if (parts.Length == 0) return normalizedQuery;
 
-    private static IQueryable<DomesticProductInfo> FilterByToken(
-        IQueryable<DomesticProductInfo> rows, string token) => rows.Where(item =>
-            item.Sku.ToLower().Contains(token) ||
-            (item.ProductCode != null && item.ProductCode.ToLower().Contains(token)) ||
-            (item.ProductName != null && item.ProductName.ToLower().Contains(token)) ||
-            (item.EnglishDeclarationName != null && item.EnglishDeclarationName.ToLower().Contains(token)) ||
-            (item.ChineseDeclarationName != null && item.ChineseDeclarationName.ToLower().Contains(token)) ||
-            (item.Material != null && item.Material.ToLower().Contains(token)) ||
-            (item.SupplierName != null && item.SupplierName.ToLower().Contains(token)));
-
-    private static IQueryable<DomesticProductInfo> FilterSkuByToken(
-        IQueryable<DomesticProductInfo> rows, string token) => rows.Where(item =>
-            item.Sku.ToLower().Contains(token) ||
-            (item.ProductCode != null && item.ProductCode.ToLower().Contains(token)));
-
-    private static string[] SearchTokens(string query) => Regex
-        .Matches(query.ToLowerInvariant(), @"[\p{L}\p{N}]+")
-        .Select(match => match.Value)
-        .Where(token => token.Length >= 2 || Regex.IsMatch(token, @"[\u3400-\u9fff]"))
-        .Distinct(StringComparer.Ordinal)
-        .Take(8)
-        .ToArray();
-
-    private static bool IsVariantDetailToken(string token) => Regex.IsMatch(
-        token,
-        @"^\d+(?:\.\d+)?(?:pcs?|pieces?|mm|cm|m|g|kg|oz|lb|pack|set)$",
-        RegexOptions.IgnoreCase);
-
-    private static bool IsSizeToken(string token) => Regex.IsMatch(
-        token, @"^\d+(?:\.\d+)?(?:mm|cm|m)$", RegexOptions.IgnoreCase);
-
-    private static string VariantNumber(string token) => Regex.Match(token, @"^\d+(?:\.\d+)?").Value;
+        // Letter-only inventory families use the following numeric segment as
+        // part of their identity: GR-236, EYE-029, CABOCHON-002. Numeric product
+        // codes such as 55104 remain a single primary segment.
+        return parts.Length > 1
+            && Regex.IsMatch(parts[0], @"^\p{L}+$")
+            && Regex.IsMatch(parts[1], @"^\d+$")
+                ? $"{parts[0]}-{parts[1]}"
+                : parts[0];
+    }
 
     [HttpPost("import")]
     [RequestSizeLimit(100_000_000)]

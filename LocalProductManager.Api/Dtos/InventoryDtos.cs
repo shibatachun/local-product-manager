@@ -5,7 +5,7 @@ public sealed record CreateShelfRequest(string ZoneCode, int RowNumber, int Leve
 public sealed record SetLevelInventoryRequest(int ProductId, int Qty, int BinNumber = 1);
 public sealed record AdjustLevelInventoryRequest(int ProductId, int Delta, int BinNumber = 1);
 public sealed record MoveProductInventoryRequest(
-    int? SourceLevelId, int? SourceBinNumber, int TargetLevelId, int TargetBinNumber, int Quantity);
+    int? SourceLevelId, int? SourceBinNumber, int? TargetLevelId, int? TargetBinNumber, int Quantity);
 public sealed record UpdateShelfLayoutRequest(decimal X, decimal Y, int Rotation);
 public sealed record WarehouseDto(int Id, string Code, string Name, IReadOnlyList<WarehouseShelfDto> Shelves);
 public sealed record WarehouseShelfDto(

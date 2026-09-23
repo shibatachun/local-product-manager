@@ -1,6 +1,5 @@
 using LocalProductManager.Api.Data;
 using LocalProductManager.Api.Models;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace LocalProductManager.Api.Services;
@@ -11,20 +10,19 @@ public sealed record InventoryAuditActor(
     string? RemoteIp,
     string? UserAgent);
 
-public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWriteService> logger, ExchangeRateService exchangeRates)
+public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService exchangeRates)
 {
-    private const int MaxAttempts = 3;
 
     public Task<bool> MoveAsync(
         int productId, int? sourceLevelId, int? sourceBinNumber,
-        int targetLevelId, int targetBinNumber, int quantity,
+        int? targetLevelId, int? targetBinNumber, int quantity,
         InventoryAuditActor actor, CancellationToken cancellationToken) =>
         ExecuteWithRetryAsync(async () =>
         {
-            if (quantity < 1 || sourceLevelId == targetLevelId && sourceBinNumber == targetBinNumber)
+            if (quantity < 1 || !sourceLevelId.HasValue && !targetLevelId.HasValue
+                || sourceLevelId.HasValue && sourceLevelId == targetLevelId && sourceBinNumber == targetBinNumber)
                 return false;
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-            var targetBefore = await CurrentQuantityAsync(targetLevelId, targetBinNumber, productId, cancellationToken);
             var now = DateTimeOffset.UtcNow;
             if (sourceLevelId.HasValue && sourceBinNumber.HasValue)
             {
@@ -34,7 +32,7 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
                     return false;
                 await DeleteZeroQuantityAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, cancellationToken);
                 await WriteHistoryAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, sourceBefore, sourceBefore - quantity,
-                    actor, $"move_out:{targetLevelId}:{targetBinNumber}", now, cancellationToken);
+                    actor, targetLevelId.HasValue ? $"move_out:{targetLevelId}:{targetBinNumber}" : "move_to_unassigned", now, cancellationToken);
             }
             else
             {
@@ -43,9 +41,13 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
                     .SumAsync(item => (int?)item.Qty, cancellationToken) ?? 0;
                 if (totalQty - locatedQty < quantity) return false;
             }
-            await AdjustLocationQuantityAsync(targetLevelId, targetBinNumber, productId, quantity, now, cancellationToken);
-            await WriteHistoryAsync(targetLevelId, targetBinNumber, productId, targetBefore, targetBefore + quantity,
-                actor, sourceLevelId.HasValue ? $"move_in:{sourceLevelId}:{sourceBinNumber}" : "place_unassigned", now, cancellationToken);
+            if (targetLevelId.HasValue && targetBinNumber.HasValue)
+            {
+                var targetBefore = await CurrentQuantityAsync(targetLevelId.Value, targetBinNumber.Value, productId, cancellationToken);
+                await AdjustLocationQuantityAsync(targetLevelId.Value, targetBinNumber.Value, productId, quantity, now, cancellationToken);
+                await WriteHistoryAsync(targetLevelId.Value, targetBinNumber.Value, productId, targetBefore, targetBefore + quantity,
+                    actor, sourceLevelId.HasValue ? $"move_in:{sourceLevelId}:{sourceBinNumber}" : "place_unassigned", now, cancellationToken);
+            }
             await transaction.CommitAsync(cancellationToken);
             return true;
         }, cancellationToken);
@@ -324,64 +326,13 @@ public sealed class InventoryWriteService(AppDbContext db, ILogger<InventoryWrit
         int productId,
         int delta,
         DateTimeOffset now,
-        CancellationToken cancellationToken) =>
-        db.Database.IsNpgsql()
-            ? db.Database.ExecuteSqlInterpolatedAsync($"""
-                UPDATE products
-                SET "Qty" = GREATEST(0, "Qty" + {delta}),
-                    "UpdatedAt" = {now}
-                WHERE "Id" = {productId}
-                """, cancellationToken)
-            : db.Database.ExecuteSqlInterpolatedAsync($"""
-                UPDATE products
-                SET Qty = MAX(0, Qty + {delta}),
-                    UpdatedAt = {now}
-                WHERE Id = {productId}
-                """, cancellationToken);
+        CancellationToken cancellationToken) => db.Products
+            .Where(item => item.Id == productId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Qty, item => item.Qty + delta < 0 ? 0 : item.Qty + delta)
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
-    private async Task<T> ExecuteWithRetryAsync<T>(
+    private static Task<T> ExecuteWithRetryAsync<T>(
         Func<Task<T>> operation,
-        CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                return await operation();
-            }
-            catch (Exception exception) when (
-                attempt < MaxAttempts
-                && IsTransientSqliteLock(exception)
-                && !cancellationToken.IsCancellationRequested)
-            {
-                var delay = TimeSpan.FromMilliseconds(60 * attempt * attempt);
-                logger.LogWarning(
-                    exception,
-                    "SQLite inventory write was busy; retrying attempt {Attempt}/{MaxAttempts} after {DelayMs} ms.",
-                    attempt + 1,
-                    MaxAttempts,
-                    delay.TotalMilliseconds);
-                await Task.Delay(delay, cancellationToken);
-            }
-        }
-    }
-
-    private static bool IsTransientSqliteLock(Exception exception)
-    {
-        for (var current = exception; current is not null; current = current.InnerException!)
-        {
-            if (current is SqliteException sqliteException
-                && sqliteException.SqliteErrorCode is 5 or 6)
-            {
-                return true;
-            }
-
-            if (current.InnerException is null)
-            {
-                break;
-            }
-        }
-
-        return false;
-    }
+        CancellationToken cancellationToken) => operation();
 }

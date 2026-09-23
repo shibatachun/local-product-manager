@@ -1,7 +1,7 @@
 .actual-sku-editor{display:flex;gap:10px;padding:10px 18px;overflow:auto;border-bottom:1px solid #e2e8eb}
 .actual-sku-editor label{display:grid;flex:0 0 240px;gap:4px;color:#536772;font-size:11px;font-weight:750}
 .actual-sku-editor input{min-height:38px;padding:0 10px;border:1px solid #ccd7dc;border-radius:6px}
-.create-modal{display:flex;flex-direction:column}
+.create-modal{display:flex;flex-direction:column;overflow-y:auto;overscroll-behavior:contain}
 .create-modal .draft-scroll{flex:1;min-height:0}
 .actual-sku-editor{flex:0 0 auto}
 .actual-sku-editor input{height:38px;max-height:38px}

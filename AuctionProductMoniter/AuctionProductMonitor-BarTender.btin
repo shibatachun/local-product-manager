@@ -2,7 +2,7 @@
   <ActionGroup ID="7392829d-7be1-4510-b7bb-d5de5ff91462" RunMethod="Sequential" MessagingEnabled="false">
     <Actions>
       <WebRequestIntegration Name="Auction Product Monitor Label Printing" IgnoreErrors="true" ID="87ecbbfa-efb7-4e63-b683-c47c25752d28" ActionExecution="WaitForPreviousEventPrintJob" Port="5164" ServiceName="auction-product-label" ResponseFormat="Json">
-        <Description>Dedicated JSON label printing endpoint for AuctionProductMonitor.Wpf</Description>
+        <Description>Dedicated CSV record-set endpoint. One HTTP request becomes one multi-record BarTender print job.</Description>
         <Variables>
           <Variable Name="action" Type="System.String">
             <Value>test</Value>
@@ -34,26 +34,18 @@
         </Variables>
         <ActionGroup ID="a8f08ccb-3be1-4b84-8eb3-d42e21c9b21e" RunMethod="Sequential" MessagingEnabled="false">
           <Actions>
-            <PrintAction Name="Print Auction Product Label" RunType="UseConditionVariable" IgnoreErrors="false" ID="dbbf8e8f-50ee-4a99-8829-3fc7c80cc7cc" CloseDocumentAfterPrint="true" Printer="PM-241H (Bluetooth)" CopiesPerSerialNumber="%copies%">
-              <ConditionExpression>
-                <Expression>[%action%] = 'print'</Expression>
-                <VariableDataTypes>{"action":"Text"}</VariableDataTypes>
-              </ConditionExpression>
+            <PrintAction Name="Print Auction Product Label Batch" IgnoreErrors="false" ID="dbbf8e8f-50ee-4a99-8829-3fc7c80cc7cc" CloseDocumentAfterPrint="true" Printer="PM-241H (Bluetooth)">
               <DocumentFile Path="C:\Users\jjgqa\local-product-manager\AuctionProductMoniter\bidproductlabel.btw">
                 <FileSystem.System />
               </DocumentFile>
-              <NamedDataSources>
-                <Field Name="BuyerName">%buyerName%</Field>
-                <Field Name="ProductNumber">%productNumber%</Field>
-                <Field Name="SessionId">%sessionId%</Field>
-              </NamedDataSources>
+              <RecordSets Type="VariableName" DataSourceVariableName="EventData" />
               <PrintToFileFolder Path="%IntegrationFileNameWithoutExtension%">
                 <FileSystem.Temporary />
               </PrintToFileFolder>
             </PrintAction>
           </Actions>
         </ActionGroup>
-        <ContentData ContentDataType="JsonVariables" />
+        <ContentData ContentDataType="TextCSV" />
         <Samples>
           <Sample Name="Auction WPF Print Request">
             <Variables>
@@ -70,17 +62,9 @@
                 <Value>2026-08-24T16:07:37-04:00</Value>
               </Variable>
               <Variable Name="EventData" Type="System.String">
-                <Value>{&#xD;
-  "action": "print",&#xD;
-  "source": "AuctionProductMonitor.Wpf",&#xD;
-  "sessionId": "LIVE-20260825-160000",&#xD;
-  "sessionDate": "2026-08-25",&#xD;
-  "buyerName": "silentgems",&#xD;
-  "productNumber": "33",&#xD;
-  "copies": 1,&#xD;
-  "detectedAt": "2026-08-24T16:07:37-04:00",&#xD;
-  "requestedAt": "2026-08-24T20:07:38Z"&#xD;
-}</Value>
+                <Value>action,BuyerName,ProductNumber,SessionId&#xD;
+print,"silentgems","33","LIVE-20260825-160000"&#xD;
+print,"second_buyer","34","LIVE-20260825-160000"</Value>
               </Variable>
               <Variable Name="productNumber" Type="System.String">
                 <Value>33</Value>
@@ -102,9 +86,9 @@
         </Samples>
         <ResponseHeaders />
         <ResponseData>
-          <Value>{&#xD;
-  "accepted": true,&#xD;
-  "message": "Auction Product Monitor request received."&#xD;
+          <Value>{&#xD;&#xD;
+  "accepted": true,&#xD;&#xD;
+  "message": "Auction Product Monitor request received."&#xD;&#xD;
 }</Value>
         </ResponseData>
       </WebRequestIntegration>
@@ -131,11 +115,18 @@
   <IsPrintPreview>false</IsPrintPreview>
   <DeploymentConfigurations>
     <DeploymentConfiguration CancelIfIntegrationFileExistsOnTargetServer="false">
-      <Name>Production</Name>
+      <Name>Test</Name>
       <TargetServers>
         <TargetServer Name="This Computer" IsServerGroup="false" />
       </TargetServers>
       <DeploymentSchedule Method="Immediately" />
+    </DeploymentConfiguration>
+    <DeploymentConfiguration CancelIfIntegrationFileExistsOnTargetServer="false">
+      <Name>Production</Name>
+      <TargetServers>
+        <TargetServer Name="This Computer" IsServerGroup="false" />
+      </TargetServers>
+      <DeploymentSchedule Method="OnSpecifiedDate" />
     </DeploymentConfiguration>
   </DeploymentConfigurations>
 </IntegrationFile>

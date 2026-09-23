@@ -5,63 +5,48 @@
 ## 文件
 
 - Integration：`AuctionProductMonitor-BarTender.btin`
-- JSON样例：`auction-bartender-print-sample.json`
-- 标签模板路径：`bidproductlabel.btw`
-- HTTP端点：`http://127.0.0.1:5164/Integration/auction-product-label/Execute`
+- CSV 记录集样例：`auction-bartender-print-sample.csv`
+- 标签模板：`bidproductlabel.btw`
+- HTTP 端点：`http://127.0.0.1:5164/Integration/auction-product-label/Execute`
 
-## 1. 创建标签模板
+## 1. 把 BTW 模板连接到记录集
 
-使用 BarTender Designer 在当前目录创建：
+为让双列纸连续填满左右两列，模板必须使用一个文本数据库连接，而不是 Embedded Data Named Data Sources。
 
-```text
-C:\Users\jjgqa\local-product-manager\AuctionProductMoniter\bidproductlabel.btw
-```
+1. 用 BarTender Designer 打开 `bidproductlabel.btw`；
+2. 打开“数据库连接设置”，添加“文本文件”连接，选择同目录的 `auction-bartender-print-sample.csv`；
+3. 选择逗号分隔，并勾选“第一行包含字段名”；
+4. 把模板上的三个文本对象分别绑定到数据库字段 `BuyerName`、`ProductNumber`、`SessionId`；`action` 不需要放到标签上；
+5. 保存模板。数据库连接设置里应能看到该文本文件连接。
 
-当前模板包含三个区分大小写的 Embedded Data Named Data Sources：
-
-```text
-BuyerName
-ProductNumber
-SessionId
-```
-
-建议标签正面突出显示 `ProductNumber`，下一行显示 `BuyerName`，并显示或保留 `SessionId`。`DetectedAt`和`SessionDate`仍包含在WPF JSON及本地Session记录中，但当前BTW不打印这两个字段。
+建议标签正面突出显示 `ProductNumber`，下一行显示 `BuyerName`，并显示或保留 `SessionId`。
 
 ## 2. 导入和部署 Integration
 
 1. 用 BarTender Integration Builder 打开 `AuctionProductMonitor-BarTender.btin`；
-2. 打开 `Print Auction Product Label` action；
-3. 确认Document指向上面的 `.btw`；
-4. 在 Named Data Sources 页面确认映射：
-   - `BuyerName` = `%buyerName%`
-   - `ProductNumber` = `%productNumber%`
-   - `SessionId` = `%sessionId%`
+2. 打开 `Print Auction Product Label Batch` action；
+3. 确认 Document 指向上面的 `.btw`；
+4. 确认 Record Sets 使用 `%EventData%`，不要配置逐条 For Each；
 5. 选择实际标签打印机；
-6. 部署 `Production` configuration，并确认Integration处于Running状态。
+6. 部署 `Production` configuration，并确认 Integration 处于 Running 状态。
 
-## 3. JSON协议
+## 3. BarTender CSV 协议
 
-```json
-{
-  "action": "print",
-  "source": "AuctionProductMonitor.Wpf",
-  "sessionId": "LIVE-20260825-160000",
-  "sessionDate": "2026-08-25",
-  "buyerName": "silentgems",
-  "productNumber": "33",
-  "copies": 1,
-  "detectedAt": "2026-08-24T16:07:37-04:00",
-  "requestedAt": "2026-08-24T20:07:38Z"
-}
+```csv
+action,BuyerName,ProductNumber,SessionId
+print,"silentgems","33","LIVE-20260825-160000"
+print,"second_buyer","34","LIVE-20260825-160000"
 ```
 
-- `action: "test"`：Integration返回响应，但Print action条件不成立，不打印；
-- `action: "print"`：正式打印；
-- `copies`：打印份数，WPF当前固定为1。
+- 每次 HTTP 请求的所有 CSV 行由同一个 Print action 处理，因此是一项打印作业，双列纸会按模板的页面顺序填充左右两列；
+- `action` 列现在只记录正式打印行；Print action 不再用 `%action%` 作条件，因为 CSV 输入不会更新旧版 JSON 变量；
+- 数量大于 1 时，中转器会在同一 CSV 中重复该标签行，不会拆成多个打印任务；
+- 中转器限制每个 bulk 作业最多 1000 张标签。
 
-## 4. WPF操作
+## 4. WPF 操作
 
-- `测试连接`：发送 `action=test`；
-- `打印选中成交`：对列表选中行发送 `action=print`；
-- `收到新成交后自动打印`：默认关闭，启用后每条首次接收的成交会自动请求BarTender；
-- WPF按“买家名称 + 商品编号”去重，手动同步不会重复打印已经接收的同一行；但手动点击“打印选中成交”允许重新打印。
+- `测试连接`：中转器检查 BarTender HTTP 端口是否可连接，不提交打印作业；
+- `打印选中成交`：支持 Ctrl/Shift 多选；选中一行时发送单记录作业，多行时按列表顺序提交一个批量作业。已提交的行也可补打；
+- `全部打印未打印项`：把全部未打印订单合成一个 `/api/print/bulk` 请求；中转器再以一份多行 CSV 提交给 BarTender；
+- `收到新成交后自动打印`：仍以单记录作业自动打印；
+- Show Report 导入按 Whatnot `order_id` 去重并排除失败/取消订单。中转器接受后的状态会保存在本地 Session；状态不是打印机物理出签的证明。

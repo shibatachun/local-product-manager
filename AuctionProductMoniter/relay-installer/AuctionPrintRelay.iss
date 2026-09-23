@@ -1,5 +1,5 @@
 #define MyAppName "Auction Print Relay"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.2"
 #define MyAppExeName "AuctionPrintRelay.Wpf.exe"
 [Setup]
 AppId={{DC2286AA-F05A-4E68-96B2-32C18F712B2D}
@@ -27,6 +27,7 @@ Name: "autostart"; Description: "Start Auction Print Relay when Windows starts";
 Source: "staging\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\AuctionProductMonitor-BarTender.btin"; DestDir: "{app}\BarTender"; Flags: ignoreversion
 Source: "..\bidproductlabel.btw"; DestDir: "{app}\BarTender"; Flags: ignoreversion
+Source: "..\auction-bartender-print-sample.csv"; DestDir: "{app}\BarTender"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon

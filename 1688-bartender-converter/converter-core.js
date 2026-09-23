@@ -187,6 +187,7 @@
   async function enrichRecords(flattened) {
     const records = [];
     const groupedSources = new Map();
+    const conversionSeed = `${new Date().toISOString()}|${Date.now()}|${globalScope.crypto?.randomUUID?.() || Math.random()}`;
     flattened.records.forEach((source, index) => {
       const itemNumber = String(source["单品货号"] || "").trim();
       const skuId = String(source["SKU ID"] || "").trim();
@@ -205,10 +206,8 @@
 
     for (const { source, firstIndex, inventory, itemNumber, skuId } of groupedSources.values()) {
       const index = firstIndex;
-      const seed = `${source["订单编号"] || ""}|${source["SKU ID"] || ""}|${source["单品货号"] || ""}|${index}`;
-      const bidCode = itemNumber && skuId
-        ? `BID|${itemNumber}|${skuId}`
-        : `BID|${await stableUuid(seed)}`;
+      const seed = `${conversionSeed}|${source["订单编号"] || ""}|${source["SKU ID"] || ""}|${source["单品货号"] || ""}|${index}`;
+      const bidCode = `BID|${await stableUuid(seed)}`;
       const grams = detectGrams(source["货品标题"]);
       const calculated = calculate(grams, source["单价(元)"], source["数量"], "per-unit");
       records.push({

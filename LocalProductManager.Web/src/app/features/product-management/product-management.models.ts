@@ -2,7 +2,7 @@ import { Platform } from '../../core/models';
 
 export type ViewMode = 'products' | 'domesticProducts' | 'autoListing' | 'bidProducts' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 export type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
-export type PricingPlatform = Exclude<Platform, 'shopify'>;
+export type PricingPlatform = Platform;
 export type ProductCostCurrency = 'rmb' | 'usd';
 export type PricingWeightUnit = 'lb' | 'oz' | 'g' | 'kg';
 

@@ -41,6 +41,7 @@ public sealed class ProductListingsController(AppDbContext db) : ControllerBase
         {
             return BadRequest($"Unsupported platform: {request.Platform}");
         }
+        if (request.RetailPrice < 0) return BadRequest("Retail price cannot be negative.");
 
         if (!await ProductExists(productId, cancellationToken))
         {
@@ -57,13 +58,15 @@ public sealed class ProductListingsController(AppDbContext db) : ControllerBase
             {
                 ProductId = productId,
                 Platform = normalizedPlatform,
-                ListingUrl = NormalizeOptional(request.ListingUrl)
+                ListingUrl = NormalizeOptional(request.ListingUrl),
+                RetailPrice = request.RetailPrice
             };
             db.ProductListings.Add(listing);
         }
         else
         {
             listing.ListingUrl = NormalizeOptional(request.ListingUrl);
+            listing.RetailPrice = request.RetailPrice;
             listing.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
@@ -83,6 +86,7 @@ public sealed class ProductListingsController(AppDbContext db) : ControllerBase
         {
             return BadRequest($"Unsupported platform: {request.Platform}");
         }
+        if (request.RetailPrice < 0) return BadRequest("Retail price cannot be negative.");
 
         var listing = await db.ProductListings.FirstOrDefaultAsync(
             existing => existing.Id == listingId && existing.ProductId == productId,
@@ -95,6 +99,7 @@ public sealed class ProductListingsController(AppDbContext db) : ControllerBase
 
         listing.Platform = normalizedPlatform;
         listing.ListingUrl = NormalizeOptional(request.ListingUrl);
+        listing.RetailPrice = request.RetailPrice;
         listing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);

@@ -8,6 +8,7 @@ import { ProductApiService } from '../../core/product-api.service';
 import { InventoryApiService } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
 import { LiveStreamBidDailySummary, LiveStreamBidProduct, LiveStreamBidProductApiService } from '../../core/live-stream-bid-product-api.service';
+import { MediaUploadService } from '../../core/media-upload.service';
 
 type ScannerLocation = {
   levelId: number;
@@ -18,6 +19,10 @@ type ScannerLocation = {
   qty: number;
 };
 
+// Some keyboard-wedge scanners pause while sending long UUIDs. Enter remains immediate;
+// scanners without an Enter suffix submit after the whole input has been idle.
+const SCANNER_INPUT_IDLE_MS = 2000;
+
 @Component({
   selector: 'app-barcode-scanner',
   standalone: true,
@@ -27,12 +32,17 @@ type ScannerLocation = {
 })
 export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   @Input() embedded = false;
+  @Input() lockedScanMode: 'inventory' | 'bid' | null = null;
+  @Input() bidShowSessionId: number | null = null;
+  @Input() bidSalesOnly = false;
   @Output() readonly openProductDetail = new EventEmitter<number>();
+  @Output() readonly bidSaleRecorded = new EventEmitter<void>();
   @ViewChild('video') video?: ElementRef<HTMLVideoElement>;
   @ViewChild('barcodeInput') barcodeInput?: ElementRef<HTMLInputElement>;
   readonly api = inject(ProductApiService);
   private readonly inventoryApi = inject(InventoryApiService);
   private readonly bidApi = inject(LiveStreamBidProductApiService);
+  private readonly mediaUpload = inject(MediaUploadService);
   private readonly reader = new BrowserMultiFormatReader(new Map<DecodeHintType, unknown>([
     [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]],
     [DecodeHintType.TRY_HARDER, true],
@@ -52,6 +62,9 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   readonly bidProduct = signal<LiveStreamBidProduct | null>(null);
   readonly bidToday = signal<LiveStreamBidDailySummary | null>(null);
   readonly bidCurrency = signal<'usd' | 'rmb'>('usd');
+  readonly uploadingBidPhotos = signal(false);
+  readonly uploadingBidVideos = signal(false);
+  readonly bidVideos = signal<{ fileName: string; updatedAt: string }[]>([]);
   readonly locations = signal<ScannerLocation[]>([]);
   readonly warehouseLevels = signal<ScannerLocation[]>([]);
   readonly notFound = signal(false);
@@ -65,12 +78,14 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   readonly inputMode = signal<'camera' | 'scanner'>('scanner');
   readonly scanMode = signal<'inventory' | 'bid'>('inventory');
   operationQty = 1;
+  bidReceiveQty = 1;
   actualSalePrice: number | null = null;
   operationLocationKey: string | null = null;
   manualCode = '';
   addForm = { localInventoryId: '', sku: '', productName: '', qty: 0 };
 
   ngAfterViewInit(): void {
+    if (this.lockedScanMode) this.scanMode.set(this.lockedScanMode);
     if (matchMedia('(max-width: 820px), (pointer: coarse)').matches) this.setInputMode('camera');
     else this.setInputMode('scanner');
   }
@@ -91,6 +106,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   }
 
   setScanMode(mode: 'inventory' | 'bid'): void {
+    if (this.lockedScanMode) return;
     this.scanMode.set(mode);
     this.reset();
     if (this.inputMode() === 'camera') void this.startCamera();
@@ -167,7 +183,17 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
       this.manualCode = '';
       if (this.barcodeInput?.nativeElement) this.barcodeInput.nativeElement.value = '';
       void this.lookupCode(completedCode);
-    }, 180);
+    }, SCANNER_INPUT_IDLE_MS);
+  }
+
+  scannerInputSubmitted(event: Event): void {
+    event.preventDefault();
+    if (this.scannerInputTimer) clearTimeout(this.scannerInputTimer);
+    const completedCode = this.manualCode.trim();
+    if (!completedCode || this.loading()) return;
+    this.manualCode = '';
+    if (this.barcodeInput?.nativeElement) this.barcodeInput.nativeElement.value = '';
+    void this.lookupCode(completedCode);
   }
 
   @HostListener('document:keydown', ['$event'])
@@ -175,7 +201,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     const target = event.target as HTMLElement | null;
     if (target?.matches('input, textarea, select, [contenteditable="true"]') || event.ctrlKey || event.altKey || event.metaKey) return;
     const now = Date.now();
-    if (now - this.hardwareLastKeyAt > 140) this.hardwareBuffer = '';
+    if (now - this.hardwareLastKeyAt > SCANNER_INPUT_IDLE_MS) this.hardwareBuffer = '';
     this.hardwareLastKeyAt = now;
     if (event.key === 'Enter') {
       const value = this.hardwareBuffer.trim();
@@ -203,6 +229,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.scannedCode.set(raw);
     this.scannedType.set('lpm');
     this.bidProduct.set(null);
+    this.bidVideos.set([]);
     try {
       const found = await this.api.lookupExact(code);
       this.product.set(found);
@@ -231,11 +258,16 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.product.set(null);
     this.locations.set([]);
     this.warehouseLevels.set([]);
+    this.bidVideos.set([]);
     try {
-      const [product, today] = await Promise.all([this.bidApi.lookup(uuid), this.bidApi.today()]);
+      const product = await this.bidApi.lookup(uuid);
       this.bidProduct.set(product);
-      this.bidToday.set(today);
+      this.bidReceiveQty = product ? Math.max(0, product.inventory - product.actualInventory) : 1;
       this.notFound.set(!product);
+      if (product) {
+        try { this.bidVideos.set(await this.bidApi.videoFiles(product.id)); }
+        catch { this.error.set('BID product loaded, but its videos could not be loaded.'); }
+      }
     } catch {
       this.error.set('Unable to reach bid inventory. Check the API connection and try again.');
     } finally { this.loading.set(false); }
@@ -244,6 +276,10 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   async confirmBidSale(): Promise<void> {
     const product = this.bidProduct();
     if (!product || this.loading()) return;
+    if (!this.bidShowSessionId) {
+      this.error.set('Start a show cost session on the BID Product page before recording a sale.');
+      return;
+    }
     const price = this.actualSalePrice === null || this.actualSalePrice === undefined || String(this.actualSalePrice).trim() === ''
       ? null : Number(this.actualSalePrice);
     if (price !== null && (!Number.isFinite(price) || price < 0)) {
@@ -253,26 +289,113 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.loading.set(true);
     this.error.set('');
     try {
-      const sale = await this.bidApi.confirmSale(product.id, price);
+      const sale = await this.bidApi.confirmSale(product.id, price, this.bidShowSessionId);
       const confirmation = `Bid sale recorded${sale.actualSalePriceUsd === null ? '' : ` at $${sale.actualSalePriceUsd.toFixed(2)}`}. Ready for the next scan.`;
       this.reset();
       this.success.set(confirmation);
+      this.bidSaleRecorded.emit();
     } catch (error: any) {
       this.error.set(error?.status === 409 ? 'This bid product has already been sold.' : 'The bid sale could not be recorded.');
     } finally { this.loading.set(false); }
   }
 
-  async adjustBidActualInventory(delta: 1 | -1): Promise<void> {
+  async adjustBidActualInventory(delta: number): Promise<void> {
     const product = this.bidProduct();
+    const amount = Math.floor(Number(delta));
     if (!product || this.loading()) return;
+    if (!Number.isFinite(amount) || amount === 0) {
+      this.error.set('Enter a whole-number received quantity of at least 1.');
+      return;
+    }
+    const next = product.actualInventory + amount;
+    if (next < 0 || next > product.inventory) {
+      this.error.set(amount > 0
+        ? `Only ${Math.max(0, product.inventory - product.actualInventory)} item(s) remain to be received.`
+        : 'Actual inventory cannot be negative.');
+      return;
+    }
     this.loading.set(true); this.error.set(''); this.success.set('');
     try {
-      const updated = await this.bidApi.adjustActualInventory(product.id, delta);
+      const updated = await this.bidApi.adjustActualInventory(product.id, amount);
       this.bidProduct.set(updated);
-      this.success.set(`Actual inventory ${delta > 0 ? 'increased' : 'decreased'} to ${updated.actualInventory}.`);
+      this.bidReceiveQty = Math.max(0, updated.inventory - updated.actualInventory);
+      this.success.set(`Actual inventory ${amount > 0 ? 'increased' : 'decreased'} by ${Math.abs(amount)} to ${updated.actualInventory}.`);
     } catch (error: any) {
-      this.error.set(error?.error || (delta > 0 ? 'Actual inventory cannot exceed expected inventory.' : 'Actual inventory cannot be negative.'));
+      this.error.set(error?.error || (amount > 0 ? 'Actual inventory cannot exceed expected inventory.' : 'Actual inventory cannot be negative.'));
     } finally { this.loading.set(false); }
+  }
+
+  receiveBidInventory(): void {
+    void this.adjustBidActualInventory(this.bidReceiveQty);
+  }
+
+  bidImageUrl(product: LiveStreamBidProduct, thumbnail = 640): string {
+    return this.bidApi.imageUrl(product.id, thumbnail, product.updatedAt);
+  }
+
+  downloadBidPicture(product: LiveStreamBidProduct): void {
+    const anchor = document.createElement('a');
+    anchor.href = this.bidApi.imageDownloadUrl(product.id);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  async uploadBidPhotos(event: Event, cameraPhoto = false): Promise<void> {
+    const { input, files: selectedFiles } = this.mediaUpload.filesFrom(event);
+    const product = this.bidProduct();
+    if (!product || this.uploadingBidPhotos()) return;
+    if (selectedFiles.length === 0) {
+      this.error.set('The camera or photo library did not return a photo. Please try again.');
+      input.value = '';
+      return;
+    }
+    this.uploadingBidPhotos.set(true);
+    this.error.set('');
+    this.success.set('');
+    try {
+      const files = cameraPhoto
+        ? await this.mediaUpload.prepareCameraImages(selectedFiles)
+        : selectedFiles;
+      const result = await this.bidApi.uploadImages(product.id, files);
+      this.bidProduct.set({ ...product, imagePath: result.imagePath, updatedAt: result.updatedAt });
+      this.success.set(`${result.uploadedCount} photo${result.uploadedCount === 1 ? '' : 's'} uploaded.`);
+    } catch (error: any) {
+      this.error.set(error?.error || 'Could not upload the BID product photos.');
+    } finally {
+      input.value = '';
+      this.uploadingBidPhotos.set(false);
+    }
+  }
+
+  bidVideoUrl(product: LiveStreamBidProduct, fileName: string): string {
+    return this.bidApi.videoUrl(product.id, fileName);
+  }
+
+  async uploadBidVideos(event: Event, cameraVideo = false): Promise<void> {
+    const { input, files } = this.mediaUpload.filesFrom(event);
+    const product = this.bidProduct();
+    if (!product || this.uploadingBidVideos()) { input.value = ''; return; }
+    if (!files.length) {
+      this.error.set('The camera or video library did not return a video. Please try again.');
+      input.value = '';
+      return;
+    }
+    this.uploadingBidVideos.set(true);
+    this.error.set('');
+    this.success.set('');
+    try {
+      const result = cameraVideo && files.length === 1
+        ? await this.bidApi.uploadCapturedVideo(product.id, files[0])
+        : await this.bidApi.uploadVideos(product.id, files);
+      this.bidVideos.set(await this.bidApi.videoFiles(product.id));
+      this.success.set(`${result.videoCount} video${result.videoCount === 1 ? '' : 's'} uploaded.`);
+    } catch (error: any) {
+      this.error.set(typeof error?.error === 'string' ? error.error : 'Could not upload the BID product video. Check the file type and size.');
+    } finally {
+      input.value = '';
+      this.uploadingBidVideos.set(false);
+    }
   }
 
   cancelBidSale(): void { this.reset(); setTimeout(() => this.barcodeInput?.nativeElement.focus()); }
@@ -310,6 +433,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
   reset(): void {
     this.product.set(null);
     this.bidProduct.set(null);
+    this.bidVideos.set([]);
     this.bidToday.set(null);
     this.notFound.set(false);
     this.scannedCode.set('');
@@ -319,6 +443,7 @@ export class BarcodeScannerPage implements AfterViewInit, OnDestroy {
     this.scannedType.set(null);
     this.operationLocationKey = null;
     this.operationQty = 1;
+    this.bidReceiveQty = 1;
     this.showAdd.set(false);
     this.success.set('');
     this.manualCode = '';

@@ -64,6 +64,8 @@ export interface ProductListItem {
   originalCost: number | null;
   salePrice: number | null;
   qty: number;
+  readyToList: boolean;
+  note: string | null;
   weight: number | null;
   length: number | null;
   width: number | null;
@@ -174,6 +176,7 @@ export interface ProductListing {
   productId: number;
   platform: Platform;
   listingUrl: string | null;
+  retailPrice: number | null;
 }
 
 export interface AmazonAsin {

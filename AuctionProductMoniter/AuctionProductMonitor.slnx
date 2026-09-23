@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="AuctionProductMonitor.Wpf/AuctionProductMonitor.Wpf.csproj" />
+  <Project Path="AuctionProductMonitor.Wpf.Tests/AuctionProductMonitor.Wpf.Tests.csproj" />
+  <Project Path="AuctionPrintRelay.Wpf/AuctionPrintRelay.Wpf.csproj" />
+  <Project Path="AuctionPrintRelay.Wpf.Tests/AuctionPrintRelay.Wpf.Tests.csproj" />
 </Solution>

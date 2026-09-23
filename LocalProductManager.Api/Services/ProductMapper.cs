@@ -17,6 +17,8 @@ public static class ProductMapper
         product.OriginalCost,
         product.SalePrice,
         product.Qty,
+        product.ReadyToList,
+        product.Note,
         product.Weight,
         product.Length,
         product.Width,
@@ -46,6 +48,8 @@ public static class ProductMapper
         product.OriginalCost,
         product.SalePrice,
         product.Qty,
+        product.ReadyToList,
+        product.Note,
         product.Weight,
         product.Length,
         product.Width,
@@ -68,6 +72,7 @@ public static class ProductMapper
         listing.ProductId,
         listing.Platform,
         listing.ListingUrl,
+        listing.RetailPrice,
         listing.CreatedAt,
         listing.UpdatedAt);
 

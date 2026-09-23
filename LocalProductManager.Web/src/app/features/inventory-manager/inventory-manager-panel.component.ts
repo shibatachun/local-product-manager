@@ -85,12 +85,14 @@ export class InventoryManagerPanelComponent {
   }
 
   historyAction(entry: InventoryHistoryEntry): string {
+    if (entry.source === 'move_to_unassigned') return 'Unassign';
     if (entry.source.startsWith('move_out:')) return 'Move out';
     if (entry.source.startsWith('move_in:')) return 'Move in';
     return entry.operation === 'stock_in' ? 'Stock in' : 'Stock out';
   }
 
   historySource(entry: InventoryHistoryEntry): string {
+    if (entry.source === 'move_to_unassigned') return 'Moved from location to unassigned inventory';
     if (entry.source.startsWith('move_out:')) return 'Warehouse transfer · source';
     if (entry.source.startsWith('move_in:')) return 'Warehouse transfer · destination';
     if (entry.source === 'place_unassigned') return 'Assigned previously unlocated stock';

@@ -93,6 +93,10 @@ code { color: #334e68; font-family: "Cascadia Mono", Consolas, monospace; font-s
 .muted { color: #9aa5ad; }
 .status { display: inline-block; padding: 4px 7px; border-radius: 4px; color: #7b5d16; background: #fff3cd; font-size: 10px; font-weight: 750; }
 .status.ready { color: #17623f; background: #ddf3e7; }
+.ready-list-status { display:inline-block; padding:4px 7px; border-radius:999px; color:#6b7280; background:#eef1f3; font-size:10px; font-weight:800; white-space:nowrap; }
+.ready-list-status.ready { color:#17623f; background:#ddf3e7; }
+.ready-list-control > span { display:flex; align-items:center; gap:8px; min-height:39px; padding:0 11px; border:1px solid #cfd7dd; border-radius:6px; color:#334e68; background:#fff; font-size:12px; font-weight:700; }
+.ready-list-control input[type="checkbox"] { width:18px; height:18px; min-height:0; margin:0; padding:0; accent-color:#176b87; }
 .empty-state, .empty-marketing { display: grid; place-items: center; min-height: 300px; color: #7e8b95; text-align: center; }
 .empty-state span, .empty-marketing span { font-size: 32px; }.empty-state strong { margin-top: 8px; }.empty-state p, .empty-marketing p { margin: 5px 0 0; font-size: 13px; }
 

@@ -28,6 +28,7 @@ import { productCategoryNumber } from '../../core/product-inventory-category';
 import { defaultProductLabelPresets, LabelSettings, loadSavedLabelPresets, SavedLabelPreset } from '../../core/label-preset-storage';
 import { LabelPrintingApiService } from '../../core/label-printing-api.service';
 import { LiveStreamBidProductApiService } from '../../core/live-stream-bid-product-api.service';
+import { MediaUploadService } from '../../core/media-upload.service';
 import { FileStoragePanelComponent } from '../file-storage/file-storage-panel.component';
 import { VideoTrendPanelComponent } from '../video-trend/video-trend-panel.component';
 import { UnitConverterPanelComponent } from '../unit-converter/unit-converter-panel.component';
@@ -98,6 +99,7 @@ export class ProductManagerPage {
   private readonly labelPrinting = inject(LabelPrintingApiService);
   private readonly bidProductApi = inject(LiveStreamBidProductApiService);
   private readonly domesticProductApi = inject(DomesticProductApiService);
+  private readonly mediaUpload = inject(MediaUploadService);
   private readonly productColumnStorageKey = 'lpm-product-table-column-widths-v1';
   private readonly productDraftStorageKey = 'lpm-add-product-draft-v1';
   private readonly productDraftDbName = 'lpm-product-drafts';
@@ -109,8 +111,8 @@ export class ProductManagerPage {
     { label: 'SKU', width: 190, minWidth: 120, sortKey: 'sku' },
     { label: 'Qty', width: 80, minWidth: 60 },
     { label: 'Cost (RMB)', width: 120, minWidth: 90 },
-    { label: 'Sale price', width: 120, minWidth: 90 },
     { label: 'Weight (oz)', width: 115, minWidth: 90 },
+    { label: 'Ready to list', width: 120, minWidth: 100 },
     { label: 'Platforms', width: 130, minWidth: 100 },
     { label: 'Updated', width: 120, minWidth: 95 },
     { label: '', width: 54, minWidth: 48 },
@@ -157,6 +159,10 @@ export class ProductManagerPage {
   readonly domesticCostLookupLoading = signal(false);
   readonly domesticCostLookupResults = signal<DomesticProduct[]>([]);
   readonly domesticCostLookupTotal = signal(0);
+  readonly domesticCostLookupPage = signal(1);
+  readonly domesticCostLookupPageSize = 100;
+  readonly domesticCostLookupTotalPages = computed(() =>
+    Math.max(1, Math.ceil(this.domesticCostLookupTotal() / this.domesticCostLookupPageSize)));
   readonly domesticCostLookupError = signal('');
   readonly domesticLookupPurpose = signal<'cost' | 'sync'>('cost');
   readonly domesticSyncReviewOpen = signal(false);
@@ -241,6 +247,8 @@ export class ProductManagerPage {
     originalCost: null as number | null,
     salePrice: null as number | null,
     qty: 0,
+    readyToList: false,
+    note: '',
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -273,6 +281,8 @@ export class ProductManagerPage {
     originalCost: null as number | null,
     salePrice: null as number | null,
     qty: 0,
+    readyToList: false,
+    note: '',
     weight: null as number | null,
     length: null as number | null,
     width: null as number | null,
@@ -285,6 +295,7 @@ export class ProductManagerPage {
   };
   readonly storeLinkDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
   readonly listingDrafts: Record<Platform, string> = { amazon: '', walmart: '', ebay: '', etsy: '', shopify: '' };
+  readonly listingPriceDrafts: Record<Platform, number | null> = { amazon: null, walmart: null, ebay: null, etsy: null, shopify: null };
   readonly asinDraft = { asin: '', asinType: 'child' as 'parent' | 'child', parentAsin: '', amazonAttributeDone: false };
   readonly pricingForm = {
     platform: 'walmart' as PricingPlatform,
@@ -434,12 +445,31 @@ export class ProductManagerPage {
         this.logistics('etsy-ups', 'Etsy UPS Ground label', 'Planning option for larger boxes.', 139, [[1, 8.6], [5, 13.35], [10, 18.35], [20, 30.95], [40, 54]], 1.2),
       ],
     },
+    shopify: {
+      label: 'Shopify',
+      defaultLogistics: 'shopify-usps',
+      defaultCategory: 'standard',
+      processingRate: 0.029,
+      fixedFee: 0.3,
+      listingFee: 0,
+      marginPercent: 20,
+      bufferPercent: 5,
+      note: 'Shopify estimate uses seller-fulfilled shipping and standard online card processing assumptions.',
+      categories: [
+        this.category('standard', 'Standard online sale', 0, 'No additional marketplace referral fee is assumed.'),
+      ],
+      logistics: [
+        this.logistics('shopify-usps', 'Shopify USPS Ground Advantage', 'Seller-fulfilled USPS parcel estimate.', 139, [[1, 5.7], [2, 8.35], [3, 10.5], [5, 13.35], [10, 19.95], [20, 34.95]], 1.45),
+        this.logistics('shopify-ups', 'Shopify UPS Ground', 'Seller-fulfilled UPS parcel estimate.', 139, [[1, 8.9], [5, 13.8], [10, 18.9], [20, 31.5], [40, 55]], 1.25),
+      ],
+    },
   };
   readonly pricingPlatformOptions: { value: PricingPlatform; label: string }[] = [
     { value: 'amazon', label: 'Amazon' },
     { value: 'walmart', label: 'Walmart' },
     { value: 'ebay', label: 'eBay' },
     { value: 'etsy', label: 'Etsy' },
+    { value: 'shopify', label: 'Shopify' },
   ];
   readonly productCostCurrencyOptions: { value: ProductCostCurrency; label: string }[] = [
     { value: 'rmb', label: 'RMB' },
@@ -909,6 +939,7 @@ export class ProductManagerPage {
     if (!product || !estimate) return this.showNotice('Choose an inventory product and calculate a price first.');
 
     await this.perform(async () => {
+      const productDetail = await this.api.getProduct(product.id);
       await this.api.updateProduct(product.id, {
         localInventoryId: product.localInventoryId,
         sku: product.sku,
@@ -916,8 +947,12 @@ export class ProductManagerPage {
         category: estimate.category,
         cost: estimate.unitProductCostRmb,
         originalCost: estimate.unitFirstMileRmb,
-        salePrice: estimate.suggestedPrice,
+        // Retail prices belong to the platform listing. Keep the legacy
+        // product-level value unchanged for older records/API compatibility.
+        salePrice: product.salePrice,
         qty: product.qty,
+        readyToList: product.readyToList,
+        note: product.note,
         weight: estimate.unitProductWeight * 16,
         length: product.length ?? this.pricingForm.length,
         width: product.width ?? this.pricingForm.width,
@@ -925,8 +960,13 @@ export class ProductManagerPage {
         imagePath: product.imagePath,
         imageSource: product.imageSource,
       });
+      await this.api.saveListing(product.id, {
+        platform: estimate.platform,
+        listingUrl: productDetail.listings.find(listing => listing.platform === estimate.platform)?.listingUrl ?? null,
+        retailPrice: estimate.suggestedPrice,
+      });
       await this.loadProducts();
-      this.showNotice(`Pricing saved to ${product.localInventoryId ?? product.sku}.`);
+      this.showNotice(`${this.pricingConfigs[estimate.platform].label} retail price saved to ${product.localInventoryId ?? product.sku}.`);
     });
   }
 
@@ -1250,7 +1290,7 @@ export class ProductManagerPage {
     const input = event.target as HTMLInputElement;
     let file = input.files?.[0] ?? null;
     if (!file) return;
-    if (cameraPhoto) file = await this.prepareCameraImage(file);
+    if (cameraPhoto) [file] = await this.mediaUpload.prepareCameraImages([file]);
     if (this.createImagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.createImagePreviewUrl);
     this.pendingCreateImage = file;
     this.createImagePreviewUrl = URL.createObjectURL(file);
@@ -1274,7 +1314,7 @@ export class ProductManagerPage {
     let file = input.files?.[0];
     const product = this.selectedProduct();
     if (!file || !product) return;
-    if (cameraPhoto) file = await this.prepareCameraImage(file);
+    if (cameraPhoto) [file] = await this.mediaUpload.prepareCameraImages([file]);
     await this.perform(async () => {
       const result = await this.api.uploadProductImage(product.id, file);
       this.editForm.imagePath = result.imagePath;
@@ -1285,22 +1325,32 @@ export class ProductManagerPage {
     input.value = '';
   }
 
-  async selectDetailImages(event: Event, cameraPhoto = false): Promise<void> {
+  async selectDetailImages(event: Event, cameraPhoto = false, cameraVideo = false): Promise<void> {
     const input = event.target as HTMLInputElement;
     const product = this.selectedProduct();
     let files = Array.from(input.files ?? []);
-    if (!product || files.length === 0) return;
+    if (!product) return;
+    if (files.length === 0) {
+      this.showNotice('The camera did not return a photo or video. Please try again.');
+      input.value = '';
+      return;
+    }
     if (cameraPhoto) {
-      files = await Promise.all(files.map(file => this.prepareCameraImage(file)));
+      files = await this.mediaUpload.prepareCameraImages(files);
     }
 
     await this.perform(async () => {
-      const result = await this.api.uploadProductImages(product.id, files);
-      this.editForm.imagePath = result.imagePath;
+      const result = cameraVideo && files.length === 1
+        ? await this.api.uploadCapturedProductVideo(product.id, files[0])
+        : await this.api.uploadProductImages(product.id, files);
+      this.editForm.imagePath = result.imagePath ?? product.imagePath ?? '';
       this.detailMatchedImages.set(result.imagePaths);
       await this.loadDetailProductImages(product.id);
       this.bumpProductImageVersion(product.id);
-      this.showNotice(`${result.count} product photo${result.count === 1 ? '' : 's'} uploaded.`);
+      const parts = [];
+      if (result.imageCount) parts.push(`${result.imageCount} photo${result.imageCount === 1 ? '' : 's'}`);
+      if (result.videoCount) parts.push(`${result.videoCount} video${result.videoCount === 1 ? '' : 's'}`);
+      this.showNotice(`${parts.join(' and ')} uploaded.`);
     });
     input.value = '';
   }
@@ -1309,9 +1359,13 @@ export class ProductManagerPage {
     return this.api.productImageFileUrl(productId, fileName);
   }
 
+  detailProductMediaDownloadUrl(productId: number): string {
+    return this.api.productMediaDownloadUrl(productId);
+  }
+
   async makeDetailImagePrimary(image: ProductImageFile): Promise<void> {
     const product = this.selectedProduct();
-    if (!product || image.isPrimary) return;
+    if (!product || image.isVideo || image.isPrimary) return;
     await this.perform(async () => {
       const result = await this.api.setPrimaryProductImage(product.id, image.fileName);
       this.editForm.imagePath = result.imagePath;
@@ -1320,6 +1374,25 @@ export class ProductManagerPage {
       await this.loadDetailProductImages(product.id);
       this.bumpProductImageVersion(product.id);
       this.showNotice('Main product image updated.');
+    });
+  }
+
+  async deleteDetailMedia(image: ProductImageFile): Promise<void> {
+    const product = this.selectedProduct();
+    if (!product || !this.currentUser()?.isAdmin) return;
+    const kind = image.isVideo ? 'video' : 'image';
+    if (!globalThis.confirm(`Delete this product ${kind}? This cannot be undone.`)) return;
+
+    await this.perform(async () => {
+      const result = await this.api.deleteProductMedia(product.id, image.fileName);
+      if (result.primaryCleared) {
+        this.editForm.imagePath = '';
+        product.imagePath = null;
+        product.imageSource = 'local';
+      }
+      await this.loadDetailProductImages(product.id);
+      this.bumpProductImageVersion(product.id);
+      this.showNotice(`Product ${kind} deleted.`);
     });
   }
 
@@ -1354,6 +1427,8 @@ export class ProductManagerPage {
         // updates the product total. Start at zero here so the quantity is not
         // counted once during product creation and a second time for the bin.
         qty: binTarget ? 0 : this.createForm.qty,
+        readyToList: this.createForm.readyToList,
+        note: this.createForm.note || null,
         weight: this.createForm.weight,
         length: this.createForm.length,
         width: this.createForm.width,
@@ -1629,6 +1704,8 @@ export class ProductManagerPage {
       this.editForm.originalCost = product.originalCost;
       this.editForm.salePrice = product.salePrice;
       this.editForm.qty = product.qty;
+      this.editForm.readyToList = product.readyToList;
+      this.editForm.note = product.note ?? '';
       this.editForm.weight = product.weight;
       this.editForm.length = product.length;
       this.editForm.width = product.width;
@@ -1665,15 +1742,21 @@ export class ProductManagerPage {
 
   async searchDomesticCost(): Promise<void> {
     this.domesticLookupPurpose.set('cost');
-    await this.searchDomesticProducts();
+    await this.searchDomesticProducts(1);
   }
 
   async startDomesticSync(): Promise<void> {
     this.domesticLookupPurpose.set('sync');
-    await this.searchDomesticProducts();
+    await this.searchDomesticProducts(1);
   }
 
-  private async searchDomesticProducts(): Promise<void> {
+  async changeDomesticCostLookupPage(page: number): Promise<void> {
+    const target = Math.min(Math.max(1, page), this.domesticCostLookupTotalPages());
+    if (target === this.domesticCostLookupPage() || this.domesticCostLookupLoading()) return;
+    await this.searchDomesticProducts(target);
+  }
+
+  private async searchDomesticProducts(page: number): Promise<void> {
     const sku = this.editForm.sku.trim();
     if (!sku || this.domesticCostLookupLoading()) return;
     this.domesticCostLookupOpen.set(true);
@@ -1681,9 +1764,10 @@ export class ProductManagerPage {
     this.domesticCostLookupError.set('');
     this.domesticCostLookupResults.set([]);
     try {
-      const result = await this.domesticProductApi.search(sku, 'asc', 1, 100);
+      const result = await this.domesticProductApi.search(sku, 'asc', page, this.domesticCostLookupPageSize);
       this.domesticCostLookupResults.set(result.items);
       this.domesticCostLookupTotal.set(result.total);
+      this.domesticCostLookupPage.set(result.page);
     } catch {
       this.domesticCostLookupError.set('Could not search the domestic product database.');
     } finally {
@@ -1696,6 +1780,7 @@ export class ProductManagerPage {
     this.domesticCostLookupLoading.set(false);
     this.domesticCostLookupResults.set([]);
     this.domesticCostLookupTotal.set(0);
+    this.domesticCostLookupPage.set(1);
     this.domesticCostLookupError.set('');
   }
 
@@ -1734,6 +1819,10 @@ export class ProductManagerPage {
 
   selectAllDomesticSyncFields(selected: boolean): void {
     this.domesticSyncFields.update(fields => fields.map(field => ({ ...field, selected })));
+  }
+
+  trackDomesticSyncField(_index: number, field: DomesticSyncField): string {
+    return field.key;
   }
 
   closeDomesticSyncReview(): void {
@@ -1789,6 +1878,8 @@ export class ProductManagerPage {
           cost: this.costInputToRmb(this.editForm.cost, this.editForm.costCurrency),
           originalCost: this.editForm.originalCost, salePrice: this.editForm.salePrice,
           qty: this.editForm.qty, weight: this.editForm.weight, length: this.editForm.length,
+          readyToList: this.editForm.readyToList,
+          note: this.editForm.note || null,
           width: this.editForm.width, height: this.editForm.height,
           imagePath: this.editForm.imagePath || null, imageSource: this.imageSourceFor(this.editForm.imagePath),
         }),
@@ -2071,6 +2162,10 @@ export class ProductManagerPage {
     this.detailMoveTargetRow = row;
     this.detailMoveTargetRack = '';
     this.detailMoveTargetKey = '';
+    if (row === 'unassigned') {
+      this.detailMoveTargetRack = 'unassigned';
+      this.detailMoveTargetKey = 'unassigned';
+    }
   }
 
   selectDetailTargetRack(rack: string): void {
@@ -2119,12 +2214,14 @@ export class ProductManagerPage {
 
   async moveDetailInventory(): Promise<void> {
     const product = this.selectedProduct();
-    const unassigned = this.detailMoveSourceKey === 'unassigned';
-    const source = unassigned ? null : this.detailLocations().find(location => location.key === this.detailMoveSourceKey);
-    const target = this.detailLocationOptions().find(location => location.key === this.detailMoveTargetKey);
+    const sourceUnassigned = this.detailMoveSourceKey === 'unassigned';
+    const targetUnassigned = this.detailMoveTargetKey === 'unassigned';
+    const source = sourceUnassigned ? null : this.detailLocations().find(location => location.key === this.detailMoveSourceKey);
+    const target = targetUnassigned ? null : this.detailLocationOptions().find(location => location.key === this.detailMoveTargetKey);
     const quantity = Math.trunc(Number(this.detailMoveQuantity));
-    const available = unassigned ? this.detailUnassignedQty() : source?.qty ?? 0;
-    if (!product || !target || (!unassigned && !source) || quantity < 1 || quantity > available) {
+    const available = sourceUnassigned ? this.detailUnassignedQty() : source?.qty ?? 0;
+    if (!product || (!targetUnassigned && !target) || (!sourceUnassigned && !source)
+        || sourceUnassigned && targetUnassigned || quantity < 1 || quantity > available) {
       this.showNotice(`Choose source and target locations, with a quantity from 1 to ${available}.`);
       return;
     }
@@ -2132,8 +2229,8 @@ export class ProductManagerPage {
       const locations = await this.inventoryApi.moveProduct(product.id, {
         sourceLevelId: source?.levelId ?? null,
         sourceBinNumber: source?.binNumber ?? null,
-        targetLevelId: target.levelId,
-        targetBinNumber: target.binNumber,
+        targetLevelId: target?.levelId ?? null,
+        targetBinNumber: target?.binNumber ?? null,
         quantity,
       });
       this.detailLocationOptions.set(locations);
@@ -2149,7 +2246,7 @@ export class ProductManagerPage {
       this.detailMoveTargetRow = '';
       this.detailMoveTargetRack = '';
       this.detailMoveQuantity = 1;
-      this.showNotice(`Moved ${quantity} unit${quantity === 1 ? '' : 's'} from ${source?.code ?? 'unassigned stock'} to ${target.code}.`);
+      this.showNotice(`Moved ${quantity} unit${quantity === 1 ? '' : 's'} from ${source?.code ?? 'unassigned stock'} to ${target?.code ?? 'unassigned inventory'}.`);
       this.detailMoveOpen.set(false);
     });
   }
@@ -2180,6 +2277,8 @@ export class ProductManagerPage {
         originalCost: this.editForm.originalCost,
         salePrice: this.editForm.salePrice,
         qty: this.editForm.qty,
+        readyToList: this.editForm.readyToList,
+        note: this.editForm.note || null,
         weight: this.editForm.weight,
         length: this.editForm.length,
         width: this.editForm.width,
@@ -2225,10 +2324,44 @@ export class ProductManagerPage {
     const product = this.selectedProduct();
     if (!product) return;
     await this.perform(async () => {
-      await this.api.saveListing(product.id, { platform, listingUrl: this.listingDrafts[platform] || null });
+      await this.api.saveListing(product.id, {
+        platform,
+        listingUrl: this.listingDrafts[platform] || null,
+        retailPrice: this.listingPriceDrafts[platform],
+      });
       await this.refreshSelected(product.id);
       this.showNotice(`${this.platformLabel(platform)} listing saved.`);
     });
+  }
+
+  async calculateListingRetailPrice(platform: Platform): Promise<void> {
+    const product = this.selectedProduct();
+    if (!product) return;
+    const config = this.pricingConfigs[platform];
+    this.detailPricingForm.platform = platform;
+    this.detailPricingForm.category = config.categories.some(category => category.value === product.category)
+      ? product.category!
+      : config.defaultCategory;
+    this.detailPricingForm.logistics = config.defaultLogistics;
+    this.detailPricingForm.quantity = 1;
+    this.detailPricingForm.productCostCurrency = this.editForm.costCurrency;
+    this.detailPricingForm.targetProfit = 0;
+    this.detailPricingForm.targetMarginPercent = config.marginPercent;
+    this.detailPricingForm.bufferPercent = config.bufferPercent;
+    if (this.pricingNeedsExchangeRate(this.detailPricingForm.productCostCurrency, this.detailPricingForm.firstMileRate)) {
+      await this.loadRmbToUsdRate(false);
+    }
+    const currentProduct = {
+      ...product,
+      cost: this.editForm.cost,
+      weight: this.editForm.weight,
+      length: this.editForm.length,
+      width: this.editForm.width,
+      height: this.editForm.height,
+    };
+    const estimate = this.calculatePricingEstimateForProduct(currentProduct);
+    this.listingPriceDrafts[platform] = estimate.suggestedPrice;
+    this.showNotice(`${config.label} retail price calculated. Click Save to keep it.`);
   }
 
   async loadDetailOnlineImage(): Promise<void> {
@@ -2843,6 +2976,7 @@ export class ProductManagerPage {
   private syncListingDrafts(product: ProductDetail): void {
     for (const platform of this.listingOptions.map((option) => option.value)) {
       this.listingDrafts[platform] = product.listings.find((item) => item.platform === platform)?.listingUrl ?? '';
+      this.listingPriceDrafts[platform] = product.listings.find((item) => item.platform === platform)?.retailPrice ?? null;
     }
   }
 
@@ -2917,6 +3051,8 @@ export class ProductManagerPage {
       originalCost: null,
       salePrice: null,
       qty: 0,
+      readyToList: false,
+      note: '',
       weight: null,
       length: null,
       width: null,
@@ -3079,43 +3215,6 @@ export class ProductManagerPage {
       );
     } catch {
       // Column resizing still works for the current session without storage.
-    }
-  }
-
-  private async prepareCameraImage(file: File): Promise<File> {
-    const sourceUrl = URL.createObjectURL(file);
-    try {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = sourceUrl;
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error('The captured image could not be decoded.'));
-      });
-
-      const maximumDimension = 2048;
-      const scale = Math.min(1, maximumDimension / Math.max(image.naturalWidth, image.naturalHeight));
-      const width = Math.max(1, Math.round(image.naturalWidth * scale));
-      const height = Math.max(1, Math.round(image.naturalHeight * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Image conversion is unavailable on this device.');
-      context.drawImage(image, 0, 0, width, height);
-
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
-      if (!blob) throw new Error('The captured image could not be converted.');
-      const baseName = file.name.replace(/\.[^.]+$/, '') || `camera-${Date.now()}`;
-      return new File([blob], `${baseName}.jpg`, {
-        type: 'image/jpeg',
-        lastModified: Date.now(),
-      });
-    } catch {
-      this.showNotice('Photo conversion was unavailable; uploading the original image.');
-      return file;
-    } finally {
-      URL.revokeObjectURL(sourceUrl);
     }
   }
 

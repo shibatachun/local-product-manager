@@ -27,13 +27,40 @@ public sealed class RelayServer : IAsyncDisposable
                 return Results.BadRequest(new { success = false, error = "buyerName and productNumber are required" });
             try
             {
-                await _barTender.SendAsync(_settings.BarTenderEndpoint, item);
+                if (item.Test)
+                    await _barTender.ProbeAsync(_settings.BarTenderEndpoint);
+                else
+                    await _barTender.SendAsync(_settings.BarTenderEndpoint, item);
                 Logged?.Invoke(new(DateTimeOffset.Now, item.BuyerName, item.ProductNumber, item.Test ? "Test OK" : "Printed"));
                 return Results.Ok(new { success = true });
             }
             catch (Exception ex)
             {
                 Logged?.Invoke(new(DateTimeOffset.Now, item.BuyerName, item.ProductNumber, "Failed: " + ex.Message));
+                return Results.Json(new { success = false, error = ex.Message }, statusCode: 502);
+            }
+        });
+        app.MapPost("/api/print/bulk", async (HttpContext context, BulkPrintRequest batch) =>
+        {
+            var supplied = context.Request.Headers["X-Api-Key"].FirstOrDefault() ?? "";
+            if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(_settings.ApiKey)))
+                return Results.Json(new { success = false, error = "invalid access key" }, statusCode: 401);
+            if (batch.Items.Count == 0)
+                return Results.BadRequest(new { success = false, error = "items are required" });
+            if (batch.Items.Any(item => string.IsNullOrWhiteSpace(item.BuyerName) || string.IsNullOrWhiteSpace(item.ProductNumber)))
+                return Results.BadRequest(new { success = false, error = "every item needs buyerName and productNumber" });
+            var labelCount = batch.Items.Sum(item => Math.Clamp(item.Copies, 1, 20));
+            if (labelCount > 1000)
+                return Results.BadRequest(new { success = false, error = "bulk print is limited to 1000 labels" });
+            try
+            {
+                await _barTender.SendBatchAsync(_settings.BarTenderEndpoint, batch);
+                Logged?.Invoke(new(DateTimeOffset.Now, $"{batch.Items.Count} orders", $"{labelCount} labels", "Bulk printed"));
+                return Results.Ok(new { success = true, orders = batch.Items.Count, labels = labelCount });
+            }
+            catch (Exception ex)
+            {
+                Logged?.Invoke(new(DateTimeOffset.Now, $"{batch.Items.Count} orders", $"{labelCount} labels", "Bulk failed: " + ex.Message));
                 return Results.Json(new { success = false, error = ex.Message }, statusCode: 502);
             }
         });

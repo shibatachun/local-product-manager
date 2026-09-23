@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 
 namespace LocalProductManager.Api.Tests;
 
@@ -100,6 +101,69 @@ public sealed class ApiSmokeTests
         Assert.Equal(created.Id, lookup.Id);
     }
 
+    [Fact]
+    public async Task ProductMediaApi_UploadsAndStreamsVideoWithoutMakingItPrimary()
+    {
+        using var factory = new IsolatedApiFactory();
+        using var client = factory.CreateClient();
+        var sku = $"VIDEO-TEST-{Guid.NewGuid():N}";
+        var createResponse = await client.PostAsJsonAsync("/api/products", new
+        {
+            localInventoryId = (string?)null,
+            sku,
+            productName = "Video upload test product",
+            category = "Test",
+            inventoryCategory = "UNKNOWN",
+            cost = (decimal?)null,
+            originalCost = (decimal?)null,
+            salePrice = (decimal?)null,
+            qty = 0,
+            weight = (decimal?)null,
+            length = (decimal?)null,
+            width = (decimal?)null,
+            height = (decimal?)null,
+            imagePath = (string?)null,
+            imageSource = "local"
+        });
+        createResponse.EnsureSuccessStatusCode();
+        var product = await createResponse.Content.ReadFromJsonAsync<CreatedProduct>();
+        Assert.NotNull(product);
+
+        using var form = new MultipartFormDataContent();
+        using var video = new ByteArrayContent([0, 0, 0, 20, 102, 116, 121, 112]);
+        video.Headers.ContentType = new MediaTypeHeaderValue("video/mp4");
+        form.Add(video, "files", "sample.mp4");
+        var uploadResponse = await client.PostAsync($"/api/products/{product.Id}/image/upload-many", form);
+        uploadResponse.EnsureSuccessStatusCode();
+        var upload = await uploadResponse.Content.ReadFromJsonAsync<ProductMediaUpload>();
+        Assert.NotNull(upload);
+        Assert.Equal(0, upload.ImageCount);
+        Assert.Equal(1, upload.VideoCount);
+        Assert.Null(upload.ImagePath);
+
+        var files = await client.GetFromJsonAsync<ProductMediaFile[]>($"/api/products/{product.Id}/image/files");
+        var savedVideo = Assert.Single(files!);
+        Assert.True(savedVideo.IsVideo);
+        Assert.Equal("video", savedVideo.MediaType);
+        Assert.False(savedVideo.IsPrimary);
+
+        var preview = await client.GetAsync($"/api/products/{product.Id}/image/files/{savedVideo.FileName}");
+        Assert.Equal("video/mp4", preview.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("bytes", preview.Headers.AcceptRanges);
+
+        var primaryResponse = await client.PostAsJsonAsync($"/api/products/{product.Id}/image/primary", new
+        {
+            fileName = savedVideo.FileName
+        });
+        Assert.Equal(HttpStatusCode.NotFound, primaryResponse.StatusCode);
+
+        var archive = await client.GetAsync($"/api/products/{product.Id}/image/files/download-all-media");
+        archive.EnsureSuccessStatusCode();
+        Assert.Equal("application/zip", archive.Content.Headers.ContentType?.MediaType);
+    }
+
     private sealed record AppVersionResponse(string Version, string Service);
     private sealed record CreatedProduct(int Id, string Sku, int Qty);
+    private sealed record ProductMediaUpload(string? ImagePath, int ImageCount, int VideoCount);
+    private sealed record ProductMediaFile(string FileName, string MediaType, bool IsVideo, bool IsPrimary);
 }

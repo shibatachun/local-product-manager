@@ -20,10 +20,10 @@
 
 Produce these fields in `listing-draft.md`:
 
-1. Product identity and local SKU/custom label.
+1. Product identity, local product SKU, and the separate eBay custom label using the exact local inventory number (`INV-xx`).
 2. eBay title of no more than 80 characters.
 3. Suggested leaf category plus a manual-verification note.
-4. Condition selection and factual condition description.
+4. Condition selection and factual condition description. Use the seller's default **New / Condition ID 1000** when supported by the category, unless product-specific evidence or user instructions indicate another condition.
 5. Item specifics as a simple field/value table, with uncertain values marked `Confirm`.
 6. Customer-facing description in readable Markdown and eBay-safe HTML, following the structured description template below.
 7. Stored local price or the website Pricing result, available quantity, and inventory location for internal reference. When calculating, use recorded cost and weight plus the Pricing feature's eBay category, logistics, packaging, fee, margin, buffer, and live exchange-rate defaults. Set the final listing price to `floor(raw price) + 0.99`; for example, 12.01, 12.54, and 12.99 all become 12.99. Include the raw calculation result for auditability.
@@ -72,14 +72,14 @@ Always create `ebay-draft-upload.csv` alongside `listing-draft.md`, using `../as
 Preserve these exact columns and their order:
 
 1. `Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)` — `Draft`.
-2. `Custom label (SKU)` — prefer Actual SKU; otherwise use the stable internal product SKU/UUID. Never use a temporary filename.
+2. `Custom label (SKU)` — always use the resolved product's exact local inventory number (`INV-xx`). Never substitute Actual SKU, product SKU, UUID, supplier code, or a temporary filename.
 3. `Category ID` — use a verified US leaf-category ID. If uncertain, flag it for confirmation rather than guessing.
 4. `Title` — use the same verified title as the Markdown, no more than 80 characters.
 5. `UPC` — use the recorded UPC; otherwise leave blank. Never fabricate one.
 6. `Price` — final calculated USD listing price with two decimal places and no currency symbol.
 7. `Quantity` — current sellable inventory as a whole number.
 8. `Item photo URL` — leave blank by default because the user will add processed local images after the row reaches eBay Drafts. Only populate a verified public HTTPS image URL.
-9. `Condition ID` — use a verified numeric eBay condition ID appropriate to the selected category. Do not put condition text in this column.
+9. `Condition ID` — default to `1000` (New) when supported by the selected category, unless product-specific evidence or user instructions indicate another condition. Do not put condition text in this column.
 10. `Description` — use the complete structured HTML version of the Markdown description: retain the two opening paragraphs and include every supported Package Includes, Size & Material, Features, and Wide Applications section. Escape/quote it as CSV data; exclude scripts, CSS, external tracking, and unsupported claims.
 11. `Format` — `FixedPrice` unless the user explicitly requests an auction.
 

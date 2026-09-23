@@ -123,8 +123,8 @@
               <td><code>{{ product.sku }}</code><small class="sku-caption" *ngIf="product.productType === 'parent'">Parent</small></td>
               <td>{{ product.qty }}</td>
               <td>{{ product.cost === null ? '—' : ('¥' + (product.cost | number:'1.2-2')) }}</td>
-              <td>{{ product.salePrice === null ? '—' : ('$' + (product.salePrice | number:'1.2-2')) }}</td>
               <td>{{ product.weight === null ? '—' : (product.weight | number:'1.0-2') }}</td>
+              <td><span class="ready-list-status" [class.ready]="product.readyToList">{{ product.readyToList ? 'Ready' : 'Not ready' }}</span></td>
               <td><span class="platform-pill" *ngFor="let platform of product.platforms">{{ platformLabel(platform) }}</span><span class="muted" *ngIf="!product.platforms.length">Not listed</span></td>
               <td>{{ product.updatedAt | date:'MMM d, y' }}</td>
               <td><a class="icon-button" title="Open full product record" [routerLink]="['/products', product.id]" (click)="$event.stopPropagation()">›</a></td>
@@ -142,8 +142,8 @@
               <td><code>{{ child.sku }}</code><small class="sku-caption" *ngIf="child.skuBase">Base {{ child.skuBase }}</small></td>
               <td>{{ child.qty }}</td>
               <td>{{ child.cost === null ? '—' : ('¥' + (child.cost | number:'1.2-2')) }}</td>
-              <td>{{ child.salePrice === null ? '—' : ('$' + (child.salePrice | number:'1.2-2')) }}</td>
               <td>{{ child.weight === null ? '—' : (child.weight | number:'1.0-2') }}</td>
+              <td><span class="ready-list-status" [class.ready]="child.readyToList">{{ child.readyToList ? 'Ready' : 'Not ready' }}</span></td>
               <td><span class="platform-pill" *ngFor="let platform of child.platforms">{{ platformLabel(platform) }}</span></td>
               <td>{{ child.updatedAt | date:'MMM d, y' }}</td>
               <td><a class="icon-button" title="Open full product record" [routerLink]="['/products', child.id]" (click)="$event.stopPropagation()">›</a></td>
@@ -165,7 +165,7 @@
     </ng-template>
     <ng-template #bidProductsView>
       <ng-container *ngIf="view() === 'bidProducts'; else marketingView">
-        <app-live-stream-bid-products-panel [canImport]="canImportData()" [canMove]="!!currentUser()?.canManageStorage" [isAdmin]="!!currentUser()?.isAdmin"></app-live-stream-bid-products-panel>
+        <app-live-stream-bid-products-panel [canImport]="canImportData()" [canMove]="!!currentUser()?.canManageStorage" [isAdmin]="!!currentUser()?.isAdmin" [isHost]="!!currentUser()?.isHost"></app-live-stream-bid-products-panel>
       </ng-container>
     </ng-template>
     <ng-template #marketingView>
@@ -572,8 +572,8 @@
         </span>
       </label>
       <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
-      <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="createForm.salePrice" placeholder="0.00" /></label>
       <label>Qty<input type="number" min="0" step="1" [(ngModel)]="createForm.qty" placeholder="0" /></label>
+      <label class="ready-list-control">Listing status<span><input type="checkbox" [(ngModel)]="createForm.readyToList" /> Ready to list</span></label>
       <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
       <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
       <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
@@ -668,11 +668,14 @@
       </div>
       <div class="detail-image-panel">
         <div class="detail-image-toolbar">
-          <span><strong>Product image</strong><small>Choose a local image, enter a network URL, or take a photo.</small></span>
-          <button
-            type="button"
-            *ngIf="currentUser()?.isAdmin"
-            (click)="openDetailImageFolder()">Open local folder</button>
+          <span><strong>Product media</strong><small>Upload photos or videos. Only a photo can be the main image.</small></span>
+          <div class="detail-media-actions">
+            <a [href]="detailProductMediaDownloadUrl(product.id)" download>Download all media</a>
+            <button
+              type="button"
+              *ngIf="currentUser()?.isAdmin"
+              (click)="openDetailImageFolder()">Open local folder</button>
+          </div>
         </div>
         <div class="detail-image-preview" *ngIf="editForm.imagePath; else noDetailImage">
           <img
@@ -693,16 +696,20 @@
         </ng-template>
         <div class="form-grid">
           <label class="wide">Network image URL<input [(ngModel)]="editForm.imagePath" placeholder="https://example.com/product.jpg" /></label>
-          <label>Upload photos<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectDetailImages($event)" /></label>
-          <label>Take photos<input type="file" multiple accept="image/*" capture="environment" (change)="selectDetailImages($event, true)" /></label>
+          <label>Upload media<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/quicktime,video/webm,.mov" (change)="selectDetailImages($event)" /></label>
+          <label>Take photo<input type="file" accept="image/*" capture="environment" (change)="selectDetailImages($event, true)" /></label>
+          <label>Record video<input type="file" accept="video/*" capture="environment" (change)="selectDetailImages($event, false, true)" /></label>
         </div>
         <div class="product-image-library" *ngIf="detailProductImages().length">
-          <p>Product photo folder <small>Select any photo below to use it as the main image.</small></p>
+          <p>Product media folder <small>Select a photo below to use it as the main image. Videos cannot be main images.</small></p>
           <div>
-            <button type="button" *ngFor="let image of detailProductImages()" [class.primary-image]="image.isPrimary" (click)="makeDetailImagePrimary(image)">
-              <img [src]="detailProductImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy" />
-              <span>{{ image.isPrimary ? 'Main image' : 'Set as main' }}</span>
-            </button>
+            <article *ngFor="let image of detailProductImages()" [class.primary-image]="image.isPrimary" [class.video-media]="image.isVideo">
+              <video *ngIf="image.isVideo; else detailPhoto" [src]="detailProductImageUrl(product.id, image.fileName)" controls preload="metadata"></video>
+              <ng-template #detailPhoto><img [src]="detailProductImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy" /></ng-template>
+              <button *ngIf="!image.isVideo" type="button" (click)="makeDetailImagePrimary(image)">{{ image.isPrimary ? 'Main image' : 'Set as main' }}</button>
+              <span *ngIf="image.isVideo">Product video</span>
+              <button class="delete-media" *ngIf="currentUser()?.isAdmin" type="button" (click)="deleteDetailMedia(image)">Delete</button>
+            </article>
           </div>
         </div>
       </div>
@@ -726,21 +733,24 @@
           </span>
         </label>
         <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="editForm.originalCost" /></label>
-        <label>Sale price (USD)<input type="number" step="0.01" [(ngModel)]="editForm.salePrice" /></label>
         <label class="total-inventory-field">Total inventory
           <input type="number" [min]="detailLocatedQty()" step="1" [(ngModel)]="editForm.qty" />
           <span><b>{{ detailEditedUnassignedQty() }}</b> unassigned · {{ detailLocatedQty() }} in locations</span>
         </label>
+        <label class="ready-list-control">Listing status<span><input type="checkbox" [(ngModel)]="editForm.readyToList" /> Ready to list</span></label>
         <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="editForm.weight" /></label>
         <label>Length<input type="number" step="0.01" [(ngModel)]="editForm.length" /></label>
         <label>Width<input type="number" step="0.01" [(ngModel)]="editForm.width" /></label>
         <label>Height<input type="number" step="0.01" [(ngModel)]="editForm.height" /></label>
+        <label class="product-note-field">Note<textarea rows="4" maxlength="4000" [(ngModel)]="editForm.note" placeholder="Write a note about this product"></textarea></label>
       </div>
     </section>
     <section>
       <div class="section-heading"><div><h3>Marketplace listings</h3><p>Add, update, or remove channels.</p></div></div>
       <div class="listing-editor" *ngFor="let option of listingOptions">
         <strong>{{ option.label }}</strong><input [(ngModel)]="listingDrafts[option.value]" placeholder="Listing URL" />
+        <label class="listing-price-field"><span>Retail price</span><span><b>$</b><input type="number" min="0" step="0.01" [(ngModel)]="listingPriceDrafts[option.value]" placeholder="0.00" /></span></label>
+        <button class="listing-price-calculate" type="button" (click)="calculateListingRetailPrice(option.value)" [disabled]="loading()">Calculate price</button>
         <a class="listing-open-button" [class.disabled]="!marketplaceListingUrl(option.value)" [href]="marketplaceListingUrl(option.value) || '#'" target="_blank" rel="noreferrer">Open</a>
         <button (click)="saveListing(option.value)">Save</button>
         <button class="danger-link" *ngIf="listingFor(product, option.value) as listing" (click)="removeListing(listing)">Remove</button>
@@ -775,7 +785,8 @@
     <p *ngIf="domesticCostLookupLoading()">Searching the domestic product database…</p>
     <p class="notice error" *ngIf="domesticCostLookupError()">{{ domesticCostLookupError() }}</p>
     <p class="domestic-cost-summary" *ngIf="!domesticCostLookupLoading() && !domesticCostLookupError()">
-      {{ domesticCostLookupTotal() }} matching product{{ domesticCostLookupTotal() === 1 ? '' : 's' }}. Showing at most 100.
+      {{ domesticCostLookupTotal() }} matching product{{ domesticCostLookupTotal() === 1 ? '' : 's' }}.
+      Showing {{ (domesticCostLookupPage() - 1) * domesticCostLookupPageSize + (domesticCostLookupResults().length ? 1 : 0) }}–{{ (domesticCostLookupPage() - 1) * domesticCostLookupPageSize + domesticCostLookupResults().length }}.
     </p>
     <div class="domestic-cost-results" *ngIf="domesticCostLookupResults().length">
       <article *ngFor="let item of domesticCostLookupResults()">
@@ -785,6 +796,11 @@
         <button *ngIf="domesticLookupPurpose() === 'sync'" type="button" (click)="reviewDomesticProduct(item)">Review fields</button>
       </article>
     </div>
+    <nav class="domestic-cost-pagination" *ngIf="!domesticCostLookupLoading() && domesticCostLookupTotalPages() > 1" aria-label="Domestic product search pages">
+      <button type="button" [disabled]="domesticCostLookupPage() <= 1" (click)="changeDomesticCostLookupPage(domesticCostLookupPage() - 1)">Previous</button>
+      <span>Page {{ domesticCostLookupPage() }} of {{ domesticCostLookupTotalPages() }}</span>
+      <button type="button" [disabled]="domesticCostLookupPage() >= domesticCostLookupTotalPages()" (click)="changeDomesticCostLookupPage(domesticCostLookupPage() + 1)">Next</button>
+    </nav>
     <p class="domestic-cost-empty" *ngIf="!domesticCostLookupLoading() && !domesticCostLookupError() && !domesticCostLookupResults().length">No domestic product matched this SKU.</p>
   </div>
 </section>
@@ -798,7 +814,7 @@
   <div class="domestic-sync-toolbar"><span>{{ domesticSyncFields().length }} usable fields found</span><div><button type="button" (click)="selectAllDomesticSyncFields(true)">Select all</button><button type="button" (click)="selectAllDomesticSyncFields(false)">Clear</button></div></div>
   <p class="domestic-sync-message" *ngIf="domesticSyncMessage()">{{ domesticSyncMessage() }}</p>
   <div class="domestic-sync-fields">
-    <div class="domestic-sync-field" *ngFor="let field of domesticSyncFields()" [class.selected]="field.selected">
+    <div class="domestic-sync-field" *ngFor="let field of domesticSyncFields(); trackBy: trackDomesticSyncField" [class.selected]="field.selected">
       <input type="checkbox" [ngModel]="field.selected" (ngModelChange)="toggleDomesticSyncField(field.key, $event)" />
       <span><small>{{ field.group }}</small><strong>{{ field.label }}</strong></span>
       <span><small>Current local value</small><b>{{ field.currentValue }}</b></span>
@@ -830,9 +846,9 @@
     <section *ngIf="detailMoveStep() === 2">
       <p class="eyebrow">STEP 2</p><h3>Where should it go?</h3><p>Choose the destination Row, Rack, then Level and Bin.</p>
       <div class="wizard-cascade">
-        <label>Row<select [ngModel]="detailMoveTargetRow" (ngModelChange)="selectDetailTargetRow($event)"><option value="">Choose row</option><option *ngFor="let row of detailTargetRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
-        <label>Rack<select [ngModel]="detailMoveTargetRack" (ngModelChange)="selectDetailTargetRack($event)" [disabled]="!detailMoveTargetRow"><option value="">Choose rack</option><option *ngFor="let rack of detailTargetRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
-        <label>Level + Bin<select [(ngModel)]="detailMoveTargetKey" [disabled]="!detailMoveTargetRack"><option value="">Choose level and bin</option><option *ngFor="let location of detailTargetPositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} currently</option></select></label>
+        <label>Row<select [ngModel]="detailMoveTargetRow" (ngModelChange)="selectDetailTargetRow($event)"><option value="">Choose row</option><option *ngIf="detailMoveSourceKey !== 'unassigned'" value="unassigned">Unassigned inventory</option><option *ngFor="let row of detailTargetRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
+        <label>Rack<select [ngModel]="detailMoveTargetRack" (ngModelChange)="selectDetailTargetRack($event)" [disabled]="!detailMoveTargetRow || detailMoveTargetRow === 'unassigned'"><option value="">Choose rack</option><option *ngFor="let rack of detailTargetRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
+        <label>Level + Bin<select [(ngModel)]="detailMoveTargetKey" [disabled]="!detailMoveTargetRack || detailMoveTargetRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailTargetPositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} currently</option></select></label>
       </div>
     </section>
     <section *ngIf="detailMoveStep() === 3">
@@ -841,7 +857,7 @@
     </section>
     <section *ngIf="detailMoveStep() === 4" class="move-review">
       <p class="eyebrow">STEP 4</p><h3>Confirm inventory move</h3>
-      <dl><div><dt>From</dt><dd>{{ detailMoveSourceKey === 'unassigned' ? 'Unassigned inventory' : detailMoveSourceKey }}</dd></div><div><dt>To</dt><dd>{{ detailMoveTargetKey }}</dd></div><div><dt>Quantity</dt><dd>{{ detailMoveQuantity }}</dd></div></dl>
+      <dl><div><dt>From</dt><dd>{{ detailMoveSourceKey === 'unassigned' ? 'Unassigned inventory' : detailMoveSourceKey }}</dd></div><div><dt>To</dt><dd>{{ detailMoveTargetKey === 'unassigned' ? 'Unassigned inventory' : detailMoveTargetKey }}</dd></div><div><dt>Quantity</dt><dd>{{ detailMoveQuantity }}</dd></div></dl>
       <p>The warehouse History Log will record this movement.</p>
     </section>
   </main>

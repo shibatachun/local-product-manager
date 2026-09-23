@@ -3,6 +3,8 @@ namespace LocalProductManager.Api.Models;
 public sealed class LiveStreamBidSale
 {
     public int Id { get; set; }
+    public int? ShowSessionId { get; set; }
+    public LiveStreamBidShowSession? ShowSession { get; set; }
     public int BidProductId { get; set; }
     public LiveStreamBidProduct BidProduct { get; set; } = null!;
     public string ProductUuid { get; set; } = "";

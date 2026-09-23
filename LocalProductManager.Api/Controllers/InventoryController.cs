@@ -91,8 +91,7 @@ public sealed class InventoryController(
             query = query.Where(item => item.Operation == operation);
 
         var rows = await query
-            // SQLite cannot translate ordering by DateTimeOffset. IDs are generated
-            // in the same transaction as the event, so descending ID is chronological.
+            // IDs are generated in the event transaction, so descending ID is chronological.
             .OrderByDescending(item => item.Id)
             .Take(Math.Clamp(limit, 1, 1000))
             .Select(item => new InventoryHistoryDto(
@@ -319,11 +318,17 @@ public sealed class InventoryController(
     {
         if (request.SourceLevelId.HasValue != request.SourceBinNumber.HasValue)
             return BadRequest("Source level and bin must both be supplied, or both omitted for unassigned stock.");
-        if (request.SourceBinNumber.HasValue && request.SourceBinNumber is < 1 or > 2 || request.TargetBinNumber is < 1 or > 2)
+        if (request.TargetLevelId.HasValue != request.TargetBinNumber.HasValue)
+            return BadRequest("Target level and bin must both be supplied, or both omitted for unassigned stock.");
+        if (!request.SourceLevelId.HasValue && !request.TargetLevelId.HasValue)
+            return BadRequest("Source and target cannot both be unassigned stock.");
+        if (request.SourceBinNumber.HasValue && request.SourceBinNumber is < 1 or > 2
+            || request.TargetBinNumber.HasValue && request.TargetBinNumber is < 1 or > 2)
             return BadRequest("Bin number must be 1 or 2.");
         if (request.Quantity < 1)
             return BadRequest("Move quantity must be greater than 0.");
-        if (request.SourceLevelId == request.TargetLevelId && request.SourceBinNumber == request.TargetBinNumber)
+        if (request.SourceLevelId.HasValue && request.SourceLevelId == request.TargetLevelId
+            && request.SourceBinNumber == request.TargetBinNumber)
             return BadRequest("Choose a different target location.");
         var levelIds = new[] { request.SourceLevelId, request.TargetLevelId }.Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
         if (await db.ShelfLevels.CountAsync(item => levelIds.Contains(item.Id), cancellationToken) != levelIds.Length

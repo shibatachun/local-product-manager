@@ -11,6 +11,7 @@ public sealed class LiveStreamBidProduct
     public decimal? WhatnotAuctionSafePrice { get; set; }
     public string? ItemCode { get; set; }
     public string Uuid { get; set; } = "";
+    public string? ImagePath { get; set; }
     public string Title { get; set; } = "";
     public int Quantity { get; set; }
     public int Inventory { get; set; } = 1;
@@ -21,6 +22,7 @@ public sealed class LiveStreamBidProduct
     public string? Material { get; set; }
     public decimal? TotalCost { get; set; }
     public string? ImportedFileName { get; set; }
+    public string? ImportedFileSha256 { get; set; }
     public bool IsSold { get; set; }
     public DateTimeOffset? SoldAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

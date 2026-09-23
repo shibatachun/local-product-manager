@@ -79,7 +79,7 @@ public sealed class AmazonMarketingController(AppDbContext db, AuthService auth)
     }
 
     private static ProductListItemDto ToListItem(AmazonMarketingProduct product) => new(
-        product.Id, null, product.Sku, product.ProductName, null, "UNKNOWN", null, null, null, null, 0,
+        product.Id, null, product.Sku, product.ProductName, null, "UNKNOWN", null, null, null, null, 0, false, null,
         null, null, null, null, product.ImageUrl, "remote", ["amazon"],
         product.Asins.Select(item => item.Asin).Order().ToArray(), product.Asins.Count,
         product.ProductType, product.SkuBase, product.AmazonParentAsin, product.ParentProductId,
@@ -87,7 +87,7 @@ public sealed class AmazonMarketingController(AppDbContext db, AuthService auth)
         product.CreatedAt, product.UpdatedAt);
 
     private static ProductDetailDto ToDetail(AmazonMarketingProduct product) => new(
-        product.Id, null, product.Sku, product.ProductName, null, "UNKNOWN", null, null, null, null, 0,
+        product.Id, null, product.Sku, product.ProductName, null, "UNKNOWN", null, null, null, null, 0, false, null,
         null, null, null, null, product.ImageUrl, "remote", [],
         product.Asins.Select(ToAsin).OrderBy(item => item.Asin).ToArray(),
         product.AttributionLinks.Select(ToLink).OrderBy(item => item.Platform).ToArray(),

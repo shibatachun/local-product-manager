@@ -133,7 +133,7 @@ ASP.NET Core HTTPS Gateway
 ASP.NET Core API (.NET 10)
           │
           ├── PostgreSQL（生产）
-          ├── SQLite（本地兼容/测试）
+          ├── PostgreSQL（唯一运行时数据库）
           ├── BarTender Integration Builder
           └── 图片目录、营销平台与后台服务
 ```
@@ -263,7 +263,7 @@ LocalProductManager.Web/dist/LocalProductManager.Web/browser
 
 ## 数据库升级与备份
 
-API 启动时会自动补齐表字段、索引和 BarTender View。生产环境使用 PostgreSQL；SQLite 路径只用于兼容和测试。
+API 启动时会自动补齐 PostgreSQL 表字段、索引和 BarTender View。旧 SQLite 迁移代码归档在 `deprecated/sqlite`，不再进入 API 运行时。
 
 每日 PostgreSQL 备份：
 

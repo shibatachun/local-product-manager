@@ -18,13 +18,16 @@
     <p class="message" *ngIf="message()">{{ message() }}</p>
     <fieldset class="record-grid editor" [disabled]="!canEdit()" *ngIf="record() as data">
       <section class="card span-2 photo-card">
-        <div class="section-title"><div><p>PRODUCT PHOTOS</p><h2>Photo folder and main image</h2></div><div class="photo-actions"><a class="local-folder-button" role="button" tabindex="0" *ngIf="canOpenLocalFolder()" (click)="openLocalImageFolder()" (keydown.enter)="openLocalImageFolder()">Open local folder</a><label class="photo-upload">Take / upload photos<input type="file" multiple accept="image/*" capture="environment" (change)="uploadPhotos($event)"></label></div></div>
+        <div class="section-title"><div><p>PRODUCT MEDIA</p><h2>Photos, videos, and main image</h2></div><div class="photo-actions"><a class="local-folder-button" [href]="mediaDownloadUrl(product.id)" download>Download all media</a><a class="local-folder-button" role="button" tabindex="0" *ngIf="canOpenLocalFolder()" (click)="openLocalImageFolder()" (keydown.enter)="openLocalImageFolder()">Open local folder</a><label class="photo-upload">Upload media<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/quicktime,video/webm,.mov" (change)="uploadPhotos($event)"></label><label class="photo-upload">Take photo<input type="file" accept="image/*" capture="environment" (change)="uploadPhotos($event, true)"></label><label class="photo-upload">Record video<input type="file" accept="video/*" capture="environment" (change)="uploadPhotos($event, false, true)"></label></div></div>
         <div class="photo-library" *ngIf="images().length; else noProductPhotos">
-          <button type="button" *ngFor="let image of images()" [class.selected]="image.isPrimary" (click)="makePrimary(image)">
-            <img [src]="folderImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy"><span>{{ image.isPrimary ? 'Main image' : 'Set as main' }}</span>
-          </button>
+          <article *ngFor="let image of images()" [class.selected]="image.isPrimary" [class.video-card]="image.isVideo">
+            <video *ngIf="image.isVideo; else productPhoto" [src]="folderImageUrl(product.id, image.fileName)" controls preload="metadata"></video>
+            <ng-template #productPhoto><img [src]="folderImageUrl(product.id, image.fileName)" [alt]="image.fileName" loading="lazy"></ng-template>
+            <button *ngIf="!image.isVideo" type="button" (click)="makePrimary(image)">{{ image.isPrimary ? 'Main image' : 'Set as main' }}</button>
+            <span *ngIf="image.isVideo">Product video</span>
+          </article>
         </div>
-        <ng-template #noProductPhotos><div class="empty">No photos saved in this product folder yet.</div></ng-template>
+        <ng-template #noProductPhotos><div class="empty">No photos or videos saved in this product folder yet.</div></ng-template>
       </section>
       <section class="card span-2 warehouse-card">
         <div class="section-title"><div><p>WAREHOUSE AVAILABILITY</p><h2>{{ locations().length ? 'US warehouse' : 'Not currently assigned' }}</h2></div><strong>{{ product.qty }} total units</strong></div>

@@ -133,7 +133,7 @@ ASP.NET Core HTTPS Gateway
 ASP.NET Core API (.NET 10)
           │
           ├── PostgreSQL (production)
-          ├── SQLite (local compatibility/testing)
+          ├── PostgreSQL (the only runtime database)
           ├── BarTender Integration Builder
           └── Image folders, marketing platforms, and background services
 ```
@@ -263,7 +263,7 @@ LocalProductManager.Web/dist/LocalProductManager.Web/browser
 
 ## Database Upgrades and Backups
 
-At startup, the API automatically creates missing table columns, indexes, and the BarTender View. Production uses PostgreSQL; the SQLite path exists only for compatibility and testing.
+At startup, the API automatically creates missing PostgreSQL table columns, indexes, and the BarTender View. Legacy SQLite migration code is archived under `deprecated/sqlite` and is not part of the API runtime.
 
 Install daily PostgreSQL backups:
 

@@ -1,0 +1,3 @@
+action,BuyerName,ProductNumber,SessionId
+print,"silentgems","33","LIVE-20260825-160000"
+print,"second_buyer","34","LIVE-20260825-160000"

@@ -6,6 +6,7 @@ import { ProductApiService, ProductImageFile } from '../../core/product-api.serv
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
 import { ProductDetail, ProductExtendedData } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
+import { MediaUploadService } from '../../core/media-upload.service';
 
 @Component({
   selector: 'app-product-details-page',
@@ -20,6 +21,7 @@ export class ProductDetailsPage {
   private readonly location = inject(Location);
   private readonly inventoryApi = inject(InventoryApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly mediaUpload = inject(MediaUploadService);
   readonly product = signal<ProductDetail | null>(null);
   readonly record = signal<ProductExtendedData | null>(null);
   readonly locations = signal<ProductScannerLocation[]>([]);
@@ -73,6 +75,7 @@ export class ProductDetailsPage {
   back(): void { this.location.back(); }
   imageUrl(product: ProductDetail): string { return this.api.productImageUrl(product.id, false, 512); }
   folderImageUrl(productId: number, fileName: string): string { return this.api.productImageFileUrl(productId, fileName); }
+  mediaDownloadUrl(productId: number): string { return this.api.productMediaDownloadUrl(productId); }
   async openLocalImageFolder(): Promise<void> {
     const product = this.product();
     if (!product || !this.canOpenLocalFolder()) return;
@@ -83,22 +86,35 @@ export class ProductDetailsPage {
       this.message.set('Unable to open the product image folder. This action is only available to an administrator.');
     }
   }
-  async uploadPhotos(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const product = this.product(), files = Array.from(input.files ?? []);
-    if (!product || !files.length) return;
+  async uploadPhotos(event: Event, cameraPhoto = false, cameraVideo = false): Promise<void> {
+    const { input, files: selectedFiles } = this.mediaUpload.filesFrom(event);
+    const product = this.product();
+    if (!product) return;
+    if (!selectedFiles.length) {
+      this.message.set('The camera or media library did not return a photo or video. Please try again.');
+      input.value = '';
+      return;
+    }
     this.saving.set(true);
     try {
-      await this.api.uploadProductImages(product.id, files);
+      const files = cameraPhoto
+        ? await this.mediaUpload.prepareCameraImages(selectedFiles)
+        : selectedFiles;
+      const result = cameraVideo && files.length === 1
+        ? await this.api.uploadCapturedProductVideo(product.id, files[0])
+        : await this.api.uploadProductImages(product.id, files);
       this.images.set(await this.api.productImageFiles(product.id));
       this.product.set(await this.api.getProduct(product.id));
-      this.message.set(`${files.length} product photo${files.length === 1 ? '' : 's'} saved.`);
-    } catch { this.message.set('Photo upload failed.'); }
+      const parts = [];
+      if (result.imageCount) parts.push(`${result.imageCount} photo${result.imageCount === 1 ? '' : 's'}`);
+      if (result.videoCount) parts.push(`${result.videoCount} video${result.videoCount === 1 ? '' : 's'}`);
+      this.message.set(`${parts.join(' and ')} saved.`);
+    } catch { this.message.set('Media upload failed. Check the file type and size.'); }
     finally { this.saving.set(false); input.value = ''; }
   }
   async makePrimary(image: ProductImageFile): Promise<void> {
     const product = this.product();
-    if (!product || image.isPrimary) return;
+    if (!product || image.isVideo || image.isPrimary) return;
     this.saving.set(true);
     try {
       await this.api.setPrimaryProductImage(product.id, image.fileName);

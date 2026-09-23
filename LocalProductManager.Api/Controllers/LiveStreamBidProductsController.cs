@@ -4,14 +4,16 @@ using LocalProductManager.Api.Models;
 using LocalProductManager.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/live-stream-bid-products")]
-public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamBidProductImportService importer, AuthService auth, ExchangeRateService exchangeRates, InventoryWriteService inventoryWrites) : ControllerBase
+public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamBidProductImportService importer, AuthService auth, ExchangeRateService exchangeRates, InventoryWriteService inventoryWrites, IHttpClientFactory httpClientFactory) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LiveStreamBidProductDto>>> GetAll(CancellationToken cancellationToken)
@@ -25,12 +27,12 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     {
         var normalized = NormalizeBidCode(uuid);
         if (string.IsNullOrWhiteSpace(normalized)) return BadRequest("BID UUID is required.");
-        var normalizedUpper = normalized.ToUpper();
-        var prefixedUpper = $"BID|{normalized}".ToUpper();
-        var item = await db.LiveStreamBidProducts.AsNoTracking().FirstOrDefaultAsync(
-            product => product.Uuid.ToUpper() == normalizedUpper ||
-                       product.Uuid.Replace(" ", "").ToUpper() == prefixedUpper,
-            cancellationToken);
+        var normalizedUpper = normalized.ToUpperInvariant();
+        var candidates = await db.LiveStreamBidProducts.AsNoTracking()
+            .Where(product => product.Uuid.ToUpper().Contains(normalizedUpper))
+            .ToListAsync(cancellationToken);
+        var item = candidates.FirstOrDefault(product =>
+            string.Equals(NormalizeBidCode(product.Uuid), normalized, StringComparison.OrdinalIgnoreCase));
         if (item is null)
         {
             var localCode = NormalizeLocalCode(uuid);
@@ -54,6 +56,12 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     public async Task<ActionResult<LiveStreamBidSaleDto>> ConfirmSale(int id, ConfirmLiveStreamBidSaleRequest request, CancellationToken cancellationToken)
     {
         if (request.ActualSalePrice < 0) return BadRequest("Actual sale price cannot be negative.");
+        if (!request.ShowSessionId.HasValue)
+            return Conflict("Start a BID show cost session before recording sales.");
+        var show = await db.LiveStreamBidShowSessions.FirstOrDefaultAsync(
+            item => item.Id == request.ShowSessionId.Value, cancellationToken);
+        if (show is null) return NotFound("The BID show cost session was not found.");
+        if (show.EndedAt.HasValue) return Conflict("This BID show cost session has already been settled.");
         var product = await db.LiveStreamBidProducts.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (product is null) return NotFound();
         if (product.Inventory <= 0) return Conflict("This bid product has no expected inventory remaining.");
@@ -90,6 +98,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         }
         var sale = new LiveStreamBidSale
         {
+            ShowSessionId = show.Id,
             BidProductId = product.Id,
             ProductUuid = product.Uuid,
             ProductTitle = product.Title,
@@ -101,7 +110,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             ExchangeRateDate = rateDate,
             Profit = profitRmb,
             ProfitUsd = profitUsd,
-            SaleDate = DateOnly.FromDateTime(DateTime.Now),
+            SaleDate = show.ShowDate,
             SoldAt = now,
             SoldBy = user.UserName
         };
@@ -115,6 +124,63 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         return Ok(ToSaleDto(sale));
     }
 
+    [HttpGet("show-sessions/active")]
+    public async Task<ActionResult<LiveStreamBidShowSummaryDto?>> ActiveShowSession(CancellationToken cancellationToken)
+    {
+        var show = await db.LiveStreamBidShowSessions.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.EndedAt == null, cancellationToken);
+        if (show is null) return Ok(null);
+        var sales = await db.LiveStreamBidSales
+            .Where(item => item.ShowSessionId == show.Id).ToListAsync(cancellationToken);
+        sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
+        await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
+        return Ok(BuildShowSummary(show, sales, true));
+    }
+
+    [HttpPost("show-sessions/start")]
+    public async Task<ActionResult<LiveStreamBidShowSummaryDto>> StartShowSession(CancellationToken cancellationToken)
+    {
+        if (await db.LiveStreamBidShowSessions.AsNoTracking().AnyAsync(item => item.EndedAt == null, cancellationToken))
+            return Conflict("A BID show cost session is already active. Stop and settle it before starting another show.");
+
+        var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
+        var date = DateOnly.FromDateTime(DateTime.Now);
+        var lastNumber = await db.LiveStreamBidShowSessions.AsNoTracking()
+            .Where(item => item.ShowDate == date)
+            .Select(item => (int?)item.ShowNumber).MaxAsync(cancellationToken) ?? 0;
+        var show = new LiveStreamBidShowSession
+        {
+            ShowDate = date,
+            ShowNumber = lastNumber + 1,
+            StartedAt = DateTimeOffset.UtcNow,
+            StartedBy = user.UserName
+        };
+        db.LiveStreamBidShowSessions.Add(show);
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException)
+        {
+            return Conflict("Another BID show cost session was started at the same time. Reload the page to resume it.");
+        }
+        return Ok(BuildShowSummary(show, [], true));
+    }
+
+    [HttpPost("show-sessions/{showSessionId:int}/stop")]
+    public async Task<ActionResult<LiveStreamBidShowSummaryDto>> StopShowSession(int showSessionId, CancellationToken cancellationToken)
+    {
+        var show = await db.LiveStreamBidShowSessions.FirstOrDefaultAsync(item => item.Id == showSessionId, cancellationToken);
+        if (show is null) return NotFound();
+        if (show.EndedAt.HasValue) return Conflict("This BID show cost session has already been settled.");
+        var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
+        show.EndedAt = DateTimeOffset.UtcNow;
+        show.EndedBy = user.UserName;
+        await db.SaveChangesAsync(cancellationToken);
+        var sales = await db.LiveStreamBidSales
+            .Where(item => item.ShowSessionId == show.Id).ToListAsync(cancellationToken);
+        sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
+        await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
+        return Ok(BuildShowSummary(show, sales, true));
+    }
+
     [HttpGet("sales/today")]
     public async Task<ActionResult<LiveStreamBidDailySummaryDto>> Today(CancellationToken cancellationToken)
     {
@@ -125,10 +191,16 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     [HttpGet("sales/history")]
     public async Task<ActionResult<IReadOnlyList<LiveStreamBidDailySummaryDto>>> SalesHistory(CancellationToken cancellationToken)
     {
-        var sales = await db.LiveStreamBidSales.OrderByDescending(item => item.SoldAt).ToListAsync(cancellationToken);
+        var sales = await db.LiveStreamBidSales.ToListAsync(cancellationToken);
+        sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
+        var shows = await db.LiveStreamBidShowSessions.AsNoTracking().ToListAsync(cancellationToken);
         await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        return Ok(sales.GroupBy(item => item.SaleDate).OrderByDescending(group => group.Key)
-            .Select(group => BuildSummary(group.Key, group, false)).ToArray());
+        var dates = sales.Select(item => item.SaleDate).Concat(shows.Select(item => item.ShowDate)).Distinct().OrderByDescending(item => item);
+        return Ok(dates.Select(date => BuildSummary(
+            date,
+            sales.Where(item => item.SaleDate == date),
+            shows.Where(item => item.ShowDate == date),
+            false)).ToArray());
     }
 
     [HttpGet("sales/by-date")]
@@ -163,9 +235,12 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         if (!await auth.IsAdminAsync(HttpContext, cancellationToken))
             return StatusCode(StatusCodes.Status403Forbidden, "Administrator access is required.");
         var sales = await db.LiveStreamBidSales.Where(item => item.SaleDate == date).ToListAsync(cancellationToken);
-        if (sales.Count == 0) return NotFound();
+        var shows = await db.LiveStreamBidShowSessions.Where(item => item.ShowDate == date).ToListAsync(cancellationToken);
+        if (sales.Count == 0 && shows.Count == 0) return NotFound();
         var productIds = sales.Select(item => item.BidProductId).Distinct().ToArray();
         db.LiveStreamBidSales.RemoveRange(sales);
+        await db.SaveChangesAsync(cancellationToken);
+        db.LiveStreamBidShowSessions.RemoveRange(shows);
         await db.SaveChangesAsync(cancellationToken);
         var products = await db.LiveStreamBidProducts.Where(item => productIds.Contains(item.Id)).ToListAsync(cancellationToken);
         foreach (var product in products)
@@ -207,12 +282,49 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
 
         var (resolvedUuids, uuidChanges) = await ResolveImportedUuidsAsync(request.Rows, cancellationToken);
 
+        var externalFileName = string.IsNullOrWhiteSpace(request.ExternalFileName)
+            ? null
+            : Path.GetFileName(request.ExternalFileName.Trim());
+        var externalHash = NormalizeSha256(request.ExternalFileSha256);
+        if (externalFileName is not null)
+        {
+            if (externalHash is null) return BadRequest("External CSV imports require a valid SHA-256 hash.");
+            if (await db.LiveStreamBidProducts.AsNoTracking().AnyAsync(
+                    item => item.ImportedFileName == externalFileName || item.ImportedFileSha256 == externalHash,
+                    cancellationToken))
+                return Conflict("This CSV file name or SHA-256 has already been imported.");
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
         var existing = await db.LiveStreamBidProducts.AsNoTracking().Where(item => item.BatchNumber != null)
             .Select(item => item.BatchNumber!).Distinct().ToListAsync(cancellationToken);
         var next = existing.Select(ParseBatchNumber).DefaultIfEmpty(0).Max() + 1;
-        var batchNumber = $"B{next:000000}";
+        var batchNumber = externalFileName is null ? $"B{next:000000}" : ExternalBatchName(externalFileName);
+        if (await db.LiveStreamBidProducts.AsNoTracking().AnyAsync(item => item.BatchNumber == batchNumber, cancellationToken))
+            return Conflict("A batch with this external CSV file name already exists.");
         var now = DateTimeOffset.UtcNow;
+        if (externalFileName is not null)
+        {
+            db.ImportedBidBatches.Add(new ImportedBidBatch
+            {
+                FileName = externalFileName,
+                Sha256 = externalHash!,
+                BatchNumber = batchNumber,
+                ImportedAt = now
+            });
+            try
+            {
+                // The unique PostgreSQL indexes are the authoritative concurrency gate.
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (
+                ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                db.ChangeTracker.Clear();
+                return Conflict("This CSV file name or SHA-256 has already been imported.");
+            }
+        }
         var rmbToUsdRate = await GetSafePricingExchangeRateAsync(cancellationToken);
         var products = request.Rows.Select((row, index) => new LiveStreamBidProduct
         {
@@ -233,7 +345,8 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             WeightOunces = row.WeightOunces ?? (row.WeightGrams.HasValue ? decimal.Round(row.WeightGrams.Value / 28.349523125m, 4) : null),
             Material = string.IsNullOrWhiteSpace(row.Material) ? null : row.Material.Trim(),
             TotalCost = row.TotalCost,
-            ImportedFileName = string.IsNullOrWhiteSpace(row.ExternalUuid) ? $"Local Manager · {batchNumber}" : $"External CSV · {batchNumber}",
+            ImportedFileName = externalFileName ?? $"Local Manager · {batchNumber}",
+            ImportedFileSha256 = externalHash,
             CreatedAt = now,
             UpdatedAt = now
         }).ToArray();
@@ -247,7 +360,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     [HttpGet("batches/{batchNumber}/bartender.csv")]
     public async Task<IActionResult> ExportBatch(string batchNumber, CancellationToken cancellationToken)
     {
-        var normalized = batchNumber.Trim().ToUpperInvariant();
+        var normalized = batchNumber.Trim();
         var rows = await db.LiveStreamBidProducts.AsNoTracking()
             .Where(item => item.BatchNumber == normalized)
             .OrderBy(item => item.BatchProductNumber).ToListAsync(cancellationToken);
@@ -272,7 +385,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         if (!await auth.CanImportDataAsync(HttpContext, cancellationToken) &&
             !await auth.CanManageStorageAsync(HttpContext, cancellationToken))
             return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
-        var normalizedBatch = batchNumber.Trim().ToUpperInvariant();
+        var normalizedBatch = batchNumber.Trim();
         if (request.Rows.Count == 0 || request.Rows.Count > 1000) return BadRequest("Add between 1 and 1,000 products.");
         if (request.Rows.Any(row => string.IsNullOrWhiteSpace(row.Title) || row.Quantity < 1 || row.ExpectedInventory < 0 || row.ActualInventory < 0 || row.UnitPrice < 0 || row.TotalCost < 0 || row.WhatnotAuctionSafePrice < 0))
             return BadRequest("Every row needs a title and valid non-negative values.");
@@ -333,7 +446,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         if (!await auth.CanImportDataAsync(HttpContext, cancellationToken) &&
             !await auth.CanManageStorageAsync(HttpContext, cancellationToken))
             return StatusCode(StatusCodes.Status403Forbidden, "Import or inventory management permission is required.");
-        var normalized = batchNumber.Trim().ToUpperInvariant();
+        var normalized = batchNumber.Trim();
         var products = await db.LiveStreamBidProducts
             .Where(item => item.BatchNumber == normalized)
             .ToListAsync(cancellationToken);
@@ -341,8 +454,13 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         var productIds = products.Select(item => item.Id).ToArray();
         if (await db.LiveStreamBidSales.AsNoTracking().AnyAsync(item => productIds.Contains(item.BidProductId), cancellationToken))
             return Conflict("This batch has sales history and cannot be deleted.");
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         db.LiveStreamBidProducts.RemoveRange(products);
+        var importedBatch = await db.ImportedBidBatches.FirstOrDefaultAsync(
+            item => item.BatchNumber == normalized, cancellationToken);
+        if (importedBatch is not null) db.ImportedBidBatches.Remove(importedBatch);
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return NoContent();
     }
 
@@ -413,11 +531,67 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     }
 
     private static LiveStreamBidProductDto ToDto(LiveStreamBidProduct item) => new(
-        item.Id, item.SourceProductId, item.BatchNumber, item.BatchProductNumber, item.ActualSku, item.RequiresLocalLabel, item.WhatnotAuctionSafePrice, item.ItemCode, NormalizeBidCode(item.Uuid), item.Title, item.Quantity, item.Inventory, item.ActualInventory, item.UnitPrice, item.WeightGrams,
-        item.WeightOunces, item.Material, EffectiveCost(item), item.ImportedFileName, item.IsSold, item.SoldAt, item.CreatedAt, item.UpdatedAt);
+        item.Id, item.SourceProductId, item.BatchNumber, item.BatchProductNumber, item.ActualSku, item.RequiresLocalLabel, item.WhatnotAuctionSafePrice, item.ItemCode, NormalizeBidCode(item.Uuid), item.ImagePath, item.Title, item.Quantity, item.Inventory, item.ActualInventory, item.UnitPrice, item.WeightGrams,
+        item.WeightOunces, item.Material, EffectiveCost(item), item.ImportedFileName, item.ImportedFileSha256, item.IsSold, item.SoldAt, item.CreatedAt, item.UpdatedAt);
 
     private static int ParseBatchNumber(string value) =>
         value.Length > 1 && int.TryParse(value[1..], out var number) ? number : 0;
+
+    private static string ExternalBatchName(string fileName)
+    {
+        var value = Path.GetFileNameWithoutExtension(fileName).Trim();
+        value = Regex.Replace(value, "[\\\\/:*?\"<>|]+", "-");
+        return value.Length <= 240 ? value : value[..240];
+    }
+
+    [HttpPost("cloud-files")]
+    public async Task<ActionResult<IReadOnlyList<CloudCsvFileDto>>> CloudFiles(CloudCsvAccessRequest request, CancellationToken cancellationToken)
+    {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Import permission is required.");
+        if (string.IsNullOrWhiteSpace(request.Token)) return BadRequest("Cloud upload token is required.");
+        var url = $"http://134.175.148.65/csv-inbox/files?token={Uri.EscapeDataString(request.Token.Trim())}";
+        using var response = await httpClientFactory.CreateClient().GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode) return StatusCode((int)response.StatusCode, "Could not access the cloud CSV inbox.");
+        var html = await response.Content.ReadAsStringAsync(cancellationToken);
+        var paths = Regex.Matches(html, "href=\"/csv-inbox/download/([^?\"]+)\\?token=")
+            .Select(match => Uri.UnescapeDataString(match.Groups[1].Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var importedNames = await db.LiveStreamBidProducts.AsNoTracking().Where(item => item.ImportedFileName != null)
+            .Select(item => item.ImportedFileName!).Distinct().ToListAsync(cancellationToken);
+        var imported = importedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Ok(paths.Select(path =>
+        {
+            var fileName = OriginalCloudFileName(Path.GetFileName(path));
+            return new CloudCsvFileDto(path, fileName, imported.Contains(fileName));
+        }).ToArray());
+    }
+
+    [HttpPost("cloud-files/download")]
+    public async Task<IActionResult> DownloadCloudFile(CloudCsvDownloadRequest request, CancellationToken cancellationToken)
+    {
+        if (!await auth.CanImportDataAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Import permission is required.");
+        if (string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.RemotePath)) return BadRequest();
+        var remotePath = request.RemotePath.Replace('\\', '/').TrimStart('/');
+        if (remotePath.Contains("..", StringComparison.Ordinal)) return BadRequest("Invalid cloud file path.");
+        var encodedPath = string.Join('/', remotePath.Split('/').Select(Uri.EscapeDataString));
+        var url = $"http://134.175.148.65/csv-inbox/download/{encodedPath}?token={Uri.EscapeDataString(request.Token.Trim())}";
+        using var response = await httpClientFactory.CreateClient().GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode) return StatusCode((int)response.StatusCode, "Could not download the cloud CSV file.");
+        return File(await response.Content.ReadAsByteArrayAsync(cancellationToken), "text/csv; charset=utf-8", Path.GetFileName(remotePath));
+    }
+
+    private static string? NormalizeSha256(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized is not null && Regex.IsMatch(normalized, "^[0-9a-f]{64}$") ? normalized : null;
+    }
+
+    private static string OriginalCloudFileName(string storedName) =>
+        Regex.IsMatch(storedName, @"^\d{6}_\d{8}_\d{6}_BarTender\.csv$", RegexOptions.IgnoreCase)
+            ? storedName[7..]
+            : storedName;
 
     private static string Csv(string value) =>
         value.IndexOfAny([',', '"', '\r', '\n']) >= 0 ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
@@ -429,16 +603,18 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     }
 
     private static LiveStreamBidSaleDto ToSaleDto(LiveStreamBidSale item) => new(
-        item.Id, item.BidProductId, item.ProductUuid, item.ProductTitle, item.Quantity, item.Cost,
+        item.Id, item.ShowSessionId, item.BidProductId, item.ProductUuid, item.ProductTitle, item.Quantity, item.Cost,
         item.ActualSalePrice, item.SalePriceRmb, item.ExchangeRateRmbToUsd, item.ExchangeRateDate,
         item.Profit, item.ProfitUsd, item.SaleDate, item.SoldAt, item.SoldBy);
 
     private async Task<LiveStreamBidDailySummaryDto> SummaryForDateAsync(DateOnly date, bool includeSales, CancellationToken cancellationToken)
     {
-        var sales = await db.LiveStreamBidSales.Where(item => item.SaleDate == date)
-            .OrderByDescending(item => item.SoldAt).ToListAsync(cancellationToken);
+        var sales = await db.LiveStreamBidSales.Where(item => item.SaleDate == date).ToListAsync(cancellationToken);
+        sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
+        var shows = await db.LiveStreamBidShowSessions.AsNoTracking().Where(item => item.ShowDate == date)
+            .OrderBy(item => item.ShowNumber).ToListAsync(cancellationToken);
         await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        return BuildSummary(date, sales, includeSales);
+        return BuildSummary(date, sales, shows, includeSales);
     }
 
     private async Task PopulateMissingExchangeRatesAsync(List<LiveStreamBidSale> sales, CancellationToken cancellationToken)
@@ -467,16 +643,54 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         }
     }
 
-    private static LiveStreamBidDailySummaryDto BuildSummary(DateOnly date, IEnumerable<LiveStreamBidSale> source, bool includeSales)
+    private static LiveStreamBidDailySummaryDto BuildSummary(
+        DateOnly date,
+        IEnumerable<LiveStreamBidSale> source,
+        IEnumerable<LiveStreamBidShowSession> showSource,
+        bool includeSales)
     {
         var sales = source.ToArray();
+        var shows = showSource.OrderBy(item => item.ShowNumber)
+            .Select(show => BuildShowSummary(show, sales.Where(item => item.ShowSessionId == show.Id), includeSales))
+            .ToList();
+        var legacySales = sales.Where(item => item.ShowSessionId == null).ToArray();
+        if (legacySales.Length > 0)
+            shows.Insert(0, BuildLegacyShowSummary(date, legacySales, includeSales));
         return new LiveStreamBidDailySummaryDto(
-            date, sales.Length, sales.Sum(item => item.Quantity), sales.Sum(item => item.Cost ?? 0),
+            date, sales.Length, sales.Length, sales.Sum(item => item.Cost ?? 0),
+            sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
+            sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
+            sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
+            shows,
+            includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
+    }
+
+    private static LiveStreamBidShowSummaryDto BuildShowSummary(
+        LiveStreamBidShowSession show,
+        IEnumerable<LiveStreamBidSale> source,
+        bool includeSales)
+    {
+        var sales = source.ToArray();
+        return new LiveStreamBidShowSummaryDto(
+            show.Id, show.ShowDate, show.ShowNumber, !show.EndedAt.HasValue,
+            show.StartedAt, show.EndedAt, show.StartedBy, show.EndedBy,
+            sales.Length, sales.Length, sales.Sum(item => item.Cost ?? 0),
             sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
             sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
             sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
             includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
     }
+
+    private static LiveStreamBidShowSummaryDto BuildLegacyShowSummary(
+        DateOnly date,
+        IReadOnlyCollection<LiveStreamBidSale> sales,
+        bool includeSales) => new(
+            null, date, 0, false, sales.Min(item => item.SoldAt), sales.Max(item => item.SoldAt),
+            null, null, sales.Count, sales.Count, sales.Sum(item => item.Cost ?? 0),
+            sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
+            sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
+            sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
+            includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
 
     private async Task<(string?[] Resolved, Dictionary<int, (string Original, string New)> Changes)> ResolveImportedUuidsAsync(
         IReadOnlyList<CreateLiveStreamBidListRow> rows, CancellationToken cancellationToken)
@@ -512,7 +726,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
 
     private static string NormalizeBidCode(string value)
     {
-        var normalized = value.Trim();
+        var normalized = value.Trim().TrimStart('\uFEFF');
         if (normalized.StartsWith("BID", StringComparison.OrdinalIgnoreCase))
             normalized = normalized[3..].TrimStart(' ', '|', ':', '-');
         return normalized.Trim();

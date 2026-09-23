@@ -6,6 +6,7 @@ public sealed class ProductListing
     public int ProductId { get; set; }
     public required string Platform { get; set; }
     public string? ListingUrl { get; set; }
+    public decimal? RetailPrice { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
