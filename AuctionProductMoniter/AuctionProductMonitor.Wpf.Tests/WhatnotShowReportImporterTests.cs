@@ -26,18 +26,18 @@ public sealed class WhatnotShowReportImporterTests
     }
 
     [Fact]
-    public void Read_DuplicateFreeGiftLabel_ReportsBothRows()
+    public void Read_ReusedNumberOnDifferentOrders_KeepsBothFullNames()
     {
         var path = WriteReport(
-            "order-1,buyer-one,Free Gift #1,1,2026-09-22 13:39:23.316,,shipment-1",
-            "order-2,buyer-two,Free Gift #1,1,2026-09-22 16:38:43.551,,shipment-2");
+            "order-1,buyer-one,Blue beads #1,1,2026-09-22 13:39:23.316,,shipment-1",
+            "order-2,buyer-two,Red charms #1,1,2026-09-22 16:38:43.551,,shipment-2");
 
         try
         {
-            var error = Assert.Throws<InvalidDataException>(() => WhatnotShowReportImporter.Read(path));
+            var report = WhatnotShowReportImporter.Read(path);
 
-            Assert.Contains("row 3: duplicate product label Free Gift #1", error.Message);
-            Assert.Contains("first used on row 2 by buyer-one (Free Gift #1)", error.Message);
+            Assert.Equal(["1", "1"], report.Sales.Select(sale => sale.ProductNumber));
+            Assert.Equal(["Blue beads #1", "Red charms #1"], report.Sales.Select(sale => sale.PrintProductName));
         }
         finally
         {
@@ -59,6 +59,38 @@ public sealed class WhatnotShowReportImporterTests
             Assert.Equal("2026-09-22", report.ShowDate);
             Assert.Equal(["1", "2"], report.Sales.Select(sale => sale.ProductNumber));
             Assert.Equal([1, 2], report.Sales.Select(sale => sale.Quantity));
+            Assert.Equal(["Lots of Charms #1", "Lots of Charms #2"], report.Sales.Select(sale => sale.PrintProductName));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void PrintProductName_OldShowReportUsesTitle_OldLiveSaleUsesNumber()
+    {
+        Assert.Equal("Blue beads #1", new SaleEvent
+        {
+            ProductNumber = "1", SourceText = "Blue beads #1", ReportRowNumber = 2
+        }.PrintProductName);
+        Assert.Equal("1", new SaleEvent
+        {
+            ProductNumber = "1", SourceText = "buyer won Blue beads #1"
+        }.PrintProductName);
+    }
+
+    [Fact]
+    public void Read_DuplicateOrderId_StillStopsImport()
+    {
+        var path = WriteReport(
+            "order-1,buyer-one,Blue beads #1,1,2026-09-22 13:39:23.316,,shipment-1",
+            "order-1,buyer-two,Red charms #1,1,2026-09-22 16:38:43.551,,shipment-2");
+
+        try
+        {
+            var error = Assert.Throws<InvalidDataException>(() => WhatnotShowReportImporter.Read(path));
+            Assert.Contains("duplicate order_id order-1", error.Message);
         }
         finally
         {

@@ -1,4 +1,4 @@
 interface:
   display_name: "eBay Listing Draft Pack"
-  short_description: "Prepare product photos and a copy-ready eBay draft"
+  short_description: "Draft eBay listings with brooch sizes and use examples"
   default_prompt: "Use $ebay-auto-listing to build a manual eBay listing package from a local product."

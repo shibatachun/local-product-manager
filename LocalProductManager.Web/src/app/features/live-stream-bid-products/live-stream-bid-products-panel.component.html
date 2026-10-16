@@ -22,35 +22,118 @@
 
   <section class="show-session-card" [class.active]="activeShow()">
     <header>
-      <div>
+      <div *ngIf="!activeShow()"><small>BID sale cost scanner</small><strong>No show is currently running</strong></div>
+      <div *ngIf="activeShow() as show" class="hierarchy-toggle" role="button" tabindex="0" [attr.aria-expanded]="isExpanded('show', show)" (click)="toggleExpanded('show', show)" (keydown.enter)="toggleExpanded('show', show)" (keydown.space)="toggleExpanded('show', show); $event.preventDefault()">
         <small>BID sale cost scanner</small>
-        <strong *ngIf="!activeShow()">No show is currently running</strong>
-        <strong *ngIf="activeShow() as show">{{ show.date | date: 'longDate' }} · Show {{ show.showNumber }}</strong>
+        <strong>{{ show.date | date: 'longDate' }} · {{ show.showName || ('Show ' + show.showNumber) }} <i>{{ isExpanded('show', show) ? '⌄' : '›' }}</i></strong>
       </div>
       <button class="start-show" type="button" *ngIf="!activeShow()" (click)="startShow()" [disabled]="loading()">Start cost session</button>
       <button class="stop-show" type="button" *ngIf="activeShow()" (click)="stopShow()" [disabled]="loading()">Stop &amp; settle show</button>
     </header>
-    <p *ngIf="!activeShow()">Start a show before scanning sold BID products. The session remains active across page refreshes until you stop and settle it.</p>
+    <p *ngIf="!activeShow()">Import one Whatnot show report to organize cost work by customer and order, or start an empty show for the original scan-only workflow.</p>
+    <div class="show-import" *ngIf="!activeShow()">
+      <label class="file-picker"><input type="file" accept=".csv,text/csv" (change)="selectShowReport($event)" /><span>{{ showReportFile?.name || 'Choose Whatnot show report CSV' }}</span></label>
+      <button class="primary" type="button" (click)="importShowReport()" [disabled]="!showReportFile || loading()">Import this show</button>
+    </div>
     <ng-container *ngIf="activeShow() as show">
+      <ng-container *ngIf="isExpanded('show', show)">
       <div class="active-show-totals">
-        <span>Scans <b>{{ show.soldCount }}</b></span>
-        <span>Inventory sold <b>{{ show.inventorySold }}</b></span>
+        <span *ngIf="show.orderedQuantity">Purchased <b>{{ show.orderedQuantity }}</b></span>
+        <span>Costs recorded <b>{{ show.recordedCostQuantity || show.soldCount }}</b></span>
+        <span *ngIf="show.orderedQuantity">Remaining <b>{{ show.remainingCostQuantity }}</b></span>
         <span>Cost <b>{{ currencySymbol() }}{{ summaryCost(show) | number: '1.2-2' }}</b></span>
         <span>Started <b>{{ show.startedAt | date: 'shortTime' }}</b></span>
       </div>
+      <div class="show-customers" *ngIf="show.customers.length">
+        <section class="show-customer" *ngFor="let customer of show.customers">
+          <header class="hierarchy-toggle" role="button" tabindex="0" [attr.aria-expanded]="isExpanded('buyer', show, customer.name)" (click)="toggleExpanded('buyer', show, customer.name)" (keydown.enter)="toggleExpanded('buyer', show, customer.name)" (keydown.space)="toggleExpanded('buyer', show, customer.name); $event.preventDefault()"><strong>{{ customer.name }}</strong><span>{{ customer.recordedQuantity }}/{{ customer.totalQuantity }} cost item(s)</span><b [class.complete]="customer.remainingQuantity === 0">{{ customer.remainingQuantity === 0 ? 'Complete' : customer.remainingQuantity + ' remaining' }}</b><i>{{ isExpanded('buyer', show, customer.name) ? '⌄' : '›' }}</i></header>
+          <div class="show-orders" *ngIf="isExpanded('buyer', show, customer.name)">
+            <div class="order-table-head"><span>Item / order</span><span>Quantity</span><span>Recorded</span><span>Cost</span><span>Details</span></div>
+            <article *ngFor="let order of customer.orders" [class.selected]="selectedShowOrderId() === order.id" [class.complete]="order.remainingQuantity === 0">
+              <div class="order-item-name"><img *ngIf="order.priceEvidence.length" [src]="showAttachmentUrl(order.priceEvidence[0].id)" alt="" loading="lazy" /><div><strong>{{ order.orderName }}</strong><small>Order {{ order.externalOrderId }}</small></div></div>
+              <span class="order-quantity"><b>{{ order.quantity }}</b> <button type="button" (click)="editOrderQuantity(order)" [disabled]="loading()" [attr.aria-label]="'Edit inventory item quantity for ' + order.orderName">Edit</button></span><span><b>{{ order.recordedQuantity }}</b> recorded</span><span><b>¥{{ order.totalCostRmb | number:'1.2-2' }}</b></span>
+              <button type="button" (click)="selectShowOrder(order)">{{ selectedShowOrderId() === order.id ? 'Close' : order.remainingQuantity === 0 ? 'View evidence' : 'Record costs' }}</button>
+              <div class="order-quantity-editor" *ngIf="editingOrderQuantityId() === order.id">
+                <label>Inventory items in this order<input type="number" min="1" step="1" [min]="order.recordedQuantity || 1" [(ngModel)]="orderQuantityDraft" /></label>
+                <button type="button" (click)="saveOrderQuantity(order)" [disabled]="loading()">Save qty</button>
+                <button type="button" (click)="cancelOrderQuantityEdit()" [disabled]="loading()">Cancel</button>
+                <small *ngIf="orderQuantityError()">{{ orderQuantityError() }}</small>
+              </div>
+              <section class="order-cost-expander" *ngIf="selectedShowOrderId() === order.id">
+                <div class="order-cost-actions" role="group" aria-label="Cost recording method" *ngIf="order.remainingQuantity > 0">
+                  <button type="button" [class.active]="orderCostMode() === 'manual'" (click)="showManualCost(order)">Manual entry</button>
+                  <button type="button" [class.active]="orderCostMode() === 'scan'" (click)="showCameraScanner(order)">Scan with camera</button>
+                </div>
+                <p class="order-cost-feedback error" *ngIf="orderCostError()">{{ orderCostError() }}</p>
+                <p class="order-cost-feedback success" *ngIf="orderCostMessage()">{{ orderCostMessage() }}</p>
+                <div class="manual-cost-form" *ngIf="orderCostMode() === 'manual' && order.remainingQuantity > 0">
+                  <label>Manual quantity<input type="number" min="1" step="1" [max]="order.remainingQuantity" [(ngModel)]="manualCostQuantity" /></label>
+                  <label>Unit cost (RMB)<div class="price-input"><b>¥</b><input type="number" min="0" step="0.01" [(ngModel)]="manualUnitCost" /></div></label>
+                  <button type="button" (click)="addManualCost()" [disabled]="loading() || order.remainingQuantity === 0">Add manual cost</button>
+                </div>
+                <app-barcode-scanner
+                  *ngIf="orderCostMode() === 'scan' && order.remainingQuantity > 0"
+                  [embedded]="true"
+                  [lockedScanMode]="'bid'"
+                  [bidSalesOnly]="true"
+                  [cameraOnly]="true"
+                  [compactBidSale]="true"
+                  [bidShowSessionId]="show.id"
+                  [bidShowOrderId]="order.id"
+                  [bidOrderRemainingQuantity]="order.remainingQuantity"
+                  (bidSaleRecorded)="bidSaleRecorded($event)"
+                ></app-barcode-scanner>
+                <div class="cost-entry-list" *ngIf="order.manualCosts.length || order.scannedCosts.length">
+                  <span *ngFor="let cost of order.manualCosts">Manual · {{ cost.quantity }} × ¥{{ cost.unitCost | number:'1.2-2' }} <button type="button" (click)="startCostEdit('manual', cost.id, cost.unitCost)">Edit</button> <button type="button" (click)="deleteManualCost(cost.id)">Delete</button></span>
+                  <span *ngFor="let sale of order.scannedCosts">Scan · {{ sale.productTitle }} · {{ sale.cost === null ? 'No cost' : '¥' + (sale.cost | number:'1.2-2') }} <button type="button" (click)="startCostEdit('scan', sale.id, sale.cost)">Edit</button></span>
+                </div>
+                <div class="cost-edit-form" *ngIf="orderHasEditedCost(order)"><label>{{ editingCost()?.kind === 'manual' ? 'Unit cost (RMB)' : 'Total scanned cost (RMB)' }}<input type="number" min="0" step="0.01" [(ngModel)]="costDraft" /></label><button type="button" (click)="saveCostEdit()" [disabled]="loading()">Save cost</button><button type="button" (click)="cancelCostEdit()">Cancel</button><small *ngIf="costEditError()">{{ costEditError() }}</small></div>
+                <div class="show-attachment-section">
+                  <strong>Price evidence</strong>
+                  <div class="shipment-upload-actions">
+                    <app-media-picker label="Take photo" variant="attachment" accept="image/*" [capture]="true" [disabled]="loading()" (selected)="uploadOrderPriceEvidence(order.id, $event)"></app-media-picker>
+                    <app-media-picker label="Upload photo" variant="attachment" accept="image/*" [disabled]="loading()" (selected)="uploadOrderPriceEvidence(order.id, $event)"></app-media-picker>
+                    <button class="attachment-detail-toggle" type="button" (click)="togglePriceEvidenceDetail(order.id)" [disabled]="!order.priceEvidence.length" [attr.aria-expanded]="priceEvidenceDetailOpen(order.id)">{{ priceEvidenceDetailOpen(order.id) ? 'Hide detail' : 'View detail' }}</button>
+                  </div>
+                  <small class="price-evidence-feedback" [class.error]="priceEvidenceFeedback()?.error" *ngIf="priceEvidenceFeedback()?.orderId === order.id">{{ priceEvidenceFeedback()?.message }}</small>
+                  <div class="evidence-gallery" *ngIf="order.priceEvidence.length && priceEvidenceDetailOpen(order.id)">
+                    <a *ngFor="let evidence of order.priceEvidence" [href]="showAttachmentUrl(evidence.id)" target="_blank" rel="noopener noreferrer"><img [src]="showAttachmentUrl(evidence.id)" [alt]="'Price evidence for ' + order.orderName" loading="lazy" /><span>{{ evidence.uploadedAt | date:'short' }} · Open full size</span></a>
+                  </div>
+                  <small *ngIf="!order.priceEvidence.length">No price photo saved yet.</small>
+                </div>
+              </section>
+            </article>
+          </div>
+          <div class="show-attachment-section shipment-record" *ngIf="isExpanded('buyer', show, customer.name)">
+            <strong>Shipment record · {{ customer.name }}</strong>
+            <div class="shipment-upload-actions">
+              <app-media-picker label="Add shipping slip" variant="attachment" accept="image/*,.pdf,application/pdf" [disabled]="loading()" (selected)="uploadShipmentDocument(show.id, customer.name, 'shipping-slip', $event)"></app-media-picker>
+              <app-media-picker label="Add shipping label" variant="attachment" accept="image/*,.pdf,application/pdf" [disabled]="loading()" (selected)="uploadShipmentDocument(show.id, customer.name, 'shipping-label', $event)"></app-media-picker>
+            </div>
+            <div class="show-attachment-links" *ngIf="customer.shipmentDocuments.length; else noShipmentDocuments">
+              <a *ngFor="let document of customer.shipmentDocuments" [href]="showAttachmentUrl(document.id)" target="_blank" rel="noopener noreferrer">{{ document.kind === 'shipping-slip' ? 'Slip' : 'Label' }} · {{ document.originalFileName }} · {{ document.uploadedAt | date:'short' }}</a>
+            </div>
+            <ng-template #noShipmentDocuments><small>No shipping slip or label saved yet.</small></ng-template>
+          </div>
+        </section>
+      </div>
       <app-barcode-scanner
+        *ngIf="!show.customers.length"
         [embedded]="true"
         [lockedScanMode]="'bid'"
         [bidSalesOnly]="true"
         [bidShowSessionId]="show.id"
-        (bidSaleRecorded)="bidSaleRecorded()"
+        [bidShowOrderId]="selectedShowOrderId()"
+        (bidSaleRecorded)="bidSaleRecorded($event)"
       ></app-barcode-scanner>
+      </ng-container>
     </ng-container>
   </section>
 
   <section class="history-card">
-    <header>
+    <header [class.collapsed]="!historyOpen()">
       <div><strong>Stream live selling history</strong><small>Daily totals with each show kept separate</small></div>
+      <div class="history-header-actions">
       <div class="currency-switch">
         <button
           type="button"
@@ -66,7 +149,12 @@
           RMB
         </button>
       </div>
+      <button type="button" class="history-visibility-toggle" [attr.aria-expanded]="historyOpen()" aria-controls="stream-selling-history-content" (click)="historyOpen.set(!historyOpen())">
+        {{ historyOpen() ? 'Hide history' : 'Show history' }} <span aria-hidden="true">{{ historyOpen() ? '⌃' : '⌄' }}</span>
+      </button>
+      </div>
     </header>
+    <div id="stream-selling-history-content" class="history-content" [hidden]="!historyOpen()">
     <div class="day-list" *ngIf="history().length; else noHistory">
       <ng-container *ngFor="let day of history()">
       <article
@@ -77,6 +165,7 @@
         [attr.aria-expanded]="selectedDay()?.date === day.date"
         (click)="toggleDay(day.date)"
         (keydown.enter)="toggleDay(day.date)"
+        (keydown.space)="toggleDay(day.date); $event.preventDefault()"
       >
         <div>
           <strong>{{ day.date | date: 'longDate' }}</strong
@@ -127,11 +216,11 @@
         </div>
         <div class="show-list">
           <section class="show-summary" *ngFor="let show of summary.shows">
-            <header>
+            <header class="hierarchy-toggle" role="button" tabindex="0" [attr.aria-expanded]="isExpanded('show', show)" (click)="toggleExpanded('show', show)" (keydown.enter)="toggleExpanded('show', show)" (keydown.space)="toggleExpanded('show', show); $event.preventDefault()">
               <div>
-                <strong>{{ show.showNumber === 0 ? 'Earlier ungrouped sales' : 'Show ' + show.showNumber }}</strong>
+                <strong>{{ show.showNumber === 0 ? 'Earlier ungrouped sales' : (show.showName || 'Show ' + show.showNumber) }}</strong>
                 <small>
-                  {{ show.inventorySold }} inventory sold
+                  {{ show.orderedQuantity ? show.recordedCostQuantity + '/' + show.orderedQuantity + ' costs recorded' : show.inventorySold + ' inventory sold' }}
                   <ng-container *ngIf="show.startedAt"> · {{ show.startedAt | date: 'shortTime' }}<ng-container *ngIf="show.endedAt">–{{ show.endedAt | date: 'shortTime' }}</ng-container></ng-container>
                 </small>
               </div>
@@ -139,8 +228,49 @@
               <span>Cost <b>{{ currencySymbol() }}{{ summaryCost(show) | number: '1.2-2' }}</b></span>
               <span>Sales <b>{{ currencySymbol() }}{{ summaryRevenue(show) | number: '1.2-2' }}</b></span>
               <span>Profit <b [class.negative]="summaryProfit(show) < 0">{{ currencySymbol() }}{{ summaryProfit(show) | number: '1.2-2' }}</b></span>
+              <i>{{ isExpanded('show', show) ? '⌄' : '›' }}</i>
             </header>
-            <div class="sale-list" *ngIf="show.sales.length; else noShowSales">
+            <div class="history-customers" *ngIf="isExpanded('show', show) && show.customers.length">
+              <section *ngFor="let customer of show.customers">
+                <header class="hierarchy-toggle" role="button" tabindex="0" [attr.aria-expanded]="isExpanded('buyer', show, customer.name)" (click)="toggleExpanded('buyer', show, customer.name)" (keydown.enter)="toggleExpanded('buyer', show, customer.name)" (keydown.space)="toggleExpanded('buyer', show, customer.name); $event.preventDefault()"><strong>{{ customer.name }}</strong><span>{{ customer.recordedQuantity }}/{{ customer.totalQuantity }} recorded</span><b>¥{{ customer.totalCostRmb | number:'1.2-2' }}</b><i>{{ isExpanded('buyer', show, customer.name) ? '⌄' : '›' }}</i></header>
+                <ng-container *ngIf="isExpanded('buyer', show, customer.name)">
+                  <article *ngFor="let order of customer.orders">
+                    <div class="order-item-name"><img *ngIf="order.priceEvidence.length" [src]="showAttachmentUrl(order.priceEvidence[0].id)" alt="" loading="lazy" /><div><strong>{{ order.orderName }}</strong><small>Order {{ order.externalOrderId }}</small></div></div>
+                    <span>Qty <b>{{ order.quantity }}</b></span><span>Recorded <b>{{ order.recordedQuantity }}</b></span><span>Cost <b>¥{{ order.totalCostRmb | number:'1.2-2' }}</b></span>
+                    <div class="cost-entry-list historical-cost-list" *ngIf="order.manualCosts.length || order.scannedCosts.length">
+                      <span *ngFor="let cost of order.manualCosts">Manual · {{ cost.quantity }} × ¥{{ cost.unitCost | number:'1.2-2' }} <button type="button" (click)="startCostEdit('manual', cost.id, cost.unitCost)">Edit cost</button></span>
+                      <span *ngFor="let sale of order.scannedCosts">Scan · {{ sale.productTitle }} · {{ sale.cost === null ? 'No cost' : '¥' + (sale.cost | number:'1.2-2') }} <button type="button" (click)="startCostEdit('scan', sale.id, sale.cost)">Edit cost</button></span>
+                    </div>
+                    <div class="cost-edit-form historical-cost-editor" *ngIf="orderHasEditedCost(order)"><label>{{ editingCost()?.kind === 'manual' ? 'Unit cost (RMB)' : 'Total scanned cost (RMB)' }}<input type="number" min="0" step="0.01" [(ngModel)]="costDraft" /></label><button type="button" (click)="saveCostEdit()" [disabled]="loading()">Save cost</button><button type="button" (click)="cancelCostEdit()">Cancel</button><small *ngIf="costEditError()">{{ costEditError() }}</small></div>
+                    <div class="show-attachment-section historical-price-evidence">
+                      <strong>Price evidence</strong>
+                      <div class="shipment-upload-actions">
+                        <app-media-picker label="Take photo" variant="attachment" accept="image/*" [capture]="true" [disabled]="loading()" (selected)="uploadOrderPriceEvidence(order.id, $event)"></app-media-picker>
+                        <app-media-picker label="Upload photo" variant="attachment" accept="image/*" [disabled]="loading()" (selected)="uploadOrderPriceEvidence(order.id, $event)"></app-media-picker>
+                        <button class="attachment-detail-toggle" type="button" (click)="togglePriceEvidenceDetail(order.id)" [disabled]="!order.priceEvidence.length" [attr.aria-expanded]="priceEvidenceDetailOpen(order.id)">{{ priceEvidenceDetailOpen(order.id) ? 'Hide detail' : 'View detail' }}</button>
+                      </div>
+                      <small class="price-evidence-feedback" [class.error]="priceEvidenceFeedback()?.error" *ngIf="priceEvidenceFeedback()?.orderId === order.id">{{ priceEvidenceFeedback()?.message }}</small>
+                      <div class="evidence-gallery" *ngIf="order.priceEvidence.length && priceEvidenceDetailOpen(order.id)">
+                        <a *ngFor="let evidence of order.priceEvidence" [href]="showAttachmentUrl(evidence.id)" target="_blank" rel="noopener noreferrer"><img [src]="showAttachmentUrl(evidence.id)" [alt]="'Price evidence for ' + order.orderName" loading="lazy" /><span>{{ evidence.uploadedAt | date:'short' }} · Open full size</span></a>
+                      </div>
+                      <small *ngIf="!order.priceEvidence.length">No price photo saved yet.</small>
+                    </div>
+                  </article>
+                </ng-container>
+                <div class="show-attachment-section shipment-record" *ngIf="isExpanded('buyer', show, customer.name)">
+                  <strong>Shipment record · {{ customer.name }}</strong>
+                  <div class="shipment-upload-actions">
+                    <app-media-picker label="Add shipping slip" variant="attachment" accept="image/*,.pdf,application/pdf" [disabled]="loading()" (selected)="uploadShipmentDocument(show.id, customer.name, 'shipping-slip', $event)"></app-media-picker>
+                    <app-media-picker label="Add shipping label" variant="attachment" accept="image/*,.pdf,application/pdf" [disabled]="loading()" (selected)="uploadShipmentDocument(show.id, customer.name, 'shipping-label', $event)"></app-media-picker>
+                  </div>
+                  <div class="show-attachment-links" *ngIf="customer.shipmentDocuments.length; else noHistoricalShipmentDocuments">
+                    <a *ngFor="let document of customer.shipmentDocuments" [href]="showAttachmentUrl(document.id)" target="_blank" rel="noopener noreferrer">{{ document.kind === 'shipping-slip' ? 'Slip' : 'Label' }} · {{ document.originalFileName }} · {{ document.uploadedAt | date:'short' }}</a>
+                  </div>
+                  <ng-template #noHistoricalShipmentDocuments><small>No shipping slip or label saved yet.</small></ng-template>
+                </div>
+              </section>
+            </div>
+            <div class="sale-list" *ngIf="isExpanded('show', show) && !show.customers.length && show.sales.length">
               <article *ngFor="let sale of show.sales">
                 <div>
                   <strong>{{ sale.productTitle }}</strong
@@ -154,13 +284,14 @@
                 <button type="button" class="delete-sale" *ngIf="isAdmin" (click)="deleteSale(sale.id)">Delete</button>
               </article>
             </div>
-            <ng-template #noShowSales><p class="no-show-sales">No products were recorded in this show.</p></ng-template>
+            <p class="no-show-sales" *ngIf="isExpanded('show', show) && !show.customers.length && !show.sales.length">No products were recorded in this show.</p>
           </section>
         </div>
       </section>
       </ng-container>
     </div>
     <ng-template #noHistory><p class="no-sales">No live selling history yet.</p></ng-template>
+    </div>
   </section>
 
   <section class="import-card" *ngIf="canImport">
@@ -402,6 +533,12 @@
                               Edit</button
                             ><button
                               type="button"
+                              *ngIf="canMove && item.sourceProductId === null"
+                              (click)="openImportToLocal(item)"
+                            >
+                              Import to Local</button
+                            ><button
+                              type="button"
                               class="delete-product"
                               *ngIf="canImport || canMove"
                               (click)="deleteProduct(item)"
@@ -440,14 +577,14 @@
         <div><dt>Actual SKU</dt><dd>{{ item.actualSku || '—' }}</dd></div>
         <div><dt>Expected inventory</dt><dd>{{ item.inventory }}</dd></div>
         <div><dt>Actual inventory</dt><dd>{{ item.actualInventory }}</dd></div>
-        <div><dt>Recorded cost</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</dd></div>
+        <div><dt>Item price (unit × qty)</dt><dd>¥{{ item.unitPrice * item.quantity | number:'1.2-2' }}</dd></div>
       </dl>
-      <p class="sale-unavailable" *ngIf="item.inventory <= 0 || item.actualInventory <= 0">This product has no available received inventory and cannot be sold.</p>
+      <p class="sale-unavailable" *ngIf="item.inventory <= 0">This product has no expected inventory remaining and cannot be sold.</p>
       <label>Actual sale price (USD) <span>Optional</span><div><b>$</b><input type="number" min="0" step="0.01" inputmode="decimal" [(ngModel)]="manualSalePrice" placeholder="Leave blank if unknown" /></div></label>
     </div>
     <footer>
       <button type="button" (click)="closeManualSale()">Cancel</button>
-      <button class="confirm-manual-sale" type="button" (click)="confirmManualSale()" [disabled]="loading() || item.inventory <= 0 || item.actualInventory <= 0">{{ loading() ? 'Recording…' : 'Confirm sold' }}</button>
+      <button class="confirm-manual-sale" type="button" (click)="confirmManualSale()" [disabled]="loading() || item.inventory <= 0">{{ loading() ? 'Recording…' : 'Confirm sold' }}</button>
     </footer>
   </section>
 
@@ -624,6 +761,27 @@
         {{ editingProduct() ? 'Save changes' : targetBatch() ? 'Add to batch' : 'Create & save' }}
       </button>
     </footer>
+  </section>
+
+  <div class="move-backdrop" *ngIf="importToLocalProduct()" (click)="closeImportToLocal()"></div>
+  <section class="move-modal" *ngIf="importToLocalProduct() as item" role="dialog" aria-modal="true" aria-labelledby="import-local-title">
+    <header><div><small>BID product</small><h2 id="import-local-title">Import as new Local product</h2></div><button type="button" (click)="closeImportToLocal()">×</button></header>
+    <div class="move-form">
+      <p><strong>{{ item.title }}</strong> · BID|{{ item.uuid }}</p>
+      <p>New SKU and INV ID: generated automatically. Name: {{ item.title }}.</p>
+      <p>Local inventory: <strong>{{ item.actualInventory }}</strong> · Cost per package: <strong>¥{{ item.unitPrice * item.quantity | number:'1.2-2' }}</strong> ({{ item.quantity }} × ¥{{ item.unitPrice | number:'1.2-2' }}).</p>
+      <p>Weight: <strong>{{ bidWeightOunces(item) === null ? 'Not recorded' : (bidWeightOunces(item) | number:'1.2-2') + ' oz' }}</strong> · Note: BID UUID: {{ item.uuid }}</p>
+      <p>Category will be UNKNOWN; listing status will be not ready. BID photos are not copied to the Local product.</p>
+      <label>Original BID inventory
+        <select [(ngModel)]="importTransferInventory">
+          <option [ngValue]="true">Transfer remaining stock to Local (set BID stock to 0)</option>
+          <option [ngValue]="false">Keep BID stock unchanged (duplicates inventory counts)</option>
+        </select>
+      </label>
+      <p class="sale-unavailable" *ngIf="item.actualInventory === 0">This BID product has 0 actual inventory; the new Local product will also have 0.</p>
+      <p class="sale-unavailable" *ngIf="error()">{{ error() }}</p>
+    </div>
+    <footer><button type="button" (click)="closeImportToLocal()">Cancel</button><button class="primary" type="button" (click)="confirmImportToLocal()" [disabled]="loading()">{{ loading() ? 'Importing…' : 'Create Local product' }}</button></footer>
   </section>
 
   <div class="move-backdrop" *ngIf="moveOpen()" (click)="closeMoveProduct()"></div>

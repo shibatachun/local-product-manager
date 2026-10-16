@@ -102,17 +102,55 @@ public sealed record MoveProductToLiveStreamBidRequest(
     int BinNumber,
     int Quantity);
 
-public sealed record ConfirmLiveStreamBidSaleRequest(decimal? ActualSalePrice, int? ShowSessionId);
+public sealed record ImportLiveStreamBidProductToLocalRequest(bool TransferInventory);
+
+public sealed record ImportLiveStreamBidProductToLocalResult(
+    int ProductId, string LocalInventoryId, string Sku, int Qty, decimal Cost,
+    decimal? WeightOunces, string Note);
+
+public sealed record ConfirmLiveStreamBidSaleRequest(decimal? ActualSalePrice, int? ShowSessionId, int? ShowOrderId = null, int Quantity = 1);
+
+public sealed record AddLiveStreamBidManualCostRequest(int Quantity, decimal UnitCost);
+public sealed record UpdateLiveStreamBidManualCostRequest(decimal UnitCost);
+public sealed record UpdateLiveStreamBidScannedCostRequest(decimal Cost);
+public sealed record UpdateLiveStreamBidShowOrderQuantityRequest(int Quantity);
+
+public sealed record LiveStreamBidManualCostDto(
+    int Id, int Quantity, decimal UnitCost, decimal TotalCost, DateTimeOffset CreatedAt, string CreatedBy);
+
+public sealed record LiveStreamBidShowAttachmentDto(
+    int Id, string Kind, string OriginalFileName, string ContentType, DateTimeOffset UploadedAt, string UploadedBy);
+
+public sealed record LiveStreamBidShowOrderDto(
+    int Id, string ExternalOrderId, string CustomerName, string OrderName, int Quantity,
+    int ScannedQuantity, int ManualQuantity, int RecordedQuantity, int RemainingQuantity,
+    decimal TotalCostRmb, IReadOnlyList<LiveStreamBidSaleDto> ScannedCosts,
+    IReadOnlyList<LiveStreamBidManualCostDto> ManualCosts)
+{
+    public IReadOnlyList<LiveStreamBidShowAttachmentDto> PriceEvidence { get; init; } = [];
+}
+
+public sealed record LiveStreamBidShowCustomerDto(
+    string Name, int TotalQuantity, int RecordedQuantity, int RemainingQuantity,
+    decimal TotalCostRmb, IReadOnlyList<LiveStreamBidShowOrderDto> Orders)
+{
+    public IReadOnlyList<LiveStreamBidShowAttachmentDto> ShipmentDocuments { get; init; } = [];
+}
+
+public sealed record LiveStreamBidShowImportResult(
+    LiveStreamBidShowSummaryDto Show, int ImportedOrders, int ImportedCustomers, int IgnoredRows);
 
 public sealed record AdjustLiveStreamBidActualInventoryRequest(int Delta);
 
 public sealed record LiveStreamBidSaleDto(
     int Id,
     int? ShowSessionId,
+    int? ShowOrderId,
     int BidProductId,
     string ProductUuid,
     string ProductTitle,
     int Quantity,
+    int SoldQuantity,
     decimal? Cost,
     decimal? ActualSalePriceUsd,
     decimal? SalePriceRmb,
@@ -133,6 +171,8 @@ public sealed record LiveStreamBidShowSummaryDto(
     DateTimeOffset? EndedAt,
     string? StartedBy,
     string? EndedBy,
+    string? ShowName,
+    string? ImportedFileName,
     int SoldCount,
     int InventorySold,
     decimal TotalCostRmb,
@@ -141,6 +181,10 @@ public sealed record LiveStreamBidShowSummaryDto(
     decimal ActualRevenueRmb,
     decimal RealizedProfitRmb,
     decimal RealizedProfitUsd,
+    int OrderedQuantity,
+    int RecordedCostQuantity,
+    int RemainingCostQuantity,
+    IReadOnlyList<LiveStreamBidShowCustomerDto> Customers,
     IReadOnlyList<LiveStreamBidSaleDto> Sales);
 
 public sealed record LiveStreamBidDailySummaryDto(

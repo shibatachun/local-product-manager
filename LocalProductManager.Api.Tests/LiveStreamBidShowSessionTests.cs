@@ -9,6 +9,75 @@ namespace LocalProductManager.Api.Tests;
 public sealed class LiveStreamBidShowSessionTests
 {
     [Fact]
+    public async Task ConfirmSale_AllowsZeroActualInventoryAndRecordsMerchandiseOnly()
+    {
+        using var factory = new IsolatedApiFactory();
+        using var client = factory.CreateClient();
+        var startedResponse = await client.PostAsJsonAsync("/api/live-stream-bid-products/show-sessions/start", new { });
+        startedResponse.EnsureSuccessStatusCode();
+        var show = await startedResponse.Content.ReadFromJsonAsync<ShowSummary>();
+        Assert.NotNull(show);
+
+        int productId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var product = new LiveStreamBidProduct
+            {
+                Uuid = Guid.NewGuid().ToString(),
+                Title = "Unreceived show product",
+                Quantity = 3,
+                Inventory = 2,
+                ActualInventory = 0,
+                UnitPrice = 10,
+                TotalCost = 40
+            };
+            db.LiveStreamBidProducts.Add(product);
+            await db.SaveChangesAsync();
+            productId = product.Id;
+        }
+
+        var response = await client.PostAsJsonAsync($"/api/live-stream-bid-products/{productId}/confirm-sale",
+            new { ShowSessionId = show.Id, Quantity = 2 });
+        response.EnsureSuccessStatusCode();
+        var sale = await response.Content.ReadFromJsonAsync<ConfirmedSale>();
+        Assert.NotNull(sale);
+        Assert.Equal(60m, sale.Cost); // 10 unit price × 3 pieces/package × 2 sold packages; not TotalCost 40 × 2.
+
+        var active = await client.GetFromJsonAsync<ShowSummary>("/api/live-stream-bid-products/show-sessions/active");
+        Assert.NotNull(active);
+        Assert.Equal(60m, active.TotalCostRmb);
+        await using var checkScope = factory.Services.CreateAsyncScope();
+        var checkDb = checkScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var remaining = await checkDb.LiveStreamBidProducts.FindAsync(productId);
+        Assert.NotNull(remaining);
+        Assert.Equal(0, remaining.Inventory);
+        Assert.Equal(0, remaining.ActualInventory);
+        Assert.Equal(40m, remaining.TotalCost); // Stored pricing input remains untouched.
+    }
+
+    [Fact]
+    public async Task StopShowSession_RemovesEmptyShowFromHistory()
+    {
+        using var factory = new IsolatedApiFactory();
+        using var client = factory.CreateClient();
+        var startedResponse = await client.PostAsJsonAsync("/api/live-stream-bid-products/show-sessions/start", new { });
+        startedResponse.EnsureSuccessStatusCode();
+        var started = await startedResponse.Content.ReadFromJsonAsync<ShowSummary>();
+        Assert.NotNull(started);
+
+        var stoppedResponse = await client.PostAsJsonAsync($"/api/live-stream-bid-products/show-sessions/{started.Id}/stop", new { });
+        stoppedResponse.EnsureSuccessStatusCode();
+        var history = await client.GetFromJsonAsync<IReadOnlyList<DailySummary>>("/api/live-stream-bid-products/sales/history");
+
+        Assert.NotNull(history);
+        Assert.Empty(history);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False(db.LiveStreamBidShowSessions.Any(item => item.Id == started.Id));
+    }
+
+    [Fact]
     public async Task DeleteBatch_RemovesImportedFileReservation()
     {
         using var factory = new IsolatedApiFactory();
@@ -164,12 +233,14 @@ public sealed class LiveStreamBidShowSessionTests
         var day = await client.GetFromJsonAsync<DailySummary>($"/api/live-stream-bid-products/sales/by-date?date={first.Date:yyyy-MM-dd}");
         Assert.NotNull(day);
         Assert.Equal(1, day.InventorySold);
-        Assert.Equal(2, day.Shows.Count);
+        Assert.Single(day.Shows);
         Assert.Equal(25, day.TotalCostRmb);
-        Assert.Equal([1, 2], day.Shows.Select(item => item.ShowNumber).ToArray());
+        Assert.Equal([1], day.Shows.Select(item => item.ShowNumber).ToArray());
     }
 
     private sealed record SaleSummary(int Id);
+
+    private sealed record ConfirmedSale(decimal? Cost);
 
     private sealed record LookupProduct(string Uuid);
 

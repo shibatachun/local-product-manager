@@ -34,6 +34,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const payload = {
     buyerName: String(message.sale?.buyerName || "").trim(),
     productNumber: String(message.sale?.productNumber || "").trim(),
+    productName: String(message.sale?.productName || "").trim().slice(0, 500),
     detectedAt: message.sale?.detectedAt || new Date().toISOString(),
     sourceText: String(message.sale?.sourceText || "").slice(0, 2000),
     pageUrl: sender.tab?.url || message.sale?.pageUrl || ""

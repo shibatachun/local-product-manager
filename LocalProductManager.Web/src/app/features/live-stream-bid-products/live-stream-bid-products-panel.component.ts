@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CloudCsvFile, LiveStreamBidDailySummary, LiveStreamBidDraftRow, LiveStreamBidImportConflict, LiveStreamBidProduct, LiveStreamBidProductApiService, LiveStreamBidRegeneratedUuid, LiveStreamBidShowSummary } from '../../core/live-stream-bid-product-api.service';
+import { CloudCsvFile, LiveStreamBidDailySummary, LiveStreamBidDraftRow, LiveStreamBidImportConflict, LiveStreamBidManualCost, LiveStreamBidProduct, LiveStreamBidProductApiService, LiveStreamBidRegeneratedUuid, LiveStreamBidSale, LiveStreamBidShowOrder, LiveStreamBidShowSummary } from '../../core/live-stream-bid-product-api.service';
 import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
 import { ProductListItem } from '../../core/models';
 import { LabelPrintingApiService, LabelPrintingSettings } from '../../core/label-printing-api.service';
 import { BarcodeScannerPage } from '../barcode-scanner/barcode-scanner.page';
 import { BrowserSecretVaultService } from '../../core/browser-secret-vault.service';
+import { MediaPickerComponent } from '../../shared/media-picker.component';
 
 type BulkCsvImportResult = { fileName: string; batchNumber: string | null; products: number; error: string | null };
 type UuidImportPreview = { fileName: string; rowNumber: number; title: string; originalUuid: string };
@@ -14,9 +15,9 @@ type UuidImportPreview = { fileName: string; rowNumber: number; title: string; o
 @Component({
   selector: 'app-live-stream-bid-products-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, BarcodeScannerPage],
+  imports: [CommonModule, FormsModule, BarcodeScannerPage, MediaPickerComponent],
   templateUrl: './live-stream-bid-products-panel.component.html',
-  styleUrls: ['./live-stream-bid-products-panel.component.css', './live-stream-bid-products-create.component.css', './live-stream-bid-products-sku.component.css'],
+  styleUrls: ['./live-stream-bid-products-panel.component.css', './live-stream-bid-products-create.component.css', './live-stream-bid-products-sku.component.css', './live-stream-bid-products-hierarchy.component.css'],
 })
 export class LiveStreamBidProductsPanelComponent implements OnInit {
   @Input() canImport = false;
@@ -33,10 +34,30 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   readonly message = signal('');
   readonly error = signal('');
   readonly history = signal<LiveStreamBidDailySummary[]>([]);
+  readonly historyOpen = signal(true);
   readonly selectedDay = signal<LiveStreamBidDailySummary | null>(null);
   readonly activeShow = signal<LiveStreamBidShowSummary | null>(null);
+  readonly selectedShowOrderId = signal<number | null>(null);
+  readonly editingOrderQuantityId = signal<number | null>(null);
+  readonly orderQuantityError = signal('');
+  orderQuantityDraft = 1;
+  readonly orderCostMode = signal<'manual' | 'scan'>('manual');
+  readonly orderCostError = signal('');
+  readonly orderCostMessage = signal('');
+  readonly editingCost = signal<{ kind: 'manual' | 'scan'; id: number } | null>(null);
+  costDraft: number | null = null;
+  readonly costEditError = signal('');
+  readonly priceEvidenceFeedback = signal<{ orderId: number; message: string; error: boolean } | null>(null);
+  readonly expandedPriceEvidenceOrders = signal<ReadonlySet<number>>(new Set());
+  readonly expandedNodes = signal<ReadonlySet<string>>(new Set());
+  private readonly initializedActiveShows = new Set<string>();
+  showReportFile: File | null = null;
+  manualCostQuantity = 1;
+  manualUnitCost: number | null = null;
   readonly displayCurrency = signal<'usd' | 'rmb'>('usd');
   readonly moveOpen = signal(false);
+  readonly importToLocalProduct = signal<LiveStreamBidProduct | null>(null);
+  importTransferInventory = true;
   readonly localInventoryProducts = signal<ProductListItem[]>([]);
   readonly moveLocations = signal<ProductScannerLocation[]>([]);
   moveProductId: number | null = null;
@@ -118,6 +139,33 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
       }))
       .sort((left, right) => Date.parse(right.importedAt) - Date.parse(left.importedAt));
   });
+  readonly selectedShowOrder = computed(() => {
+    const id = this.selectedShowOrderId();
+    return this.activeShow()?.customers.flatMap(customer => customer.orders).find(order => order.id === id) ?? null;
+  });
+
+  private showKey(show: LiveStreamBidShowSummary): string {
+    return `${show.id ?? `${show.date}-${show.showNumber}`}`;
+  }
+
+  private nodeKey(level: 'show' | 'buyer', show: LiveStreamBidShowSummary, customerName?: string): string {
+    return level === 'show'
+      ? `show:${this.showKey(show)}`
+      : `buyer:${this.showKey(show)}:${customerName!.toLowerCase()}`;
+  }
+
+  isExpanded(level: 'show' | 'buyer', show: LiveStreamBidShowSummary, customerName?: string): boolean {
+    return this.expandedNodes().has(this.nodeKey(level, show, customerName));
+  }
+
+  toggleExpanded(level: 'show' | 'buyer', show: LiveStreamBidShowSummary, customerName?: string): void {
+    const key = this.nodeKey(level, show, customerName);
+    this.expandedNodes.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   currencySymbol(): string { return this.displayCurrency() === 'usd' ? '$' : '¥'; }
   summaryCost(summary: LiveStreamBidDailySummary | LiveStreamBidShowSummary): number { return this.displayCurrency() === 'usd' ? summary.totalCostUsd : summary.totalCostRmb; }
@@ -188,6 +236,17 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
       this.products.set(products);
       this.history.set(history);
       this.activeShow.set(activeShow);
+      if (activeShow) {
+        const key = this.nodeKey('show', activeShow);
+        if (!this.initializedActiveShows.has(key)) {
+          this.initializedActiveShows.add(key);
+          this.expandedNodes.update(current => new Set([...current, key]));
+        }
+      }
+      if (!activeShow?.customers.some(customer => customer.orders.some(order => order.id === this.selectedShowOrderId()))) {
+        this.selectedShowOrderId.set(null);
+        this.orderCostMode.set('manual');
+      }
       const selectedDate = this.selectedDay()?.date;
       if (selectedDate && history.some(day => day.date === selectedDate)) await this.openDay(selectedDate);
       else this.selectedDay.set(null);
@@ -236,6 +295,284 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     } finally { this.loading.set(false); }
   }
 
+  selectShowReport(event: Event): void {
+    this.showReportFile = (event.target as HTMLInputElement).files?.[0] ?? null;
+    this.error.set('');
+    this.message.set('');
+  }
+
+  async importShowReport(): Promise<void> {
+    if (!this.showReportFile || this.loading()) return;
+    this.loading.set(true);
+    this.error.set('');
+    this.message.set('');
+    try {
+      const result = await this.api.importShowReport(this.showReportFile);
+      this.showReportFile = null;
+      await this.load();
+      this.message.set(`Show imported: ${result.importedCustomers} customer(s), ${result.importedOrders} order(s), ${result.ignoredRows} cancelled/failed row(s) ignored.`);
+    } catch (error: any) {
+      this.error.set(typeof error?.error === 'string' ? error.error : 'The Whatnot show report could not be imported.');
+    } finally { this.loading.set(false); }
+  }
+
+  selectShowOrder(order: LiveStreamBidShowOrder): void {
+    if (this.selectedShowOrderId() === order.id) {
+      this.selectedShowOrderId.set(null);
+      this.orderCostMode.set('manual');
+      this.orderCostError.set('');
+      this.orderCostMessage.set('');
+      return;
+    }
+    this.selectedShowOrderId.set(order.id);
+    this.orderCostMode.set('manual');
+    this.orderCostError.set('');
+    this.orderCostMessage.set('');
+    this.manualCostQuantity = 1;
+    this.manualUnitCost = null;
+  }
+
+  editOrderQuantity(order: LiveStreamBidShowOrder): void {
+    this.editingOrderQuantityId.set(order.id);
+    this.orderQuantityDraft = order.quantity;
+    this.orderQuantityError.set('');
+  }
+
+  cancelOrderQuantityEdit(): void {
+    this.editingOrderQuantityId.set(null);
+    this.orderQuantityError.set('');
+  }
+
+  async saveOrderQuantity(order: LiveStreamBidShowOrder): Promise<void> {
+    if (this.loading()) return;
+    const quantity = Number(this.orderQuantityDraft);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity < order.recordedQuantity) {
+      this.orderQuantityError.set(`Enter a whole number of at least ${Math.max(1, order.recordedQuantity)}; recorded items cannot be removed.`);
+      return;
+    }
+    this.orderQuantityError.set('');
+    if (quantity === order.quantity) { this.cancelOrderQuantityEdit(); return; }
+    this.loading.set(true);
+    try {
+      await this.api.updateShowOrderQuantity(order.id, quantity);
+      await this.load();
+      if (this.error()) {
+        this.orderQuantityError.set('Quantity was saved, but the page could not refresh. Reload to see the updated remaining count.');
+        return;
+      }
+      this.cancelOrderQuantityEdit();
+      this.orderCostMessage.set(`Order quantity updated to ${quantity} inventory item(s).`);
+    } catch (error: any) {
+      this.orderQuantityError.set(typeof error?.error === 'string' ? error.error : 'Could not update the order quantity.');
+    } finally { this.loading.set(false); }
+  }
+
+  showAttachmentUrl(id: number): string { return this.api.showAttachmentUrl(id); }
+
+  priceEvidenceDetailOpen(orderId: number): boolean {
+    return this.expandedPriceEvidenceOrders().has(orderId);
+  }
+
+  togglePriceEvidenceDetail(orderId: number): void {
+    this.expandedPriceEvidenceOrders.update(current => {
+      const next = new Set(current);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  }
+
+  async uploadOrderPriceEvidence(orderId: number, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (this.loading()) { input.value = ''; return; }
+    this.priceEvidenceFeedback.set(null);
+    if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
+      this.priceEvidenceFeedback.set({ orderId, message: 'Choose a photo between 1 byte and 20 MB.', error: true });
+      input.value = '';
+      return;
+    }
+    this.loading.set(true);
+    this.error.set('');
+    this.message.set('');
+    try {
+      await this.api.uploadOrderPriceEvidence(orderId, file);
+      await this.load();
+      if (this.error()) {
+        this.priceEvidenceFeedback.set({ orderId, message: 'Photo saved, but the list could not refresh. Reload to view it.', error: true });
+      } else {
+        this.priceEvidenceFeedback.set({ orderId, message: 'Order price photo saved.', error: false });
+      }
+    } catch (error: any) {
+      this.priceEvidenceFeedback.set({ orderId, message: this.priceEvidenceUploadError(error), error: true });
+    } finally { input.value = ''; this.loading.set(false); }
+  }
+
+  private priceEvidenceUploadError(error: any): string {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    if (typeof error?.error === 'string' && error.error.trim()) return error.error;
+    const validationErrors = error?.error?.errors;
+    if (validationErrors && typeof validationErrors === 'object') {
+      const first = Object.values(validationErrors).flat().find(value => typeof value === 'string' && value.trim());
+      if (typeof first === 'string') return first;
+    }
+    if (typeof error?.error?.detail === 'string' && error.error.detail.trim()) return error.error.detail;
+    if (error?.status === 0) return 'Could not reach the server. Check the connection and try again.';
+    if (error?.status === 413) return 'Photo is too large. Choose one under 20 MB.';
+    if (error?.status === 401 || error?.status === 403) return 'Sign in with an account allowed to upload price photos.';
+    return `Could not save the order price photo (HTTP ${error?.status || 'error'}).`;
+  }
+
+  async uploadShipmentDocument(showId: number | null, customerName: string,
+    kind: 'shipping-slip' | 'shipping-label', event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || showId === null || this.loading()) return;
+    this.loading.set(true);
+    this.error.set('');
+    this.message.set('');
+    try {
+      await this.api.uploadShipmentDocument(showId, customerName, kind, file);
+      await this.load();
+      if (!this.error()) this.message.set(`${kind === 'shipping-slip' ? 'Shipping slip' : 'Shipping label'} saved for ${customerName}.`);
+    } catch (error: any) {
+      this.error.set(typeof error?.error === 'string' ? error.error : 'Could not save the shipment document.');
+    } finally { this.loading.set(false); }
+  }
+
+  showManualCost(order: LiveStreamBidShowOrder): void {
+    if (this.selectedShowOrderId() !== order.id) this.selectShowOrder(order);
+    this.orderCostMode.set('manual');
+    this.orderCostError.set('');
+  }
+
+  showCameraScanner(order: LiveStreamBidShowOrder): void {
+    if (this.selectedShowOrderId() !== order.id) this.selectShowOrder(order);
+    this.orderCostMode.set('scan');
+    this.orderCostError.set('');
+    this.orderCostMessage.set('');
+  }
+
+  async addManualCost(): Promise<void> {
+    const order = this.selectedShowOrder();
+    const quantity = Number(this.manualCostQuantity);
+    const unitCost = Number(this.manualUnitCost);
+    if (!order || !Number.isInteger(quantity) || quantity < 1 || quantity > order.remainingQuantity) {
+      this.orderCostError.set(`Enter a whole-number quantity from 1 to ${order?.remainingQuantity ?? 0}.`);
+      return;
+    }
+    if (this.manualUnitCost === null || !Number.isFinite(unitCost) || unitCost < 0) {
+      this.orderCostError.set('Enter a valid unit cost of zero or greater.');
+      return;
+    }
+    this.loading.set(true);
+    this.error.set('');
+    this.orderCostError.set('');
+    this.orderCostMessage.set('');
+    try {
+      const saved = await this.api.addManualCost(order.id, quantity, unitCost);
+      this.applyManualCostLocally(order.id, saved);
+      this.manualCostQuantity = 1;
+      this.manualUnitCost = null;
+      this.orderCostMessage.set(`${quantity} item(s) recorded. Total manual cost: ¥${saved.totalCost.toFixed(2)}.`);
+    } catch (error: any) {
+      this.orderCostError.set(typeof error?.error === 'string' ? error.error : 'Could not save the manual cost.');
+    } finally { this.loading.set(false); }
+  }
+
+  private applyManualCostLocally(orderId: number, saved: LiveStreamBidManualCost): void {
+    const show = this.activeShow();
+    if (!show) return;
+    const quantity = saved.quantity;
+    const cost = saved.totalCost;
+    this.activeShow.set({
+      ...show,
+      inventorySold: show.inventorySold + quantity,
+      totalCostRmb: show.totalCostRmb + cost,
+      totalCostUsd: show.totalCostUsd + cost * 0.15,
+      realizedProfitRmb: show.realizedProfitRmb - cost,
+      realizedProfitUsd: show.realizedProfitUsd - cost * 0.15,
+      recordedCostQuantity: show.recordedCostQuantity + quantity,
+      remainingCostQuantity: Math.max(0, show.remainingCostQuantity - quantity),
+      customers: show.customers.map(customer => {
+        if (!customer.orders.some(item => item.id === orderId)) return customer;
+        return {
+          ...customer,
+          recordedQuantity: customer.recordedQuantity + quantity,
+          remainingQuantity: Math.max(0, customer.remainingQuantity - quantity),
+          totalCostRmb: customer.totalCostRmb + cost,
+          orders: customer.orders.map(item => item.id !== orderId ? item : {
+            ...item,
+            manualQuantity: item.manualQuantity + quantity,
+            recordedQuantity: item.recordedQuantity + quantity,
+            remainingQuantity: Math.max(0, item.remainingQuantity - quantity),
+            totalCostRmb: item.totalCostRmb + cost,
+            manualCosts: [...item.manualCosts, saved],
+          }),
+        };
+      }),
+    });
+  }
+
+  async deleteManualCost(id: number): Promise<void> {
+    if (!confirm('Delete this manual cost entry?')) return;
+    this.loading.set(true);
+    this.error.set('');
+    try { await this.api.deleteManualCost(id); await this.load(); }
+    catch (error: any) { this.error.set(typeof error?.error === 'string' ? error.error : 'Could not delete the manual cost.'); }
+    finally { this.loading.set(false); }
+  }
+
+  startCostEdit(kind: 'manual' | 'scan', id: number, currentCost: number | null): void {
+    this.editingCost.set({ kind, id });
+    this.costDraft = currentCost;
+    this.costEditError.set('');
+  }
+
+  isEditingCost(kind: 'manual' | 'scan', id: number): boolean {
+    const edit = this.editingCost();
+    return edit?.kind === kind && edit.id === id;
+  }
+
+  orderHasEditedCost(order: LiveStreamBidShowOrder): boolean {
+    const edit = this.editingCost();
+    return !!edit && (edit.kind === 'manual'
+      ? order.manualCosts.some(item => item.id === edit.id)
+      : order.scannedCosts.some(item => item.id === edit.id));
+  }
+
+  cancelCostEdit(): void {
+    this.editingCost.set(null);
+    this.costDraft = null;
+    this.costEditError.set('');
+  }
+
+  async saveCostEdit(): Promise<void> {
+    const edit = this.editingCost();
+    const amount = Number(this.costDraft);
+    if (!edit || this.costDraft === null || !Number.isFinite(amount) || amount < 0) {
+      this.costEditError.set('Enter a cost of zero or greater.');
+      return;
+    }
+    this.loading.set(true);
+    this.costEditError.set('');
+    try {
+      if (edit.kind === 'manual') await this.api.updateManualCost(edit.id, amount);
+      else await this.api.updateScannedCost(edit.id, amount);
+      await this.load();
+      if (this.error()) {
+        this.costEditError.set('Cost was saved, but the page could not refresh. Reload to see the new totals.');
+        return;
+      }
+      this.cancelCostEdit();
+      this.message.set('Cost updated. Order and show totals have been recalculated.');
+    } catch (error: any) {
+      this.costEditError.set(typeof error?.error === 'string' ? error.error : 'Could not update this cost.');
+    } finally { this.loading.set(false); }
+  }
+
   async stopShow(): Promise<void> {
     const show = this.activeShow();
     if (!show?.id || this.loading()) return;
@@ -246,22 +583,85 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     try {
       const settled = await this.api.stopShowSession(show.id);
       this.activeShow.set(null);
+      const key = this.nodeKey('show', show);
+      this.initializedActiveShows.delete(key);
+      this.expandedNodes.update(current => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
       await this.load();
       await this.openDay(settled.date);
-      this.message.set(`Show ${settled.showNumber} settled with ${settled.soldCount} sale(s) and ${this.currencySymbol()}${this.summaryCost(settled).toFixed(2)} cost.`);
+      this.message.set(settled.soldCount === 0 && settled.customers.length === 0
+        ? `Empty Show ${settled.showNumber} was removed.`
+        : `Show ${settled.showNumber} settled with ${settled.soldCount} sale(s) and ${this.currencySymbol()}${this.summaryCost(settled).toFixed(2)} cost.`);
     } catch (error: any) {
       this.error.set(typeof error?.error === 'string' ? error.error : 'The show cost session could not be settled.');
     } finally { this.loading.set(false); }
   }
 
-  async bidSaleRecorded(): Promise<void> {
-    await this.load();
-    this.message.set('Sale added to the active show cost session.');
+  async bidSaleRecorded(sale: LiveStreamBidSale): Promise<void> {
+    const order = this.selectedShowOrder();
+    if (!order || sale.showOrderId !== order.id) {
+      await this.load();
+      this.message.set('Sale added to the active show cost session.');
+      return;
+    }
+    this.applyScannedCostLocally(order.id, sale);
+    this.orderCostMessage.set(`Scanned cost recorded: ${sale.productTitle}.`);
+    this.products.update(products => products.map(product => product.id !== sale.bidProductId ? product : {
+      ...product,
+      inventory: Math.max(0, product.inventory - sale.soldQuantity),
+      actualInventory: Math.max(0, product.actualInventory - sale.soldQuantity),
+    }));
+  }
+
+  private applyScannedCostLocally(orderId: number, sale: LiveStreamBidSale): void {
+    const show = this.activeShow();
+    if (!show) return;
+    const costRmb = sale.cost ?? 0;
+    const costUsd = costRmb * (sale.exchangeRateRmbToUsd ?? 0.15);
+    const quantity = sale.soldQuantity;
+    this.activeShow.set({
+      ...show,
+      soldCount: show.soldCount + 1,
+      inventorySold: show.inventorySold + quantity,
+      totalCostRmb: show.totalCostRmb + costRmb,
+      totalCostUsd: show.totalCostUsd + costUsd,
+      actualRevenueUsd: show.actualRevenueUsd + (sale.actualSalePriceUsd ?? 0),
+      actualRevenueRmb: show.actualRevenueRmb + (sale.salePriceRmb ?? 0),
+      realizedProfitRmb: show.realizedProfitRmb + (sale.profitRmb ?? 0),
+      realizedProfitUsd: show.realizedProfitUsd + (sale.profitUsd ?? 0),
+      recordedCostQuantity: show.recordedCostQuantity + quantity,
+      remainingCostQuantity: Math.max(0, show.remainingCostQuantity - quantity),
+      sales: [sale, ...show.sales],
+      customers: show.customers.map(customer => {
+        if (!customer.orders.some(item => item.id === orderId)) return customer;
+        return {
+          ...customer,
+          recordedQuantity: customer.recordedQuantity + quantity,
+          remainingQuantity: Math.max(0, customer.remainingQuantity - quantity),
+          totalCostRmb: customer.totalCostRmb + costRmb,
+          orders: customer.orders.map(item => item.id !== orderId ? item : {
+            ...item,
+            scannedQuantity: item.scannedQuantity + quantity,
+            recordedQuantity: item.recordedQuantity + quantity,
+            remainingQuantity: Math.max(0, item.remainingQuantity - quantity),
+            totalCostRmb: item.totalCostRmb + costRmb,
+            scannedCosts: [sale, ...item.scannedCosts],
+          }),
+        };
+      }),
+    });
   }
 
   openManualSale(item: LiveStreamBidProduct): void {
     if (!this.activeShow()) {
       this.error.set('Start a show cost session before recording a BID sale.');
+      return;
+    }
+    if (this.activeShow()!.customers.length && !this.selectedShowOrder()) {
+      this.error.set('Choose a customer order before recording a BID cost.');
       return;
     }
     this.error.set('');
@@ -290,7 +690,7 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
     this.loading.set(true);
     this.error.set('');
     try {
-      const sale = await this.api.confirmSale(product.id, price, show.id);
+      const sale = await this.api.confirmSale(product.id, price, show.id, this.selectedShowOrderId());
       this.closeManualSale();
       await this.load();
       this.message.set(`Sale recorded for ${product.title}${sale.actualSalePriceUsd === null ? '' : ` at $${sale.actualSalePriceUsd.toFixed(2)}`}.`);
@@ -320,6 +720,36 @@ export class LiveStreamBidProductsPanelComponent implements OnInit {
   }
 
   closeMoveProduct(): void { this.moveOpen.set(false); }
+
+  openImportToLocal(item: LiveStreamBidProduct): void {
+    if (!this.canMove || item.sourceProductId !== null) return;
+    this.importTransferInventory = true;
+    this.importToLocalProduct.set(item);
+  }
+
+  closeImportToLocal(): void { this.importToLocalProduct.set(null); }
+
+  bidWeightOunces(item: LiveStreamBidProduct): number | null {
+    if (item.weightOunces !== null) return item.weightOunces;
+    return item.weightGrams === null ? null : +(item.weightGrams / 28.349523125).toFixed(2);
+  }
+
+  async confirmImportToLocal(): Promise<void> {
+    const item = this.importToLocalProduct();
+    if (!item || !this.canMove || this.loading()) return;
+    this.loading.set(true);
+    this.error.set('');
+    try {
+      const created = await this.api.importToLocal(item.id, this.importTransferInventory);
+      this.importToLocalProduct.set(null);
+      this.message.set(`${created.localInventoryId} (${created.sku}) created from BID|${item.uuid} with ${created.qty} in Local inventory.`);
+      await this.load();
+    } catch (error: any) {
+      this.error.set(error?.status === 409
+        ? 'This BID product is already linked to a Local product. Reload the list.'
+        : typeof error?.error === 'string' ? error.error : 'Could not import this BID product to Local inventory.');
+    } finally { this.loading.set(false); }
+  }
 
   async moveProductChanged(): Promise<void> {
     this.moveLocationKey = '';

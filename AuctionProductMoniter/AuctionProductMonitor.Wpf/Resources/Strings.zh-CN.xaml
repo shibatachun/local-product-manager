@@ -71,6 +71,7 @@
   <sys:String x:Key="ColumnTime">时间</sys:String>
   <sys:String x:Key="ColumnBuyerName">买家名称</sys:String>
   <sys:String x:Key="ColumnProductNumber">商品编号</sys:String>
+  <sys:String x:Key="ColumnProductName">商品名称</sys:String>
   <sys:String x:Key="ColumnQuantity">数量</sys:String>
   <sys:String x:Key="ColumnShipment">包裹 ID</sys:String>
   <sys:String x:Key="ColumnPrintState">打印状态</sys:String>

@@ -10,4 +10,4 @@ Resolve the product through the repository's current database, product services,
 
 Prefer existing application services or read-only database access. The development API commonly uses `http://localhost:5077/api`, but resolve the actual URL from project configuration. If the site is not running, inspect the local database and storage configuration directly.
 
-Create a non-destructive output folder such as `ebay-draft-YYYYMMDD-HHMMSS` inside the verified product directory. Copy or derive outputs there; leave all source files unchanged. Save `listing-draft.md` plus processed images with stable numbered names.
+Create a non-destructive output folder such as `ebay-draft-YYYYMMDD-HHMMSS` inside the verified product directory. Leave source photos unchanged. Save `listing-draft.md` and the Seller Hub Draft CSV. Reference the seller's existing ordinary listing images by path; for supported brooches, add measurement infographics with audits and two AI Example of Use illustrations. Other image outputs require an explicit request.

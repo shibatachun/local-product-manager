@@ -32,6 +32,16 @@ export interface LiveStreamBidProduct {
   updatedAt: string;
 }
 
+export interface ImportedLocalProductResult {
+  productId: number;
+  localInventoryId: string;
+  sku: string;
+  qty: number;
+  cost: number;
+  weightOunces: number | null;
+  note: string;
+}
+
 export interface LiveStreamBidDraftRow {
   sourceProductId: number | null; externalUuid: string | null; actualSku: string | null; title: string; quantity: number; expectedInventory: number; actualInventory: number;
   unitPrice: number; weightGrams: number | null; weightOunces: number | null;
@@ -67,10 +77,12 @@ export interface LiveStreamBidImportConflict {
 export interface LiveStreamBidSale {
   id: number;
   showSessionId: number | null;
+  showOrderId: number | null;
   bidProductId: number;
   productUuid: string;
   productTitle: string;
   quantity: number;
+  soldQuantity: number;
   cost: number | null;
   actualSalePriceUsd: number | null;
   salePriceRmb: number | null;
@@ -81,6 +93,24 @@ export interface LiveStreamBidSale {
   saleDate: string;
   soldAt: string;
   soldBy: string;
+}
+export interface LiveStreamBidManualCost {
+  id: number; quantity: number; unitCost: number; totalCost: number; createdAt: string; createdBy: string;
+}
+export interface LiveStreamBidShowAttachment {
+  id: number; kind: 'price-evidence' | 'shipping-slip' | 'shipping-label';
+  originalFileName: string; contentType: string; uploadedAt: string; uploadedBy: string;
+}
+export interface LiveStreamBidShowOrder {
+  id: number; externalOrderId: string; customerName: string; orderName: string; quantity: number;
+  scannedQuantity: number; manualQuantity: number; recordedQuantity: number; remainingQuantity: number;
+  totalCostRmb: number; scannedCosts: LiveStreamBidSale[]; manualCosts: LiveStreamBidManualCost[];
+  priceEvidence: LiveStreamBidShowAttachment[];
+}
+export interface LiveStreamBidShowCustomer {
+  name: string; totalQuantity: number; recordedQuantity: number; remainingQuantity: number;
+  totalCostRmb: number; orders: LiveStreamBidShowOrder[];
+  shipmentDocuments: LiveStreamBidShowAttachment[];
 }
 export interface CloudCsvFile { remotePath: string; fileName: string; alreadyImported: boolean; }
 
@@ -93,6 +123,8 @@ export interface LiveStreamBidShowSummary {
   endedAt: string | null;
   startedBy: string | null;
   endedBy: string | null;
+  showName: string | null;
+  importedFileName: string | null;
   soldCount: number;
   inventorySold: number;
   totalCostRmb: number;
@@ -101,6 +133,10 @@ export interface LiveStreamBidShowSummary {
   actualRevenueRmb: number;
   realizedProfitRmb: number;
   realizedProfitUsd: number;
+  orderedQuantity: number;
+  recordedCostQuantity: number;
+  remainingCostQuantity: number;
+  customers: LiveStreamBidShowCustomer[];
   sales: LiveStreamBidSale[];
 }
 
@@ -137,8 +173,8 @@ export class LiveStreamBidProductApiService {
     }
   }
 
-  confirmSale(id: number, actualSalePrice: number | null, showSessionId: number): Promise<LiveStreamBidSale> {
-    return firstValueFrom(this.http.post<LiveStreamBidSale>(`${this.baseUrl}/live-stream-bid-products/${id}/confirm-sale`, { actualSalePrice, showSessionId }));
+  confirmSale(id: number, actualSalePrice: number | null, showSessionId: number, showOrderId: number | null = null, quantity = 1): Promise<LiveStreamBidSale> {
+    return firstValueFrom(this.http.post<LiveStreamBidSale>(`${this.baseUrl}/live-stream-bid-products/${id}/confirm-sale`, { actualSalePrice, showSessionId, showOrderId, quantity }));
   }
 
   activeShowSession(): Promise<LiveStreamBidShowSummary | null> {
@@ -151,6 +187,60 @@ export class LiveStreamBidProductApiService {
 
   stopShowSession(id: number): Promise<LiveStreamBidShowSummary> {
     return firstValueFrom(this.http.post<LiveStreamBidShowSummary>(`${this.baseUrl}/live-stream-bid-products/show-sessions/${id}/stop`, {}));
+  }
+
+  importShowReport(file: File): Promise<{ show: LiveStreamBidShowSummary; importedOrders: number; importedCustomers: number; ignoredRows: number }> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<{ show: LiveStreamBidShowSummary; importedOrders: number; importedCustomers: number; ignoredRows: number }>(`${this.baseUrl}/live-stream-bid-products/show-sessions/import`, data));
+  }
+
+  addManualCost(showOrderId: number, quantity: number, unitCost: number): Promise<LiveStreamBidManualCost> {
+    return firstValueFrom(this.http.post<LiveStreamBidManualCost>(`${this.baseUrl}/live-stream-bid-products/show-orders/${showOrderId}/manual-costs`, { quantity, unitCost }));
+  }
+
+  updateManualCost(id: number, unitCost: number): Promise<LiveStreamBidManualCost> {
+    return firstValueFrom(this.http.patch<LiveStreamBidManualCost>(`${this.baseUrl}/live-stream-bid-products/manual-costs/${id}`, { unitCost }));
+  }
+
+  updateScannedCost(id: number, cost: number): Promise<LiveStreamBidSale> {
+    return firstValueFrom(this.http.patch<LiveStreamBidSale>(`${this.baseUrl}/live-stream-bid-products/sales/${id}/cost`, { cost }));
+  }
+
+  updateShowOrderQuantity(showOrderId: number, quantity: number): Promise<void> {
+    return firstValueFrom(this.http.patch<void>(`${this.baseUrl}/live-stream-bid-products/show-orders/${showOrderId}/quantity`, { quantity }));
+  }
+
+  async uploadOrderPriceEvidence(showOrderId: number, file: File): Promise<LiveStreamBidShowAttachment> {
+    const bytes = await this.mediaUpload.readFileBytes(file);
+    const extension = file.name?.match(/\.(jpe?g|png|webp|heic|heif)$/i)?.[1]?.toLowerCase();
+    const typeByExtension: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+      heic: 'image/heic', heif: 'image/heif',
+    };
+    const reportedType = file.type.toLowerCase() === 'image/jpg' ? 'image/jpeg' : file.type.toLowerCase();
+    const contentType = /^(image\/(jpeg|png|webp|heic|heif))$/.test(reportedType)
+      ? reportedType
+      : (extension ? typeByExtension[extension] : '') || 'application/octet-stream';
+    return firstValueFrom(this.http.post<LiveStreamBidShowAttachment>(
+      `${this.baseUrl}/live-stream-bid-products/show-attachments/orders/${showOrderId}/price-evidence/raw`,
+      new Blob([bytes], { type: contentType }),
+      { headers: { 'Content-Type': contentType } }
+    ));
+  }
+
+  uploadShipmentDocument(showId: number, customerName: string, kind: 'shipping-slip' | 'shipping-label', file: File): Promise<LiveStreamBidShowAttachment> {
+    return this.mediaUpload.uploadMultipart<LiveStreamBidShowAttachment>(
+      `${this.baseUrl}/live-stream-bid-products/show-attachments/shows/${showId}/shipment-documents`,
+      [file], 'file', { customerName, kind });
+  }
+
+  showAttachmentUrl(id: number): string {
+    return `${this.baseUrl}/live-stream-bid-products/show-attachments/files/${id}`;
+  }
+
+  deleteManualCost(id: number): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/live-stream-bid-products/manual-costs/${id}`));
   }
 
   adjustActualInventory(id: number, delta: number): Promise<LiveStreamBidProduct> {
@@ -185,6 +275,11 @@ export class LiveStreamBidProductApiService {
 
   moveFromInventory(body: { productId: number; levelId: number; binNumber: number; quantity: number }): Promise<LiveStreamBidProduct> {
     return firstValueFrom(this.http.post<LiveStreamBidProduct>(`${this.baseUrl}/live-stream-bid-products/move-from-inventory`, body));
+  }
+
+  importToLocal(id: number, transferInventory: boolean): Promise<ImportedLocalProductResult> {
+    return firstValueFrom(this.http.post<ImportedLocalProductResult>(
+      `${this.baseUrl}/live-stream-bid-products/${id}/import-to-local`, { transferInventory }));
   }
 
   createBatch(rows: LiveStreamBidDraftRow[], external?: { fileName: string; sha256: string }): Promise<{ batchNumber: string; products: LiveStreamBidProduct[]; regeneratedUuids: LiveStreamBidRegeneratedUuid[] }> {

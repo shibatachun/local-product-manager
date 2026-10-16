@@ -19,7 +19,7 @@
 4. 把模板上的三个文本对象分别绑定到数据库字段 `BuyerName`、`ProductNumber`、`SessionId`；`action` 不需要放到标签上；
 5. 保存模板。数据库连接设置里应能看到该文本文件连接。
 
-建议标签正面突出显示 `ProductNumber`，下一行显示 `BuyerName`，并显示或保留 `SessionId`。
+建议标签正面突出显示 `ProductNumber`，下一行显示 `BuyerName`，并显示或保留 `SessionId`。这里沿用字段名 `ProductNumber` 以兼容现有 `.btw` 模板，但字段值现在优先是 Whatnot 的完整商品名（通常包含末尾 `#编号`），而非只有编号。商品名较长时请在 BarTender 中检查自动换行和字号。
 
 ## 2. 导入和部署 Integration
 
@@ -34,13 +34,14 @@
 
 ```csv
 action,BuyerName,ProductNumber,SessionId
-print,"silentgems","33","LIVE-20260825-160000"
-print,"second_buyer","34","LIVE-20260825-160000"
+print,"silentgems","Blue beads #33","LIVE-20260825-160000"
+print,"second_buyer","Red charms #33","LIVE-20260825-160000"
 ```
 
 - 每次 HTTP 请求的所有 CSV 行由同一个 Print action 处理，因此是一项打印作业，双列纸会按模板的页面顺序填充左右两列；
 - `action` 列现在只记录正式打印行；Print action 不再用 `%action%` 作条件，因为 CSV 输入不会更新旧版 JSON 变量；
 - 数量大于 1 时，中转器会在同一 CSV 中重复该标签行，不会拆成多个打印任务；
+- Show Report 以 `order_id` 去重，不再因不同商品复用同一个 `#编号` 而拒绝导入；旧数据仍保留编号，导入记录可从保存的原始商品名打印；没有可靠商品名的旧直播记录则继续打印编号；
 - 中转器限制每个 bulk 作业最多 1000 张标签。
 
 ## 4. WPF 操作

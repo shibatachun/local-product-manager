@@ -1,0 +1,66 @@
+<section class="finder">
+  <div class="intro">
+    <div><h2>Brooch finder</h2><p>A separate photo-and-location catalog for unidentified brooches. Nothing here changes local inventory.</p></div>
+    <span>{{ records().length }} saved</span>
+  </div>
+
+  <div class="finder-grid">
+    <section class="panel search-panel">
+      <h3>Find a brooch</h3>
+      <p>Photograph one brooch against a plain background, filling most of the frame. Compare the result before picking it.</p>
+      <div class="actions">
+        <app-media-picker label="Take photo" accept="image/*" [capture]="true" [disabled]="busy()" (selected)="find($event)"></app-media-picker>
+        <app-media-picker label="Choose photo" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" [disabled]="busy()" variant="outline" (selected)="find($event)"></app-media-picker>
+      </div>
+      <img class="query-preview" *ngIf="queryPreview()" [src]="queryPreview()" alt="Your search photo" />
+      <div class="results" *ngIf="searched()">
+        <h3>Closest visual matches</h3>
+        <p *ngIf="!matches().length">No reference photos to compare.</p>
+        <article class="result" *ngFor="let match of matches(); let index = index">
+          <img [src]="photoUrl(match.record, match.bestPhotoId)" [alt]="match.record.label || shortId(match.record)" />
+          <div><small>#{{ index + 1 }} · {{ shortId(match.record) }}</small><strong>{{ match.record.label || 'Unidentified brooch' }}</strong><b>{{ match.record.location }}</b><small>Visual similarity {{ match.visualScore }}% · verify manually</small></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel add-panel">
+      <h3>Add an unidentified brooch</h3>
+      <p>Use a temporary name if helpful. The physical position and one real photo are required.</p>
+      <label>Temporary name (optional)<input [(ngModel)]="newLabel" maxlength="100" placeholder="e.g. green beetle / tray 2" /></label>
+      <label>Physical location<input [(ngModel)]="newLocation" maxlength="160" placeholder="e.g. Brooch box B · compartment 3" /></label>
+      <div class="actions">
+        <app-media-picker label="Take reference photo" accept="image/*" [capture]="true" [disabled]="busy()" (selected)="chooseReference($event)"></app-media-picker>
+        <app-media-picker label="Choose reference photo" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" [disabled]="busy()" variant="outline" (selected)="chooseReference($event)"></app-media-picker>
+      </div>
+      <small *ngIf="selectedFile()">Selected: {{ selectedFile()?.name }}</small>
+      <button class="save" type="button" [disabled]="busy() || !newLocation.trim() || !selectedFile()" (click)="create()">{{ busy() ? 'Working…' : 'Save brooch' }}</button>
+    </section>
+  </div>
+
+  <p class="message" role="status" *ngIf="message()">{{ message() }}</p>
+
+  <section class="catalog">
+    <div class="catalog-title"><h3>Saved brooches</h3><small>Tap a card to update its position or add more angles.</small></div>
+    <p class="empty" *ngIf="!records().length">No unidentified brooches saved yet.</p>
+    <div class="cards">
+      <article class="card" *ngFor="let record of records()">
+        <img *ngIf="record.photos.length" [src]="photoUrl(record, record.photos[0].id)" [alt]="record.label || shortId(record)" />
+        <div class="no-photo" *ngIf="!record.photos.length">Photo needed</div>
+        <div class="card-body">
+          <small>{{ shortId(record) }} · {{ record.photos.length }} photo{{ record.photos.length === 1 ? '' : 's' }}</small>
+          <strong>{{ record.label || 'Unidentified brooch' }}</strong>
+          <b>{{ record.location }}</b>
+          <div class="card-actions">
+            <button type="button" (click)="startEdit(record)">Move / rename</button>
+            <app-media-picker *ngIf="record.photos.length < 6" label="Add angle" accept="image/*" [multiple]="true" [disabled]="busy()" variant="outline" (selected)="addPhoto(record, $event)"></app-media-picker>
+          </div>
+          <div class="edit" *ngIf="editId === record.id">
+            <label>Name<input [(ngModel)]="editLabel" maxlength="100" /></label>
+            <label>Location<input [(ngModel)]="editLocation" maxlength="160" /></label>
+            <div class="card-actions"><button type="button" [disabled]="busy() || !editLocation.trim()" (click)="saveEdit()">Save</button><button type="button" (click)="editId = ''">Cancel</button></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+</section>

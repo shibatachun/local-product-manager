@@ -259,7 +259,7 @@ public partial class MainWindow : Window
         });
     }
 
-    private static string SaleKey(SaleEvent sale) => $"{sale.BuyerName.Trim()}|{sale.ProductNumber.Trim()}";
+    private static string SaleKey(SaleEvent sale) => $"{sale.BuyerName.Trim()}|{sale.ProductNumber.Trim()}|{sale.ProductName.Trim()}";
 
     private async Task<bool> SaveScreenshotAsync(ScreenshotCapture capture)
     {

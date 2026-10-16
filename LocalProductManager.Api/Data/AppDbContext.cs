@@ -35,6 +35,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<LiveStreamBidProduct> LiveStreamBidProducts => Set<LiveStreamBidProduct>();
     public DbSet<ImportedBidBatch> ImportedBidBatches => Set<ImportedBidBatch>();
     public DbSet<LiveStreamBidShowSession> LiveStreamBidShowSessions => Set<LiveStreamBidShowSession>();
+    public DbSet<LiveStreamBidShowOrder> LiveStreamBidShowOrders => Set<LiveStreamBidShowOrder>();
+    public DbSet<LiveStreamBidManualCost> LiveStreamBidManualCosts => Set<LiveStreamBidManualCost>();
+    public DbSet<LiveStreamBidShowAttachment> LiveStreamBidShowAttachments => Set<LiveStreamBidShowAttachment>();
     public DbSet<LiveStreamBidSale> LiveStreamBidSales => Set<LiveStreamBidSale>();
     public DbSet<DomesticProductInfo> DomesticProductInfos => Set<DomesticProductInfo>();
 
@@ -102,6 +105,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("shelf_level_inventory");
             entity.HasIndex(item => new { item.ShelfLevelId, item.BinNumber, item.ProductId }).IsUnique();
+            entity.Property(item => item.InventoryChannel).HasMaxLength(16).HasDefaultValue("general").IsRequired();
             entity.HasOne(item => item.ShelfLevel).WithMany(item => item.Inventory)
                 .HasForeignKey(item => item.ShelfLevelId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(item => item.Product).WithMany()
@@ -221,6 +225,47 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(item => item.EndedAt);
             entity.Property(item => item.StartedBy).HasMaxLength(80).IsRequired();
             entity.Property(item => item.EndedBy).HasMaxLength(80);
+            entity.Property(item => item.ShowName).HasMaxLength(300);
+            entity.Property(item => item.ImportedFileName).HasMaxLength(260);
+            entity.Property(item => item.ImportedFileSha256).HasMaxLength(64);
+            entity.HasIndex(item => item.ImportedFileSha256).IsUnique();
+        });
+
+        modelBuilder.Entity<LiveStreamBidShowOrder>(entity =>
+        {
+            entity.ToTable("live_stream_bid_show_orders");
+            entity.HasIndex(item => new { item.ShowSessionId, item.ExternalOrderId }).IsUnique();
+            entity.HasIndex(item => new { item.ShowSessionId, item.CustomerName });
+            entity.Property(item => item.ExternalOrderId).HasMaxLength(160).IsRequired();
+            entity.Property(item => item.CustomerName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.OrderName).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.PlacedAt).HasMaxLength(80);
+            entity.HasOne(item => item.ShowSession).WithMany(item => item.Orders).HasForeignKey(item => item.ShowSessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LiveStreamBidManualCost>(entity =>
+        {
+            entity.ToTable("live_stream_bid_manual_costs");
+            entity.HasIndex(item => item.ShowOrderId);
+            entity.Property(item => item.UnitCost).HasPrecision(12, 2);
+            entity.Property(item => item.CreatedBy).HasMaxLength(80).IsRequired();
+            entity.HasOne(item => item.ShowOrder).WithMany(item => item.ManualCosts).HasForeignKey(item => item.ShowOrderId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LiveStreamBidShowAttachment>(entity =>
+        {
+            entity.ToTable("live_stream_bid_show_attachments");
+            entity.HasIndex(item => item.ShowSessionId);
+            entity.HasIndex(item => item.ShowOrderId);
+            entity.HasIndex(item => new { item.ShowSessionId, item.CustomerName });
+            entity.Property(item => item.CustomerName).HasMaxLength(200);
+            entity.Property(item => item.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.StoredFileName).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.OriginalFileName).HasMaxLength(260).IsRequired();
+            entity.Property(item => item.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.UploadedBy).HasMaxLength(80).IsRequired();
+            entity.HasOne(item => item.ShowSession).WithMany().HasForeignKey(item => item.ShowSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.ShowOrder).WithMany().HasForeignKey(item => item.ShowOrderId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<LiveStreamBidSale>(entity =>
@@ -228,6 +273,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("live_stream_bid_sales");
             entity.HasIndex(item => item.BidProductId);
             entity.HasIndex(item => item.ShowSessionId);
+            entity.HasIndex(item => item.ShowOrderId);
             entity.HasIndex(item => item.SaleDate);
             entity.Property(item => item.ProductUuid).HasMaxLength(64).IsRequired();
             entity.Property(item => item.ProductTitle).HasMaxLength(1000).IsRequired();
@@ -240,6 +286,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.SoldBy).HasMaxLength(80).IsRequired();
             entity.HasOne(item => item.BidProduct).WithMany().HasForeignKey(item => item.BidProductId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.ShowSession).WithMany(item => item.Sales).HasForeignKey(item => item.ShowSessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ShowOrder).WithMany(item => item.ScannedCosts).HasForeignKey(item => item.ShowOrderId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ProductDetailProfile>(entity =>

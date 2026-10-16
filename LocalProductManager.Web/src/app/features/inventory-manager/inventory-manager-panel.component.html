@@ -120,7 +120,7 @@
         <div class="inventory-list" *ngIf="selectedBinItems().length">
           <div *ngFor="let item of selectedBinItems()" [class.selected]="inventoryForm.productId === item.productId" (click)="selectInventoryItem(item)">
             <button class="inventory-product-link" type="button" (click)="selectInventoryItem(item)">
-              <strong>{{ item.productName }}</strong><code>{{ item.sku }}</code>
+              <strong>{{ item.productName }}</strong><code>{{ item.sku }}</code><small *ngIf="item.inventoryChannel !== 'general'">{{ item.inventoryChannel === 'walmart' ? 'Walmart inventory' : 'eBay inventory' }}</small>
             </button>
             <div class="inventory-item-actions"><b>{{ item.qty }}</b><button class="details-button" type="button" (click)="$event.stopPropagation(); showProductDetail(item.productId)">Details</button><button type="button" (click)="$event.stopPropagation(); removeInventoryItem(item)" [disabled]="loading()">Remove</button></div>
           </div>
@@ -139,6 +139,7 @@
             </select>
           </label>
           <label>Current quantity<input type="number" min="0" step="1" [(ngModel)]="inventoryForm.qty" /></label>
+          <label>Inventory for<select [(ngModel)]="inventoryForm.inventoryChannel"><option value="general">General</option><option value="walmart">Walmart</option><option value="ebay">eBay</option></select></label>
           <button class="save-quantity-button" type="button" (click)="saveInventory()" [disabled]="!inventoryForm.productId || loading()">Set quantity</button>
           <div class="stock-adjustment">
             <label>Stock movement quantity<input type="number" min="1" step="1" [(ngModel)]="adjustmentForm.qty" /></label>

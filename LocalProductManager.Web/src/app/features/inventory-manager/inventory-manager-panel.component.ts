@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, ElementRef, HostListener, inject, input, output, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { InventoryApiService, InventoryHistoryEntry } from '../../core/inventory-api.service';
+import { InventoryApiService, InventoryChannel, InventoryHistoryEntry } from '../../core/inventory-api.service';
 import { ProductListItem, ShelfDetail, ShelfInventoryItem, ShelfLevel, Warehouse, WarehouseShelf } from '../../core/models';
 
 @Component({
@@ -31,7 +31,7 @@ export class InventoryManagerPanelComponent {
   readonly historyOperation = signal('');
   readonly warehouseName = signal('Main Warehouse');
   readonly shelfForm = { zoneCode: 'A', rowNumber: 1, levelCount: 5 };
-  readonly inventoryForm = { productId: null as number | null, qty: 0 };
+  readonly inventoryForm = { productId: null as number | null, qty: 0, inventoryChannel: 'general' as InventoryChannel };
   readonly adjustmentForm = { qty: 1 };
   readonly totalQty = computed(() => this.warehouse()?.shelves.reduce((sum, shelf) => sum + shelf.totalQty, 0) ?? 0);
   readonly selectedBinItems = computed(() =>
@@ -261,6 +261,7 @@ export class InventoryManagerPanelComponent {
     const item = this.selectedLevel()?.items.find(row => row.binNumber === binNumber);
     this.inventoryForm.productId = item?.productId ?? this.products()[0]?.id ?? null;
     this.inventoryForm.qty = item?.qty ?? 0;
+    this.inventoryForm.inventoryChannel = item?.inventoryChannel ?? 'general';
   }
 
   binQty(binNumber: number): number {
@@ -273,11 +274,13 @@ export class InventoryManagerPanelComponent {
     const row = this.selectedLevel()?.items.find(item =>
       item.binNumber === this.selectedBin() && item.productId === Number(productId));
     this.inventoryForm.qty = row?.qty ?? 0;
+    this.inventoryForm.inventoryChannel = row?.inventoryChannel ?? 'general';
   }
 
   selectInventoryItem(item: ShelfInventoryItem): void {
     this.inventoryForm.productId = item.productId;
     this.inventoryForm.qty = item.qty;
+    this.inventoryForm.inventoryChannel = item.inventoryChannel;
   }
 
   async saveInventory(): Promise<void> {
@@ -285,7 +288,7 @@ export class InventoryManagerPanelComponent {
     const productId = Number(this.inventoryForm.productId);
     if (!level || !productId) return;
     const updated = await this.run(async () =>
-      this.api.setInventory(level.id, productId, this.inventoryForm.qty, this.selectedBin()));
+      this.api.setInventory(level.id, productId, this.inventoryForm.qty, this.selectedBin(), this.inventoryForm.inventoryChannel));
     if (!updated) return;
     this.selectedLevel.set(updated);
     const shelf = this.selectedShelf();
@@ -310,7 +313,7 @@ export class InventoryManagerPanelComponent {
 
     const delta = direction === 'in' ? quantity : -quantity;
     const updated = await this.run(() =>
-      this.api.adjustInventory(level.id, productId, delta, this.selectedBin()));
+      this.api.adjustInventory(level.id, productId, delta, this.selectedBin(), this.inventoryForm.inventoryChannel));
     if (!updated) return;
 
     this.applyUpdatedLevel(updated);

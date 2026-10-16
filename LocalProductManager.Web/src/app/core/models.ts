@@ -133,6 +133,7 @@ export interface ShelfInventoryItem {
   productName: string;
   qty: number;
   binNumber: number;
+  inventoryChannel: 'general' | 'walmart' | 'ebay';
 }
 
 export interface ProductExtendedData {

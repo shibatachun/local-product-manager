@@ -11,6 +11,7 @@ public sealed class SaleEvent
     public string SessionId { get; set; } = "";
     public string BuyerName { get; set; } = "";
     public string ProductNumber { get; set; } = "";
+    public string ProductName { get; set; } = "";
     public DateTimeOffset DetectedAt { get; set; }
     public string SourceText { get; set; } = "";
     public string PageUrl { get; set; } = "";
@@ -18,5 +19,10 @@ public sealed class SaleEvent
     public string LocalTime => !string.IsNullOrWhiteSpace(ReportPlacedAt)
         ? ReportPlacedAt
         : DetectedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    public string PrintProductName => !string.IsNullOrWhiteSpace(ProductName)
+        ? ProductName.Trim()
+        : ReportRowNumber > 0 && !string.IsNullOrWhiteSpace(SourceText)
+            ? SourceText.Trim()
+            : ProductNumber.Trim();
     public string PrintState => PrintedAt.HasValue ? LanguageManager.Get("Printed") : LanguageManager.Get("NotPrinted");
 }

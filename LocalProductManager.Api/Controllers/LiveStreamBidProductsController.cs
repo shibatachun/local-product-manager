@@ -13,7 +13,7 @@ namespace LocalProductManager.Api.Controllers;
 
 [ApiController]
 [Route("api/live-stream-bid-products")]
-public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamBidProductImportService importer, AuthService auth, ExchangeRateService exchangeRates, InventoryWriteService inventoryWrites, IHttpClientFactory httpClientFactory) : ControllerBase
+public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamBidProductImportService importer, WhatnotShowCostImportService showImporter, AuthService auth, ExchangeRateService exchangeRates, InventoryWriteService inventoryWrites, IHttpClientFactory httpClientFactory) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LiveStreamBidProductDto>>> GetAll(CancellationToken cancellationToken)
@@ -56,25 +56,39 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     public async Task<ActionResult<LiveStreamBidSaleDto>> ConfirmSale(int id, ConfirmLiveStreamBidSaleRequest request, CancellationToken cancellationToken)
     {
         if (request.ActualSalePrice < 0) return BadRequest("Actual sale price cannot be negative.");
+        if (request.Quantity < 1) return BadRequest("Sold quantity must be at least 1.");
         if (!request.ShowSessionId.HasValue)
             return Conflict("Start a BID show cost session before recording sales.");
         var show = await db.LiveStreamBidShowSessions.FirstOrDefaultAsync(
             item => item.Id == request.ShowSessionId.Value, cancellationToken);
         if (show is null) return NotFound("The BID show cost session was not found.");
         if (show.EndedAt.HasValue) return Conflict("This BID show cost session has already been settled.");
+        var hasImportedOrders = await db.LiveStreamBidShowOrders.AsNoTracking()
+            .AnyAsync(item => item.ShowSessionId == show.Id, cancellationToken);
+        LiveStreamBidShowOrder? showOrder = null;
+        if (hasImportedOrders)
+        {
+            if (!request.ShowOrderId.HasValue)
+                return Conflict("Choose a customer order before confirming this scanned cost.");
+            showOrder = await db.LiveStreamBidShowOrders.FirstOrDefaultAsync(
+                item => item.Id == request.ShowOrderId.Value && item.ShowSessionId == show.Id, cancellationToken);
+            if (showOrder is null) return NotFound("The selected customer order was not found in this show.");
+            if (request.Quantity > showOrder.Quantity - showOrder.RecordedQuantity)
+                return Conflict($"Only {Math.Max(0, showOrder.Quantity - showOrder.RecordedQuantity)} item(s) remain in this customer order.");
+        }
         var product = await db.LiveStreamBidProducts.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (product is null) return NotFound();
-        if (product.Inventory <= 0) return Conflict("This bid product has no expected inventory remaining.");
-        if (product.ActualInventory <= 0) return Conflict("This bid product has not been physically received or has no actual inventory remaining.");
+        if (product.Inventory < request.Quantity) return Conflict($"Only {product.Inventory} expected inventory item(s) remain for this BID product.");
         var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var effectiveCost = EffectiveCost(product);
+        // Show cost capture counts merchandise only. Keep TotalCost for suggested-price calculations.
+        decimal? effectiveCost = decimal.Round(product.UnitPrice * product.Quantity * request.Quantity, 2);
         decimal? rate = null;
         DateOnly? rateDate = null;
         decimal? salePriceRmb = null;
         decimal? profitRmb = null;
         decimal? profitUsd = null;
-        if (effectiveCost.HasValue || request.ActualSalePrice.HasValue)
+        if (request.ActualSalePrice.HasValue)
         {
             try
             {
@@ -93,16 +107,19 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, "The live exchange rate is unavailable. Please retry before confirming this sale.");
+                // Cost capture must remain available during a show even if the optional exchange-rate provider is offline.
+                // The existing history backfill will populate conversion and profit fields later.
             }
         }
         var sale = new LiveStreamBidSale
         {
             ShowSessionId = show.Id,
+            ShowOrderId = showOrder?.Id,
             BidProductId = product.Id,
             ProductUuid = product.Uuid,
             ProductTitle = product.Title,
             Quantity = product.Quantity,
+            SoldQuantity = request.Quantity,
             Cost = effectiveCost,
             ActualSalePrice = request.ActualSalePrice,
             SalePriceRmb = salePriceRmb,
@@ -114,13 +131,36 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             SoldAt = now,
             SoldBy = user.UserName
         };
-        product.Inventory -= 1;
-        product.ActualInventory -= 1;
-        product.IsSold = product.Inventory == 0;
-        product.SoldAt = product.IsSold ? now : null;
-        product.UpdatedAt = now;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        if (showOrder is not null)
+        {
+            var allocated = await db.LiveStreamBidShowOrders
+                .Where(item => item.Id == showOrder.Id && item.RecordedQuantity + request.Quantity <= item.Quantity)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(
+                    item => item.RecordedQuantity, item => item.RecordedQuantity + request.Quantity), cancellationToken);
+            if (allocated == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return Conflict("This customer order no longer has enough unrecorded quantity. Reload and try again.");
+            }
+        }
+        var inventoryUpdated = await db.LiveStreamBidProducts
+            .Where(item => item.Id == product.Id && item.Inventory >= request.Quantity)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Inventory, item => item.Inventory - request.Quantity)
+                .SetProperty(item => item.ActualInventory,
+                    item => item.ActualInventory >= request.Quantity ? item.ActualInventory - request.Quantity : 0)
+                .SetProperty(item => item.IsSold, item => item.Inventory == request.Quantity)
+                .SetProperty(item => item.SoldAt, item => item.Inventory == request.Quantity ? now : null)
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+        if (inventoryUpdated == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Conflict("BID inventory changed before confirmation. Reload and try again.");
+        }
         db.LiveStreamBidSales.Add(sale);
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return Ok(ToSaleDto(sale));
     }
 
@@ -134,7 +174,7 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             .Where(item => item.ShowSessionId == show.Id).ToListAsync(cancellationToken);
         sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
         await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        return Ok(BuildShowSummary(show, sales, true));
+        return Ok(await BuildShowSummaryAsync(show, sales, true, cancellationToken));
     }
 
     [HttpPost("show-sessions/start")]
@@ -161,7 +201,48 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         {
             return Conflict("Another BID show cost session was started at the same time. Reload the page to resume it.");
         }
-        return Ok(BuildShowSummary(show, [], true));
+        return Ok(await BuildShowSummaryAsync(show, [], true, cancellationToken));
+    }
+
+    [HttpPost("show-sessions/import")]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<ActionResult<LiveStreamBidShowImportResult>> ImportShowReport(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file.Length == 0) return BadRequest("Choose a non-empty Whatnot show report CSV.");
+        if (await db.LiveStreamBidShowSessions.AsNoTracking().AnyAsync(item => item.EndedAt == null, cancellationToken))
+            return Conflict("Settle the active show before importing another show report.");
+        ParsedWhatnotShow parsed;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            parsed = showImporter.Read(stream);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or DecoderFallbackException)
+        { return BadRequest(ex.Message); }
+        if (await db.LiveStreamBidShowSessions.AsNoTracking().AnyAsync(
+            item => item.ImportedFileSha256 == parsed.Sha256, cancellationToken))
+            return Conflict("This exact Whatnot show report has already been imported.");
+        var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
+        var lastNumber = await db.LiveStreamBidShowSessions.AsNoTracking()
+            .Where(item => item.ShowDate == parsed.ShowDate).Select(item => (int?)item.ShowNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var show = new LiveStreamBidShowSession
+        {
+            ShowDate = parsed.ShowDate,
+            ShowNumber = lastNumber + 1,
+            ShowName = Path.GetFileNameWithoutExtension(file.FileName),
+            ImportedFileName = Path.GetFileName(file.FileName),
+            ImportedFileSha256 = parsed.Sha256,
+            StartedAt = DateTimeOffset.UtcNow,
+            StartedBy = user.UserName,
+            Orders = parsed.Orders.ToList()
+        };
+        db.LiveStreamBidShowSessions.Add(show);
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException) { return Conflict("This show report was imported by another request. Reload the page."); }
+        var summary = await BuildShowSummaryAsync(show, [], true, cancellationToken);
+        return Ok(new LiveStreamBidShowImportResult(summary, parsed.Orders.Count,
+            parsed.Orders.Select(item => item.CustomerName).Distinct(StringComparer.OrdinalIgnoreCase).Count(), parsed.IgnoredRows));
     }
 
     [HttpPost("show-sessions/{showSessionId:int}/stop")]
@@ -170,6 +251,30 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         var show = await db.LiveStreamBidShowSessions.FirstOrDefaultAsync(item => item.Id == showSessionId, cancellationToken);
         if (show is null) return NotFound();
         if (show.EndedAt.HasValue) return Conflict("This BID show cost session has already been settled.");
+        var hasOrders = await db.LiveStreamBidShowOrders.AsNoTracking()
+            .AnyAsync(item => item.ShowSessionId == show.Id, cancellationToken);
+        var hasSales = await db.LiveStreamBidSales.AsNoTracking()
+            .AnyAsync(item => item.ShowSessionId == show.Id, cancellationToken);
+        if (!hasOrders && !hasSales)
+        {
+            var emptySummary = await BuildShowSummaryAsync(show, [], true, cancellationToken);
+            db.LiveStreamBidShowSessions.Remove(show);
+            await db.SaveChangesAsync(cancellationToken);
+            return Ok(emptySummary);
+        }
+        var incomplete = await db.LiveStreamBidShowOrders.AsNoTracking()
+            .Where(order => order.ShowSessionId == show.Id)
+            .Select(order => new
+            {
+                order.CustomerName,
+                order.OrderName,
+                order.Quantity,
+                Recorded = order.RecordedQuantity
+            })
+            .Where(item => item.Recorded != item.Quantity)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (incomplete is not null)
+            return Conflict($"Cannot settle: {incomplete.CustomerName} / {incomplete.OrderName} has {incomplete.Recorded} of {incomplete.Quantity} cost item(s) recorded.");
         var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
         show.EndedAt = DateTimeOffset.UtcNow;
         show.EndedBy = user.UserName;
@@ -178,7 +283,102 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             .Where(item => item.ShowSessionId == show.Id).ToListAsync(cancellationToken);
         sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
         await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        return Ok(BuildShowSummary(show, sales, true));
+        return Ok(await BuildShowSummaryAsync(show, sales, true, cancellationToken));
+    }
+
+    [HttpPatch("show-orders/{showOrderId:int}/quantity")]
+    public async Task<IActionResult> UpdateShowOrderQuantity(int showOrderId, UpdateLiveStreamBidShowOrderQuantityRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Quantity < 1) return BadRequest("Order item quantity must be at least 1.");
+        var order = await db.LiveStreamBidShowOrders.AsNoTracking()
+            .Where(item => item.Id == showOrderId)
+            .Select(item => new { item.RecordedQuantity, item.ShowSession.EndedAt })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (order is null) return NotFound();
+        if (order.EndedAt.HasValue) return Conflict("Settled show orders cannot be changed.");
+        if (request.Quantity < order.RecordedQuantity)
+            return Conflict($"Quantity cannot be below the {order.RecordedQuantity} item(s) already recorded.");
+        var updated = await db.LiveStreamBidShowOrders
+            .Where(item => item.Id == showOrderId && item.ShowSession.EndedAt == null && item.RecordedQuantity <= request.Quantity)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.Quantity, request.Quantity), cancellationToken);
+        return updated == 0 ? Conflict("This order changed before the quantity was saved. Reload and try again.") : NoContent();
+    }
+
+    [HttpPost("show-orders/{showOrderId:int}/manual-costs")]
+    public async Task<ActionResult<LiveStreamBidManualCostDto>> AddManualCost(int showOrderId, AddLiveStreamBidManualCostRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Quantity < 1) return BadRequest("Quantity must be at least 1.");
+        if (request.UnitCost < 0) return BadRequest("Unit cost cannot be negative.");
+        var order = await db.LiveStreamBidShowOrders.Include(item => item.ShowSession)
+            .FirstOrDefaultAsync(item => item.Id == showOrderId, cancellationToken);
+        if (order is null) return NotFound();
+        if (order.ShowSession.EndedAt.HasValue) return Conflict("This show has already been settled.");
+        if (request.Quantity > order.Quantity - order.RecordedQuantity)
+            return Conflict($"Only {Math.Max(0, order.Quantity - order.RecordedQuantity)} item(s) remain without a cost.");
+        var user = await auth.GetOrCreateCurrentUserAsync(HttpContext, cancellationToken);
+        var entry = new LiveStreamBidManualCost
+        {
+            ShowOrderId = order.Id, Quantity = request.Quantity,
+            UnitCost = decimal.Round(request.UnitCost, 2), CreatedBy = user.UserName
+        };
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var allocated = await db.LiveStreamBidShowOrders
+            .Where(item => item.Id == order.Id && item.RecordedQuantity + request.Quantity <= item.Quantity)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                item => item.RecordedQuantity, item => item.RecordedQuantity + request.Quantity), cancellationToken);
+        if (allocated == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Conflict("This customer order no longer has enough unrecorded quantity. Reload and try again.");
+        }
+        db.LiveStreamBidManualCosts.Add(entry);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(ToManualCostDto(entry));
+    }
+
+    [HttpDelete("manual-costs/{id:int}")]
+    public async Task<IActionResult> DeleteManualCost(int id, CancellationToken cancellationToken)
+    {
+        var entry = await db.LiveStreamBidManualCosts.Include(item => item.ShowOrder).ThenInclude(item => item.ShowSession)
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (entry is null) return NotFound();
+        if (entry.ShowOrder.ShowSession.EndedAt.HasValue) return Conflict("Settled show costs cannot be changed.");
+        entry.ShowOrder.RecordedQuantity = Math.Max(0, entry.ShowOrder.RecordedQuantity - entry.Quantity);
+        db.LiveStreamBidManualCosts.Remove(entry);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPatch("manual-costs/{id:int}")]
+    public async Task<ActionResult<LiveStreamBidManualCostDto>> UpdateManualCost(
+        int id, UpdateLiveStreamBidManualCostRequest request, CancellationToken cancellationToken)
+    {
+        if (request.UnitCost < 0) return BadRequest("Unit cost cannot be negative.");
+        var entry = await db.LiveStreamBidManualCosts.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (entry is null) return NotFound();
+        entry.UnitCost = decimal.Round(request.UnitCost, 2);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToManualCostDto(entry));
+    }
+
+    [HttpPatch("sales/{id:int}/cost")]
+    public async Task<ActionResult<LiveStreamBidSaleDto>> UpdateScannedCost(
+        int id, UpdateLiveStreamBidScannedCostRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Cost < 0) return BadRequest("Cost cannot be negative.");
+        var sale = await db.LiveStreamBidSales.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (sale is null) return NotFound();
+        if (!sale.ShowOrderId.HasValue) return Conflict("Only scanned costs linked to a customer order can be edited here.");
+        sale.Cost = decimal.Round(request.Cost, 2);
+        if (sale.ActualSalePrice.HasValue && sale.ExchangeRateRmbToUsd is > 0)
+        {
+            sale.SalePriceRmb = decimal.Round(sale.ActualSalePrice.Value / sale.ExchangeRateRmbToUsd.Value, 2);
+            sale.Profit = sale.SalePriceRmb.Value - sale.Cost.Value;
+            sale.ProfitUsd = sale.ActualSalePrice.Value - decimal.Round(sale.Cost.Value * sale.ExchangeRateRmbToUsd.Value, 2);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToSaleDto(sale));
     }
 
     [HttpGet("sales/today")]
@@ -191,16 +391,15 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     [HttpGet("sales/history")]
     public async Task<ActionResult<IReadOnlyList<LiveStreamBidDailySummaryDto>>> SalesHistory(CancellationToken cancellationToken)
     {
-        var sales = await db.LiveStreamBidSales.ToListAsync(cancellationToken);
-        sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
-        var shows = await db.LiveStreamBidShowSessions.AsNoTracking().ToListAsync(cancellationToken);
-        await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        var dates = sales.Select(item => item.SaleDate).Concat(shows.Select(item => item.ShowDate)).Distinct().OrderByDescending(item => item);
-        return Ok(dates.Select(date => BuildSummary(
-            date,
-            sales.Where(item => item.SaleDate == date),
-            shows.Where(item => item.ShowDate == date),
-            false)).ToArray());
+        var saleDates = await db.LiveStreamBidSales.AsNoTracking().Select(item => item.SaleDate).Distinct().ToListAsync(cancellationToken);
+        var showDates = await db.LiveStreamBidShowSessions.AsNoTracking()
+            .Where(show => db.LiveStreamBidShowOrders.Any(order => order.ShowSessionId == show.Id)
+                || db.LiveStreamBidSales.Any(sale => sale.ShowSessionId == show.Id))
+            .Select(item => item.ShowDate).Distinct().ToListAsync(cancellationToken);
+        var result = new List<LiveStreamBidDailySummaryDto>();
+        foreach (var date in saleDates.Concat(showDates).Distinct().OrderByDescending(item => item))
+            result.Add(await SummaryForDateAsync(date, false, cancellationToken));
+        return Ok(result);
     }
 
     [HttpGet("sales/by-date")]
@@ -215,13 +414,22 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         var sale = await db.LiveStreamBidSales.FirstOrDefaultAsync(item => item.Id == saleId, cancellationToken);
         if (sale is null) return NotFound();
         var product = await db.LiveStreamBidProducts.FirstOrDefaultAsync(item => item.Id == sale.BidProductId, cancellationToken);
+        var order = sale.ShowOrderId.HasValue
+            ? await db.LiveStreamBidShowOrders.FirstOrDefaultAsync(item => item.Id == sale.ShowOrderId.Value, cancellationToken)
+            : null;
+        if (order is not null) order.RecordedQuantity = Math.Max(0, order.RecordedQuantity - sale.SoldQuantity);
+        if (product is not null)
+        {
+            product.Inventory += sale.SoldQuantity;
+            product.ActualInventory += sale.SoldQuantity;
+        }
         db.LiveStreamBidSales.Remove(sale);
         await db.SaveChangesAsync(cancellationToken);
         if (product is not null)
         {
             var latestSale = await db.LiveStreamBidSales.AsNoTracking().Where(item => item.BidProductId == product.Id)
                 .OrderByDescending(item => item.SoldAt).Select(item => (DateTimeOffset?)item.SoldAt).FirstOrDefaultAsync(cancellationToken);
-            product.IsSold = latestSale.HasValue;
+            product.IsSold = product.Inventory == 0;
             product.SoldAt = latestSale;
             product.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
@@ -514,6 +722,72 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
             : Ok(ToDto(bidProduct));
     }
 
+    [HttpPost("{id:int}/import-to-local")]
+    public async Task<ActionResult<ImportLiveStreamBidProductToLocalResult>> ImportToLocal(
+        int id, ImportLiveStreamBidProductToLocalRequest request, CancellationToken cancellationToken)
+    {
+        if (!await auth.CanManageStorageAsync(HttpContext, cancellationToken))
+            return StatusCode(StatusCodes.Status403Forbidden, "Inventory management permission is required.");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
+        var bidProduct = await db.LiveStreamBidProducts.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (bidProduct is null) return NotFound();
+        if (bidProduct.SourceProductId.HasValue)
+            return Conflict("This BID product is already linked to a Local product.");
+        var uuid = NormalizeBidCode(bidProduct.Uuid);
+        var note = $"BID UUID: {uuid}";
+        if (await db.Products.AsNoTracking().AnyAsync(item => item.Note == note, cancellationToken))
+            return Conflict("A Local product with this BID UUID already exists.");
+        if (string.IsNullOrWhiteSpace(bidProduct.Title) || bidProduct.Title.Trim().Length > 256)
+            return BadRequest("The BID title must be 1–256 characters to become a Local product name.");
+        if (bidProduct.Quantity < 1 || bidProduct.ActualInventory < 0 || bidProduct.UnitPrice < 0)
+            return BadRequest("The BID product has invalid quantity, actual inventory, or unit price.");
+
+        decimal cost;
+        try { cost = decimal.Round(checked(bidProduct.UnitPrice * bidProduct.Quantity), 2); }
+        catch (OverflowException) { return BadRequest("The calculated Local product cost is too large."); }
+        if (cost > 99_999_999.99m)
+            return BadRequest("The calculated Local product cost exceeds the Local product limit.");
+        var weightOunces = bidProduct.WeightOunces ??
+            (bidProduct.WeightGrams.HasValue
+                ? decimal.Round(bidProduct.WeightGrams.Value / 28.349523125m, 2)
+                : null);
+        if (weightOunces < 0)
+            return BadRequest("The BID product weight cannot be negative.");
+
+        var categoryNumber = await ProductInventoryCategorySchema.NextNumberAsync(
+            db, ProductInventoryCategories.Unknown, cancellationToken);
+        var localProduct = new Product
+        {
+            Sku = $"PENDING-{Guid.NewGuid():N}",
+            ProductName = bidProduct.Title.Trim(),
+            InventoryCategory = ProductInventoryCategories.Unknown,
+            CategoryInventoryId = ProductInventoryCategories.BuildId(ProductInventoryCategories.Unknown, categoryNumber),
+            Cost = cost,
+            Qty = bidProduct.ActualInventory,
+            Weight = weightOunces,
+            Note = note,
+            ReadyToList = false,
+            ImageSource = "local"
+        };
+        db.Products.Add(localProduct);
+        await db.SaveChangesAsync(cancellationToken);
+        localProduct.Sku = $"LPM-{localProduct.Id:D6}";
+        localProduct.LocalInventoryId = ProductService.BuildLocalInventoryId(localProduct.Id);
+        bidProduct.SourceProductId = localProduct.Id;
+        if (request.TransferInventory)
+        {
+            bidProduct.Inventory = 0;
+            bidProduct.ActualInventory = 0;
+        }
+        bidProduct.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(new ImportLiveStreamBidProductToLocalResult(
+            localProduct.Id, localProduct.LocalInventoryId, localProduct.Sku,
+            localProduct.Qty, cost, weightOunces, note));
+    }
+
     [HttpPost("{id:int}/actual-inventory")]
     public async Task<ActionResult<LiveStreamBidProductDto>> AdjustActualInventory(
         int id, AdjustLiveStreamBidActualInventoryRequest request, CancellationToken cancellationToken)
@@ -603,18 +877,31 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     }
 
     private static LiveStreamBidSaleDto ToSaleDto(LiveStreamBidSale item) => new(
-        item.Id, item.ShowSessionId, item.BidProductId, item.ProductUuid, item.ProductTitle, item.Quantity, item.Cost,
+        item.Id, item.ShowSessionId, item.ShowOrderId, item.BidProductId, item.ProductUuid, item.ProductTitle, item.Quantity, item.SoldQuantity, item.Cost,
         item.ActualSalePrice, item.SalePriceRmb, item.ExchangeRateRmbToUsd, item.ExchangeRateDate,
         item.Profit, item.ProfitUsd, item.SaleDate, item.SoldAt, item.SoldBy);
+
+    private static LiveStreamBidManualCostDto ToManualCostDto(LiveStreamBidManualCost item) => new(
+        item.Id, item.Quantity, item.UnitCost, item.Quantity * item.UnitCost, item.CreatedAt, item.CreatedBy);
+
+    private static LiveStreamBidShowAttachmentDto ToShowAttachmentDto(LiveStreamBidShowAttachment item) => new(
+        item.Id, item.Kind, item.OriginalFileName, item.ContentType, item.UploadedAt, item.UploadedBy);
 
     private async Task<LiveStreamBidDailySummaryDto> SummaryForDateAsync(DateOnly date, bool includeSales, CancellationToken cancellationToken)
     {
         var sales = await db.LiveStreamBidSales.Where(item => item.SaleDate == date).ToListAsync(cancellationToken);
         sales.Sort((left, right) => right.SoldAt.CompareTo(left.SoldAt));
         var shows = await db.LiveStreamBidShowSessions.AsNoTracking().Where(item => item.ShowDate == date)
+            .Where(show => db.LiveStreamBidShowOrders.Any(order => order.ShowSessionId == show.Id)
+                || db.LiveStreamBidSales.Any(sale => sale.ShowSessionId == show.Id))
             .OrderBy(item => item.ShowNumber).ToListAsync(cancellationToken);
         await PopulateMissingExchangeRatesAsync(sales, cancellationToken);
-        return BuildSummary(date, sales, shows, includeSales);
+        var showSummaries = new List<LiveStreamBidShowSummaryDto>();
+        foreach (var show in shows)
+            showSummaries.Add(await BuildShowSummaryAsync(show, sales.Where(item => item.ShowSessionId == show.Id), includeSales, cancellationToken));
+        var legacySales = sales.Where(item => item.ShowSessionId == null).ToArray();
+        if (legacySales.Length > 0) showSummaries.Insert(0, BuildLegacyShowSummary(date, legacySales, includeSales));
+        return BuildSummary(date, sales, showSummaries, includeSales);
     }
 
     private async Task PopulateMissingExchangeRatesAsync(List<LiveStreamBidSale> sales, CancellationToken cancellationToken)
@@ -646,38 +933,80 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
     private static LiveStreamBidDailySummaryDto BuildSummary(
         DateOnly date,
         IEnumerable<LiveStreamBidSale> source,
-        IEnumerable<LiveStreamBidShowSession> showSource,
+        IReadOnlyList<LiveStreamBidShowSummaryDto> shows,
         bool includeSales)
     {
         var sales = source.ToArray();
-        var shows = showSource.OrderBy(item => item.ShowNumber)
-            .Select(show => BuildShowSummary(show, sales.Where(item => item.ShowSessionId == show.Id), includeSales))
-            .ToList();
-        var legacySales = sales.Where(item => item.ShowSessionId == null).ToArray();
-        if (legacySales.Length > 0)
-            shows.Insert(0, BuildLegacyShowSummary(date, legacySales, includeSales));
         return new LiveStreamBidDailySummaryDto(
-            date, sales.Length, sales.Length, sales.Sum(item => item.Cost ?? 0),
-            sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
-            sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
-            sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
+            date, sales.Length, shows.Sum(item => item.InventorySold), shows.Sum(item => item.TotalCostRmb),
+            shows.Sum(item => item.TotalCostUsd), shows.Sum(item => item.ActualRevenueUsd),
+            shows.Sum(item => item.ActualRevenueRmb), shows.Sum(item => item.RealizedProfitRmb),
+            shows.Sum(item => item.RealizedProfitUsd),
             shows,
             includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
     }
 
-    private static LiveStreamBidShowSummaryDto BuildShowSummary(
+    private async Task<LiveStreamBidShowSummaryDto> BuildShowSummaryAsync(
         LiveStreamBidShowSession show,
         IEnumerable<LiveStreamBidSale> source,
-        bool includeSales)
+        bool includeSales,
+        CancellationToken cancellationToken)
     {
         var sales = source.ToArray();
+        var orders = await db.LiveStreamBidShowOrders.AsNoTracking()
+            .Where(item => item.ShowSessionId == show.Id).OrderBy(item => item.CustomerName).ThenBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var orderIds = orders.Select(item => item.Id).ToArray();
+        var manualCosts = orderIds.Length == 0 ? [] : await db.LiveStreamBidManualCosts.AsNoTracking()
+            .Where(item => orderIds.Contains(item.ShowOrderId)).ToListAsync(cancellationToken);
+        manualCosts.Sort((left, right) => left.CreatedAt.CompareTo(right.CreatedAt));
+        var attachments = await db.LiveStreamBidShowAttachments.AsNoTracking()
+            .Where(item => item.ShowSessionId == show.Id)
+            .ToListAsync(cancellationToken);
+        attachments.Sort((left, right) => left.UploadedAt.CompareTo(right.UploadedAt));
+        var rate = sales.Select(item => item.ExchangeRateRmbToUsd).FirstOrDefault(item => item.HasValue) ?? 0.15m;
+        var orderDtos = orders.Select(order =>
+        {
+            var scannedCosts = sales.Where(item => item.ShowOrderId == order.Id).ToArray();
+            var manual = manualCosts.Where(item => item.ShowOrderId == order.Id).ToArray();
+            var scannedQuantity = scannedCosts.Sum(item => item.SoldQuantity);
+            var manualQuantity = manual.Sum(item => item.Quantity);
+            return new LiveStreamBidShowOrderDto(
+                order.Id, order.ExternalOrderId, order.CustomerName, order.OrderName, order.Quantity,
+                scannedQuantity, manualQuantity, order.RecordedQuantity,
+                Math.Max(0, order.Quantity - order.RecordedQuantity),
+                scannedCosts.Sum(item => item.Cost ?? 0) + manual.Sum(item => item.Quantity * item.UnitCost),
+                includeSales ? scannedCosts.Select(ToSaleDto).ToArray() : [], manual.Select(ToManualCostDto).ToArray())
+            {
+                PriceEvidence = attachments.Where(item => item.ShowOrderId == order.Id && item.Kind == "price-evidence")
+                    .Select(ToShowAttachmentDto).ToArray()
+            };
+        }).ToArray();
+        var customers = orderDtos.GroupBy(item => item.CustomerName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new LiveStreamBidShowCustomerDto(
+                group.First().CustomerName, group.Sum(item => item.Quantity), group.Sum(item => item.RecordedQuantity),
+                group.Sum(item => item.RemainingQuantity), group.Sum(item => item.TotalCostRmb), group.ToArray())
+            {
+                ShipmentDocuments = attachments.Where(item => item.ShowOrderId == null &&
+                    string.Equals(item.CustomerName, group.First().CustomerName, StringComparison.OrdinalIgnoreCase))
+                    .Select(ToShowAttachmentDto).ToArray()
+            })
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var manualCostRmb = manualCosts.Sum(item => item.Quantity * item.UnitCost);
+        var scannedCostRmb = sales.Sum(item => item.Cost ?? 0);
+        var scannedProfitRmb = sales.Sum(item => item.Profit ?? 0);
+        var scannedProfitUsd = sales.Sum(item => item.ProfitUsd ?? 0);
+        var orderedQuantity = orders.Sum(item => item.Quantity);
+        var recordedQuantity = orders.Sum(item => item.RecordedQuantity);
         return new LiveStreamBidShowSummaryDto(
             show.Id, show.ShowDate, show.ShowNumber, !show.EndedAt.HasValue,
             show.StartedAt, show.EndedAt, show.StartedBy, show.EndedBy,
-            sales.Length, sales.Length, sales.Sum(item => item.Cost ?? 0),
-            sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
+            show.ShowName, show.ImportedFileName,
+            sales.Length, orders.Count > 0 ? recordedQuantity : sales.Sum(item => item.SoldQuantity), scannedCostRmb + manualCostRmb,
+            sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)) + manualCostRmb * rate,
             sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
-            sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
+            scannedProfitRmb - manualCostRmb, scannedProfitUsd - manualCostRmb * rate,
+            orderedQuantity, recordedQuantity, Math.Max(0, orderedQuantity - recordedQuantity), customers,
             includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
     }
 
@@ -686,10 +1015,11 @@ public sealed class LiveStreamBidProductsController(AppDbContext db, LiveStreamB
         IReadOnlyCollection<LiveStreamBidSale> sales,
         bool includeSales) => new(
             null, date, 0, false, sales.Min(item => item.SoldAt), sales.Max(item => item.SoldAt),
-            null, null, sales.Count, sales.Count, sales.Sum(item => item.Cost ?? 0),
+            null, null, null, null, sales.Count, sales.Sum(item => item.SoldQuantity), sales.Sum(item => item.Cost ?? 0),
             sales.Sum(item => (item.Cost ?? 0) * (item.ExchangeRateRmbToUsd ?? 0)),
             sales.Sum(item => item.ActualSalePrice ?? 0), sales.Sum(item => item.SalePriceRmb ?? 0),
             sales.Sum(item => item.Profit ?? 0), sales.Sum(item => item.ProfitUsd ?? 0),
+            0, sales.Sum(item => item.SoldQuantity), 0, [],
             includeSales ? sales.Select(ToSaleDto).ToArray() : Array.Empty<LiveStreamBidSaleDto>());
 
     private async Task<(string?[] Resolved, Dictionary<int, (string Original, string New)> Changes)> ResolveImportedUuidsAsync(

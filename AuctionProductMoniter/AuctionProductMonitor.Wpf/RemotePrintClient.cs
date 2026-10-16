@@ -16,7 +16,7 @@ public sealed class RemotePrintClient
         request.Content = JsonContent.Create(new
         {
             buyerName = sale?.BuyerName ?? "connection_test",
-            productNumber = sale?.ProductNumber ?? "0",
+            productNumber = sale?.PrintProductName ?? "0",
             sessionId = sale?.SessionId ?? "connection-test",
             copies = test ? 0 : Math.Clamp(copies, 1, 20),
             test
@@ -40,7 +40,7 @@ public sealed class RemotePrintClient
             items = sales.Select(sale => new
             {
                 buyerName = sale.BuyerName,
-                productNumber = sale.ProductNumber,
+                productNumber = sale.PrintProductName,
                 copies = Math.Clamp(sale.Quantity, 1, 20)
             })
         });

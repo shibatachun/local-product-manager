@@ -7,6 +7,7 @@ public sealed class ShelfLevelInventory
     public int BinNumber { get; set; } = 1;
     public int ProductId { get; set; }
     public int Qty { get; set; }
+    public string InventoryChannel { get; set; } = "general";
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public ShelfLevel? ShelfLevel { get; set; }
     public Product? Product { get; set; }

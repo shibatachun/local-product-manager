@@ -1,0 +1,57 @@
+<section class="media-library">
+  <header class="library-intro">
+    <div><h2>Local media library</h2><p>Create a folder, then take photos, record videos, or upload existing files. Media is stored on the local API computer, outside product records.</p></div>
+    <button type="button" (click)="loadFolders()" [disabled]="busy() || recordingState() !== 'idle'">Refresh</button>
+  </header>
+
+  <div class="folder-controls">
+    <label>New folder name<input type="text" maxlength="80" [ngModel]="newFolderName()" (ngModelChange)="newFolderName.set($event)" (keyup.enter)="createFolder()" placeholder="e.g. September live stream"></label>
+    <button type="button" (click)="createFolder()" [disabled]="busy() || recordingState() !== 'idle' || !newFolderName().trim()">Create folder</button>
+  </div>
+
+  <p class="library-message" role="status" *ngIf="message()">{{ message() }}</p>
+  <div class="library-layout">
+    <aside class="folder-list" aria-label="Media folders">
+      <button type="button" *ngFor="let folder of folders()" [class.selected]="folder.name === selectedFolder()" [disabled]="recordingState() !== 'idle'" (click)="selectFolder(folder.name)">
+        <strong>📁 {{ folder.name }}</strong><small>{{ folder.photoCount }} photos · {{ folder.videoCount }} videos</small>
+      </button>
+      <p *ngIf="!folders().length">No folders yet. Create one to begin.</p>
+    </aside>
+
+    <div class="folder-content" *ngIf="selectedFolder(); else chooseFolder">
+      <div class="folder-heading"><h3>{{ selectedFolder() }}</h3><button type="button" *ngIf="currentUser()?.isAdmin" (click)="openFolder()">Open folder on host</button></div>
+      <div class="upload-actions">
+        <app-media-picker label="Take photo" accept="image/*" [capture]="true" [disabled]="busy()" (selected)="upload($event, 'photo', true)"></app-media-picker>
+        <app-media-picker label="Upload photos" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" [multiple]="true" [disabled]="busy()" (selected)="upload($event, 'photo')"></app-media-picker>
+        <button type="button" (click)="startRecording()" [disabled]="busy() || recordingState() !== 'idle'">Record video (HD)</button>
+        <app-media-picker label="Device camera" accept="video/*" [capture]="true" [disabled]="busy() || recordingState() !== 'idle'" (selected)="upload($event, 'video', true)"></app-media-picker>
+        <app-media-picker label="Upload videos" accept="video/mp4,video/quicktime,video/webm,.mov" [multiple]="true" [disabled]="busy() || recordingState() !== 'idle'" (selected)="upload($event, 'video')"></app-media-picker>
+      </div>
+      <div class="recording-panel" [hidden]="recordingState() === 'idle'">
+        <video #recordingPreview autoplay muted playsinline></video>
+        <div class="recording-controls">
+          <span>{{ recordingState() === 'starting' ? 'Opening camera…' : recordingState() === 'saving' ? 'Saving video…' : 'Recording' }} · {{ recordingResolution() || 'Checking resolution…' }}</span>
+          <button type="button" *ngIf="recordingState() === 'recording'" (click)="stopRecording()">Stop and save</button>
+          <button type="button" *ngIf="recordingState() === 'starting' || recordingState() === 'recording'" (click)="cancelRecording()">Cancel</button>
+        </div>
+      </div>
+      <p class="upload-hint">HD recording requests 1080p / 30 fps; the actual resolution appears above. Videos: up to 200 MB each; recording stops near the limit. Device camera quality depends on the phone/browser.</p>
+
+      <section class="media-section"><h4>Photos <span>{{ photos().length }}</span></h4>
+        <div class="media-grid" *ngIf="photos().length; else noPhotos">
+          <a *ngFor="let file of photos()" [href]="fileUrl(file)" target="_blank" rel="noopener" [title]="file.fileName">
+            <img [src]="fileUrl(file)" [alt]="file.fileName" loading="lazy"><small>{{ file.fileName }} · {{ sizeLabel(file.size) }}</small>
+          </a>
+        </div>
+        <ng-template #noPhotos><p class="empty-media">No photos in this folder.</p></ng-template>
+      </section>
+      <section class="media-section"><h4>Videos <span>{{ videos().length }}</span></h4>
+        <div class="media-grid" *ngIf="videos().length; else noVideos">
+          <div *ngFor="let file of videos()"><video [src]="fileUrl(file)" controls preload="metadata"></video><small>{{ file.fileName }} · {{ sizeLabel(file.size) }}</small></div>
+        </div>
+        <ng-template #noVideos><p class="empty-media">No videos in this folder.</p></ng-template>
+      </section>
+    </div>
+    <ng-template #chooseFolder><div class="folder-content empty-media">Choose or create a folder to start capturing media.</div></ng-template>
+  </div>
+</section>

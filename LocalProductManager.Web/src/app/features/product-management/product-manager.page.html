@@ -17,12 +17,14 @@
       <button [class.active]="view() === 'autoListing'" (click)="changeView('autoListing')"><span>AI</span> Auto Listing</button>
       <button [class.active]="view() === 'bidProducts'" (click)="changeView('bidProducts')"><span>BP</span> Live Stream Bid Products</button>
       <button [class.active]="view() === 'inventory'" (click)="changeView('inventory')"><span>▤</span> Inventory Manager</button>
+      <button [class.active]="view() === 'broochFinder'" (click)="changeView('broochFinder')"><span>◈</span> Brooch finder</button>
       <button [class.active]="view() === 'barcodeScanner'" (click)="changeView('barcodeScanner')"><span>▣</span> Barcode Scanner</button>
       <button [class.active]="view() === 'labelMaker'" (click)="changeView('labelMaker')"><span>LB</span> Label Maker</button>
       <button [class.active]="view() === 'pricing'" (click)="changeView('pricing')"><span>$</span> Pricing</button>
       <button [class.active]="view() === 'unitConverter'" (click)="changeView('unitConverter')"><span>C</span> Converter</button>
       <button [class.active]="view() === 'marketing'" (click)="changeView('marketing')"><span>↗</span> Marketing</button>
       <button [class.active]="view() === 'storage'" (click)="changeView('storage')"><span>▧</span> File storage</button>
+      <button [class.active]="view() === 'mediaLibrary'" (click)="changeView('mediaLibrary')"><span>▣</span> Media library</button>
       <button [class.active]="view() === 'videoTrend'" (click)="changeView('videoTrend')"><span>VT</span> Video trend</button>
       <button [class.active]="view() === 'sceneEditor'" (click)="changeView('sceneEditor')"><span>3D</span> Product 3D Scene Editor</button>
       <button [class.active]="view() === 'apiDocs'" (click)="changeView('apiDocs')"><span>API</span> API documentation</button>
@@ -405,8 +407,13 @@
     </ng-template>
 
     <ng-template #fileStorageView>
-      <ng-container *ngIf="view() === 'storage'; else videoTrendView">
+      <ng-container *ngIf="view() === 'storage'; else mediaLibraryView">
         <app-file-storage-panel [currentUser]="currentUser()"></app-file-storage-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #mediaLibraryView>
+      <ng-container *ngIf="view() === 'mediaLibrary'; else videoTrendView">
+        <app-media-library-panel [currentUser]="currentUser()"></app-media-library-panel>
       </ng-container>
     </ng-template>
     <ng-template #videoTrendView>
@@ -420,6 +427,11 @@
       </ng-container>
     </ng-template>
     <ng-template #apiDocsView>
+      <ng-container *ngIf="view() === 'broochFinder'; else inventoryOrDocsView">
+        <app-brooch-finder-panel></app-brooch-finder-panel>
+      </ng-container>
+    </ng-template>
+    <ng-template #inventoryOrDocsView>
       <ng-container *ngIf="view() === 'inventory'; else actualApiDocsView">
         <app-inventory-manager-panel #inventoryPanel [isAdmin]="currentUser()?.isAdmin ?? false" (addProductToBin)="openWizardForBin($event)" (openProductDetail)="openInventoryProductDetail($event)"></app-inventory-manager-panel>
       </ng-container>
@@ -573,14 +585,17 @@
       </label>
       <label>First-mile cost (RMB)<input type="number" step="0.01" [(ngModel)]="createForm.originalCost" placeholder="0.00" /></label>
       <label>Qty<input type="number" min="0" step="1" [(ngModel)]="createForm.qty" placeholder="0" /></label>
+      <label *ngIf="pendingBinTarget()">Inventory for
+        <select [(ngModel)]="createInventoryChannel"><option value="general">General</option><option value="walmart">Walmart</option><option value="ebay">eBay</option></select>
+      </label>
       <label class="ready-list-control">Listing status<span><input type="checkbox" [(ngModel)]="createForm.readyToList" /> Ready to list</span></label>
       <label>Weight (oz)<input type="number" step="0.01" [(ngModel)]="createForm.weight" placeholder="0.00" /></label>
-      <label>Length<input type="number" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
-      <label>Width<input type="number" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
-      <label>Height<input type="number" step="0.01" [(ngModel)]="createForm.height" placeholder="0.00" /></label>
+      <label>Length (mm)<input type="number" min="0" step="0.01" [(ngModel)]="createForm.length" placeholder="0.00" /></label>
+      <label>Width (mm)<input type="number" min="0" step="0.01" [(ngModel)]="createForm.width" placeholder="0.00" /></label>
+      <label>Height (mm)<input type="number" min="0" step="0.01" [(ngModel)]="createForm.height" placeholder="0.00" /></label>
       <label class="wide">Network image URL<input [ngModel]="createForm.imagePath" (ngModelChange)="useCreateRemoteImage($event)" placeholder="https://example.com/product.jpg" /></label>
-      <label>Choose local image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="selectCreateImage($event)" /></label>
-      <label>Take one photo<input type="file" accept="image/*" capture="environment" (change)="selectCreateImage($event, true)" /></label>
+      <app-media-picker label="Choose local image" variant="outline" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (selected)="selectCreateImage($event)"></app-media-picker>
+      <app-media-picker label="Take one photo" variant="outline" accept="image/*" [capture]="true" (selected)="selectCreateImage($event, true)"></app-media-picker>
     </div>
     <div class="image-results" *ngIf="createImagePreviewUrl">
       <span class="match-preview"><img [src]="createImagePreviewUrl" [alt]="createForm.productName || createForm.sku" (error)="hideBrokenImage($event)" /></span>
@@ -660,6 +675,7 @@
           <div *ngFor="let location of detailLocations()">
             <strong>{{ location.description }}</strong>
             <code>{{ location.code }}</code>
+            <em *ngIf="location.inventoryChannel !== 'general'" class="inventory-channel-badge">{{ location.inventoryChannel === 'walmart' ? 'Walmart inventory' : 'eBay inventory' }}</em>
             <span>{{ location.qty }} unit{{ location.qty === 1 ? '' : 's' }}</span>
           </div>
         </div>
@@ -696,9 +712,9 @@
         </ng-template>
         <div class="form-grid">
           <label class="wide">Network image URL<input [(ngModel)]="editForm.imagePath" placeholder="https://example.com/product.jpg" /></label>
-          <label>Upload media<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/quicktime,video/webm,.mov" (change)="selectDetailImages($event)" /></label>
-          <label>Take photo<input type="file" accept="image/*" capture="environment" (change)="selectDetailImages($event, true)" /></label>
-          <label>Record video<input type="file" accept="video/*" capture="environment" (change)="selectDetailImages($event, false, true)" /></label>
+          <app-media-picker label="Upload media" variant="outline" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/quicktime,video/webm,.mov" [multiple]="true" (selected)="selectDetailImages($event)"></app-media-picker>
+          <app-media-picker label="Take photo" variant="outline" accept="image/*" [capture]="true" (selected)="selectDetailImages($event, true)"></app-media-picker>
+          <app-media-picker label="Record video" variant="outline" accept="video/*" [capture]="true" (selected)="selectDetailImages($event, false, true)"></app-media-picker>
         </div>
         <div class="product-image-library" *ngIf="detailProductImages().length">
           <p>Product media folder <small>Select a photo below to use it as the main image. Videos cannot be main images.</small></p>
@@ -840,7 +856,7 @@
       <div class="wizard-cascade">
         <label>Row<select [ngModel]="detailMoveSourceRow" (ngModelChange)="selectDetailSourceRow($event)"><option value="">Choose row</option><option *ngIf="detailUnassignedQty() > 0" value="unassigned">Unassigned · {{ detailUnassignedQty() }} available</option><option *ngFor="let row of detailSourceRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
         <label>Rack<select [ngModel]="detailMoveSourceRack" (ngModelChange)="selectDetailSourceRack($event)" [disabled]="!detailMoveSourceRow || detailMoveSourceRow === 'unassigned'"><option value="">Choose rack</option><option *ngFor="let rack of detailSourceRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
-        <label>Level + Bin<select [(ngModel)]="detailMoveSourceKey" [disabled]="!detailMoveSourceRack || detailMoveSourceRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailSourcePositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} available</option></select></label>
+        <label>Level + Bin<select [ngModel]="detailMoveSourceKey" (ngModelChange)="selectDetailMoveSource($event)" [disabled]="!detailMoveSourceRack || detailMoveSourceRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailSourcePositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} available</option></select></label>
       </div>
     </section>
     <section *ngIf="detailMoveStep() === 2">
@@ -848,7 +864,8 @@
       <div class="wizard-cascade">
         <label>Row<select [ngModel]="detailMoveTargetRow" (ngModelChange)="selectDetailTargetRow($event)"><option value="">Choose row</option><option *ngIf="detailMoveSourceKey !== 'unassigned'" value="unassigned">Unassigned inventory</option><option *ngFor="let row of detailTargetRows()" [value]="locationRowKey(row)">{{ locationRowLabel(row) }}</option></select></label>
         <label>Rack<select [ngModel]="detailMoveTargetRack" (ngModelChange)="selectDetailTargetRack($event)" [disabled]="!detailMoveTargetRow || detailMoveTargetRow === 'unassigned'"><option value="">Choose rack</option><option *ngFor="let rack of detailTargetRacks()" [value]="locationRackKey(rack)">{{ locationRackLabel(rack) }}</option></select></label>
-        <label>Level + Bin<select [(ngModel)]="detailMoveTargetKey" [disabled]="!detailMoveTargetRack || detailMoveTargetRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailTargetPositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} currently</option></select></label>
+        <label>Level + Bin<select [ngModel]="detailMoveTargetKey" (ngModelChange)="selectDetailMoveTarget($event)" [disabled]="!detailMoveTargetRack || detailMoveTargetRack === 'unassigned'"><option value="">Choose level and bin</option><option *ngFor="let location of detailTargetPositions()" [value]="location.key">{{ locationLevelBinLabel(location) }} · {{ location.qty }} currently</option></select></label>
+        <label *ngIf="detailMoveTargetKey && detailMoveTargetKey !== 'unassigned'">Inventory for<select [(ngModel)]="detailMoveTargetChannel" [disabled]="detailMoveTargetHasStock()"><option value="general">General</option><option value="walmart">Walmart</option><option value="ebay">eBay</option></select></label>
       </div>
     </section>
     <section *ngIf="detailMoveStep() === 3">
@@ -857,7 +874,7 @@
     </section>
     <section *ngIf="detailMoveStep() === 4" class="move-review">
       <p class="eyebrow">STEP 4</p><h3>Confirm inventory move</h3>
-      <dl><div><dt>From</dt><dd>{{ detailMoveSourceKey === 'unassigned' ? 'Unassigned inventory' : detailMoveSourceKey }}</dd></div><div><dt>To</dt><dd>{{ detailMoveTargetKey === 'unassigned' ? 'Unassigned inventory' : detailMoveTargetKey }}</dd></div><div><dt>Quantity</dt><dd>{{ detailMoveQuantity }}</dd></div></dl>
+      <dl><div><dt>From</dt><dd>{{ detailMoveSourceKey === 'unassigned' ? 'Unassigned inventory' : detailMoveSourceKey }}</dd></div><div><dt>To</dt><dd>{{ detailMoveTargetKey === 'unassigned' ? 'Unassigned inventory' : detailMoveTargetKey }}</dd></div><div><dt>Inventory for</dt><dd>{{ detailMoveTargetKey === 'unassigned' ? 'Unassigned' : detailMoveTargetChannel }}</dd></div><div><dt>Quantity</dt><dd>{{ detailMoveQuantity }}</dd></div></dl>
       <p>The warehouse History Log will record this movement.</p>
     </section>
   </main>

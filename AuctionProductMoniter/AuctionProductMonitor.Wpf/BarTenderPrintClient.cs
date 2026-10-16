@@ -19,7 +19,7 @@ public sealed class BarTenderPrintClient
             sessionId = sale?.SessionId ?? "connection-test",
             sessionDate = sale?.DetectedAt.ToLocalTime().ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-MM-dd"),
             buyerName = sale?.BuyerName ?? "connection_test",
-            productNumber = sale?.ProductNumber ?? "0",
+            productNumber = sale?.PrintProductName ?? "0",
             copies = Math.Clamp(copies, 1, 20),
             detectedAt = sale?.DetectedAt ?? DateTimeOffset.Now,
             requestedAt = DateTimeOffset.UtcNow

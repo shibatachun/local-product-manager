@@ -12,6 +12,7 @@
 **/Data/youtube-oauth-token.json
 **/Data/youtube-client-secret.json
 **/Data/product-images/
+**/Data/media-library/
 **/Data/live-stream-bid-product-images/
 **/Data/image-thumbnails/
 **/__pycache__/
@@ -20,6 +21,15 @@
 **/logging/*.jsonl
 .codex/secrets/
 .codex/
+!.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/walmart-auto-listing/
+.codex/skills/walmart-auto-listing/*
+!.codex/skills/walmart-auto-listing/assets/
+.codex/skills/walmart-auto-listing/assets/*
+!.codex/skills/walmart-auto-listing/assets/walmart-copy-ready.template.html
 *.log
 *.user
 *.suo

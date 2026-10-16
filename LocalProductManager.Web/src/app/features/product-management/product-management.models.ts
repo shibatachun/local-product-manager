@@ -1,6 +1,6 @@
 import { Platform } from '../../core/models';
 
-export type ViewMode = 'products' | 'domesticProducts' | 'autoListing' | 'bidProducts' | 'inventory' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
+export type ViewMode = 'products' | 'domesticProducts' | 'autoListing' | 'bidProducts' | 'inventory' | 'broochFinder' | 'barcodeScanner' | 'labelMaker' | 'pricing' | 'unitConverter' | 'marketing' | 'storage' | 'mediaLibrary' | 'videoTrend' | 'sceneEditor' | 'apiDocs';
 export type MarketingProductFilter = 'all' | 'standalone' | 'family-one';
 export type PricingPlatform = Platform;
 export type ProductCostCurrency = 'rmb' | 'usd';

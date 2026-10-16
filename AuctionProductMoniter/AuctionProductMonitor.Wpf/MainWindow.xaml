@@ -88,7 +88,8 @@
       <DataGrid.Columns>
         <DataGridTextColumn Header="{DynamicResource ColumnTime}" Binding="{Binding LocalTime}" Width="180"/>
         <DataGridTextColumn Header="{DynamicResource ColumnBuyerName}" Binding="{Binding BuyerName}" Width="*"/>
-        <DataGridTextColumn Header="{DynamicResource ColumnProductNumber}" Binding="{Binding ProductNumber}" Width="180"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnProductNumber}" Binding="{Binding ProductNumber}" Width="100"/>
+        <DataGridTextColumn Header="{DynamicResource ColumnProductName}" Binding="{Binding PrintProductName}" Width="2*"/>
         <DataGridTextColumn Header="{DynamicResource ColumnQuantity}" Binding="{Binding Quantity}" Width="70"/>
         <DataGridTextColumn Header="{DynamicResource ColumnShipment}" Binding="{Binding ShipmentId}" Width="120"/>
         <DataGridTextColumn Header="{DynamicResource ColumnPrintState}" Binding="{Binding PrintState}" Width="90"/>

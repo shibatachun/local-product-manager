@@ -3,6 +3,8 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ProductListItem, ShelfDetail, ShelfLevel, Warehouse, WarehouseShelf } from './models';
 
+export type InventoryChannel = 'general' | 'walmart' | 'ebay';
+
 export interface ProductScannerLocation {
   levelId: number;
   binNumber: number;
@@ -10,6 +12,7 @@ export interface ProductScannerLocation {
   code: string;
   description: string;
   qty: number;
+  inventoryChannel: InventoryChannel;
 }
 
 export interface InventoryHistoryEntry {
@@ -72,6 +75,7 @@ export class InventoryApiService {
 
   moveProduct(productId: number, body: {
     sourceLevelId: number | null; sourceBinNumber: number | null; targetLevelId: number | null; targetBinNumber: number | null; quantity: number;
+    targetInventoryChannel?: InventoryChannel;
   }): Promise<ProductScannerLocation[]> {
     return firstValueFrom(this.http.post<ProductScannerLocation[]>(
       `${this.baseUrl}/inventory/products/${productId}/move`, body));
@@ -94,14 +98,14 @@ export class InventoryApiService {
       `${this.baseUrl}/inventory/shelves/${shelfId}/layout`, { x, y, rotation }));
   }
 
-  setInventory(levelId: number, productId: number, qty: number, binNumber = 1): Promise<ShelfLevel> {
+  setInventory(levelId: number, productId: number, qty: number, binNumber = 1, inventoryChannel?: InventoryChannel): Promise<ShelfLevel> {
     return firstValueFrom(this.http.put<ShelfLevel>(
-      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, qty, binNumber }));
+      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, qty, binNumber, inventoryChannel }));
   }
 
-  adjustInventory(levelId: number, productId: number, delta: number, binNumber = 1): Promise<ShelfLevel> {
+  adjustInventory(levelId: number, productId: number, delta: number, binNumber = 1, inventoryChannel?: InventoryChannel): Promise<ShelfLevel> {
     return firstValueFrom(this.http.patch<ShelfLevel>(
-      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, delta, binNumber }));
+      `${this.baseUrl}/inventory/levels/${levelId}/inventory`, { productId, delta, binNumber, inventoryChannel }));
   }
 
   history(search = '', operation = '', limit = 250): Promise<InventoryHistoryEntry[]> {

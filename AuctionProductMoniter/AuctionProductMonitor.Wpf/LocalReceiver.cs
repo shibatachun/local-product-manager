@@ -41,6 +41,7 @@ public sealed class LocalReceiver : IAsyncDisposable
         {
             sale.BuyerName = sale.BuyerName.Trim();
             sale.ProductNumber = sale.ProductNumber.Trim();
+            sale.ProductName = sale.ProductName.Trim();
             if (string.IsNullOrWhiteSpace(sale.BuyerName) ||
                 string.IsNullOrWhiteSpace(sale.ProductNumber))
             {

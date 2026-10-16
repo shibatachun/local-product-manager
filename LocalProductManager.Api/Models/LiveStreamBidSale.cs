@@ -5,11 +5,14 @@ public sealed class LiveStreamBidSale
     public int Id { get; set; }
     public int? ShowSessionId { get; set; }
     public LiveStreamBidShowSession? ShowSession { get; set; }
+    public int? ShowOrderId { get; set; }
+    public LiveStreamBidShowOrder? ShowOrder { get; set; }
     public int BidProductId { get; set; }
     public LiveStreamBidProduct BidProduct { get; set; } = null!;
     public string ProductUuid { get; set; } = "";
     public string ProductTitle { get; set; } = "";
     public int Quantity { get; set; }
+    public int SoldQuantity { get; set; } = 1;
     public decimal? Cost { get; set; }
     public decimal? ActualSalePrice { get; set; }
     public decimal? SalePriceRmb { get; set; }

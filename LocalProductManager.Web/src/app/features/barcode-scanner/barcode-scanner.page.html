@@ -1,4 +1,4 @@
-<div class="scanner-page" [class.embedded]="embedded">
+<div class="scanner-page" [class.embedded]="embedded" [class.compact-bid-sale]="compactBidSale">
   <header class="topbar">
     <a routerLink="/" class="back" aria-label="Back to products">←</a>
     <div><span>Inventory tools</span><h1>Barcode Scanner</h1></div>
@@ -29,7 +29,7 @@
         <button type="button" [class.active]="scanMode() === 'inventory'" (click)="setScanMode('inventory')"><strong>Inventory mode</strong><small>Normal LPM products</small></button>
         <button type="button" [class.active]="scanMode() === 'bid'" (click)="setScanMode('bid')"><strong>BID mode</strong><small>Live stream auction products</small></button>
       </div>
-      <div class="scanner-mode-switch" role="group" aria-label="Scanner input mode">
+      <div class="scanner-mode-switch" role="group" aria-label="Scanner input mode" *ngIf="!cameraOnly">
         <button type="button" [class.active]="inputMode() === 'scanner'" (click)="setInputMode('scanner')">Scanner gun</button>
         <button type="button" [class.active]="inputMode() === 'camera'" (click)="setInputMode('camera')">Camera</button>
       </div>
@@ -42,7 +42,7 @@
         </div>
       </div>
       <div class="camera-actions">
-        <button class="primary" type="button" *ngIf="!scanning()" (click)="startCamera()">Start camera</button>
+        <button class="primary" type="button" *ngIf="!scanning() && !scannedCode()" (click)="startCamera()">Start camera</button>
         <button type="button" *ngIf="scanning() && torchAvailable()" (click)="toggleTorch()">{{ torchOn() ? 'Flash off' : 'Flash on' }}</button>
         <button type="button" *ngIf="scanning()" (click)="stopCamera()">Stop camera</button>
       </div>
@@ -96,33 +96,21 @@
 
     <section class="result-card bid-result" *ngIf="!loading() && bidProduct() as item">
       <div class="result-heading"><span class="bid-icon">BID</span><div><small>Live stream bid product</small><h2>{{ item.title }}</h2></div><span class="sold-status" *ngIf="item.isSold">Sold out</span></div>
-      <div class="bid-photo-panel">
+      <div class="bid-photo-panel" *ngIf="!compactBidSale">
         <img *ngIf="item.imagePath" [src]="bidImageUrl(item)" [alt]="item.title" />
         <div class="bid-photo-placeholder" *ngIf="!item.imagePath"><span>📷</span><small>No photo yet</small></div>
         <div class="bid-photo-actions" *ngIf="!bidSalesOnly">
-          <label class="bid-photo-upload">
-            <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" (change)="uploadBidPhotos($event)" [disabled]="uploadingBidPhotos()" />
-            <span>{{ uploadingBidPhotos() ? 'Uploading…' : 'Choose photos' }}</span>
-          </label>
-          <label class="bid-photo-upload">
-            <input type="file" accept="image/*" capture="environment" (change)="uploadBidPhotos($event, true)" [disabled]="uploadingBidPhotos()" />
-            <span>{{ uploadingBidPhotos() ? 'Uploading…' : 'Take photo' }}</span>
-          </label>
+          <app-media-picker [label]="uploadingBidPhotos() ? 'Uploading…' : 'Choose photos'" variant="dashed" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" [multiple]="true" [disabled]="uploadingBidPhotos()" (selected)="uploadBidPhotos($event)"></app-media-picker>
+          <app-media-picker [label]="uploadingBidPhotos() ? 'Uploading…' : 'Take photo'" variant="dashed" accept="image/*" [capture]="true" [disabled]="uploadingBidPhotos()" (selected)="uploadBidPhotos($event, true)"></app-media-picker>
         </div>
         <button class="bid-photo-download" type="button" *ngIf="item.imagePath" (click)="downloadBidPicture(item)">Download picture</button>
       </div>
-      <section class="bid-video-panel">
+      <section class="bid-video-panel" *ngIf="!compactBidSale">
         <div class="bid-video-heading">
           <div><strong>Videos</strong><small>Saved separately from photos · MP4, MOV, or WebM · up to 200 MB each</small></div>
           <div class="bid-video-actions" *ngIf="!bidSalesOnly">
-            <label class="bid-photo-upload">
-              <input type="file" multiple accept="video/mp4,video/quicktime,video/webm,.mov" (change)="uploadBidVideos($event)" [disabled]="uploadingBidVideos()" />
-              <span>{{ uploadingBidVideos() ? 'Uploading…' : 'Choose videos' }}</span>
-            </label>
-            <label class="bid-photo-upload">
-              <input type="file" accept="video/*" capture="environment" (change)="uploadBidVideos($event, true)" [disabled]="uploadingBidVideos()" />
-              <span>{{ uploadingBidVideos() ? 'Uploading…' : 'Record video' }}</span>
-            </label>
+            <app-media-picker [label]="uploadingBidVideos() ? 'Uploading…' : 'Choose videos'" variant="dashed" accept="video/mp4,video/quicktime,video/webm,.mov" [multiple]="true" [disabled]="uploadingBidVideos()" (selected)="uploadBidVideos($event)"></app-media-picker>
+            <app-media-picker [label]="uploadingBidVideos() ? 'Uploading…' : 'Record video'" variant="dashed" accept="video/*" [capture]="true" [disabled]="uploadingBidVideos()" (selected)="uploadBidVideos($event, true)"></app-media-picker>
           </div>
         </div>
         <div class="bid-video-list" *ngIf="bidVideos().length; else noBidVideos">
@@ -130,7 +118,7 @@
         </div>
         <ng-template #noBidVideos><p class="bid-video-empty">No videos saved yet.</p></ng-template>
       </section>
-      <dl>
+      <dl *ngIf="!compactBidSale">
         <div><dt>Batch</dt><dd>{{ item.batchNumber || '—' }}<span *ngIf="item.batchProductNumber"> · #{{ item.batchProductNumber }}</span></dd></div>
         <div><dt>UUID</dt><dd><code>{{ item.uuid }}</code></dd></div>
         <div><dt>Actual SKU</dt><dd><code *ngIf="item.actualSku">{{ item.actualSku }}</code><span *ngIf="!item.actualSku">—</span></dd></div>
@@ -138,11 +126,11 @@
         <div><dt>Expected inventory</dt><dd class="quantity">{{ item.inventory }}</dd></div>
         <div><dt>Actual inventory</dt><dd class="quantity">{{ item.actualInventory }}</dd></div>
         <div><dt>Unit price</dt><dd>¥{{ item.unitPrice | number:'1.2-2' }}</dd></div>
+        <div><dt>Product price</dt><dd>¥{{ item.quantity * item.unitPrice | number:'1.2-2' }}</dd></div>
         <div><dt>Weight</dt><dd>{{ item.weightGrams === null ? '—' : ((item.weightGrams | number:'1.0-2') + ' g') }}<span *ngIf="item.weightOunces !== null"> · {{ item.weightOunces | number:'1.2-2' }} oz</span></dd></div>
         <div><dt>Material</dt><dd>{{ item.material || '—' }}</dd></div>
-        <div><dt>Cost / package</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + (item.totalCost | number:'1.2-2')) }}</dd></div>
-        <div><dt>Inventory total value</dt><dd>{{ item.totalCost === null ? '—' : ('¥' + ((item.totalCost * item.inventory) | number:'1.2-2')) }}</dd></div>
         <div><dt>Whatnot safe start</dt><dd>{{ item.whatnotAuctionSafePrice === null ? '—' : ('$' + (item.whatnotAuctionSafePrice | number:'1.2-2')) }}</dd></div>
+        <div><dt>Item Code</dt><dd><code *ngIf="item.itemCode">{{ item.itemCode }}</code><span *ngIf="!item.itemCode">—</span></dd></div>
       </dl>
       <div class="bid-actual-inventory-actions" *ngIf="!bidSalesOnly">
         <div class="bid-receive-quantity">
@@ -159,9 +147,16 @@
           <button type="button" (click)="adjustBidActualInventory(-1)" [disabled]="loading() || item.actualInventory <= 0">− Actual inventory</button>
         </div>
       </div>
+      <dl class="compact-bid-summary" *ngIf="compactBidSale">
+        <div><dt>Product</dt><dd>{{ item.title }}</dd></div>
+        <div><dt>Item Code</dt><dd>{{ item.itemCode || '—' }}</dd></div>
+        <div><dt>Item price (unit × qty)</dt><dd>¥{{ item.unitPrice * item.quantity | number:'1.2-2' }}</dd></div>
+        <div><dt>Expected remaining</dt><dd>{{ item.inventory }}</dd></div>
+      </dl>
       <div class="bid-sale-form" *ngIf="bidShowSessionId !== null">
+        <label>Sold quantity <span>Max {{ bidOrderRemainingQuantity === null ? item.inventory : (bidOrderRemainingQuantity < item.inventory ? bidOrderRemainingQuantity : item.inventory) }}</span><input type="number" min="1" step="1" inputmode="numeric" [(ngModel)]="bidSaleQuantity" /></label>
         <label>Actual sale price (USD) <span>Optional</span><div class="price-input"><b>$</b><input type="number" min="0" step="0.01" inputmode="decimal" [(ngModel)]="actualSalePrice" placeholder="Leave blank if unknown" /></div></label>
-        <div><button class="confirm-sale" type="button" (click)="confirmBidSale()" [disabled]="loading() || item.inventory <= 0 || item.actualInventory <= 0">Confirm sold</button><button type="button" (click)="cancelBidSale()">Cancel</button></div>
+        <div><button class="confirm-sale" type="button" (click)="confirmBidSale()" [disabled]="loading() || item.inventory <= 0 || bidSaleQuantity < 1">Confirm sold</button><button type="button" (click)="cancelBidSale()">Cancel</button></div>
       </div>
       <p class="bid-sale-moved" *ngIf="bidShowSessionId === null">Sales and cost scanning are recorded from the BID Product page after a show session is started. This scanner remains available for received-inventory updates.</p>
       <section class="bid-today" *ngIf="bidToday() as today"><header><strong>Today's live sales</strong><div class="bid-currency"><button type="button" [class.active]="bidCurrency() === 'usd'" (click)="bidCurrency.set('usd')">USD</button><button type="button" [class.active]="bidCurrency() === 'rmb'" (click)="bidCurrency.set('rmb')">RMB</button></div><span>{{ today.soldCount }} sold</span></header><div><span>Cost <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.totalCostUsd : today.totalCostRmb) | number:'1.2-2' }}</b></span><span>Sales <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.actualRevenueUsd : today.actualRevenueRmb) | number:'1.2-2' }}</b></span><span>Profit <b>{{ bidCurrency() === 'usd' ? '$' : '¥' }}{{ (bidCurrency() === 'usd' ? today.realizedProfitUsd : today.realizedProfitRmb) | number:'1.2-2' }}</b></span></div></section>

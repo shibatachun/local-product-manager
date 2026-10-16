@@ -17,17 +17,32 @@ export class MediaUploadService {
       : file));
   }
 
-  uploadMultipart<T>(url: string, files: File[]): Promise<T> {
+  async prepareSelectedImages(files: File[]): Promise<File[]> {
+    // Some mobile file pickers revoke their File handles after the input is
+    // cleared. Copy bytes while the selection is still live, then decode or
+    // upload only the stable in-memory copies.
+    const copies = await Promise.all(files.map(async (file, index) => {
+      const bytes = await this.readFileBytes(file);
+      return new File([bytes], this.uploadFileName(file, index), {
+        type: file.type,
+        lastModified: file.lastModified || Date.now(),
+      });
+    }));
+    return this.prepareCameraImages(copies);
+  }
+
+  async uploadMultipart<T>(url: string, files: File[], fieldName = 'files', fields: Record<string, string> = {}): Promise<T> {
     const data = new FormData();
-    files.forEach((file, index) => data.append('files', file, this.uploadFileName(file, index)));
+    for (const [name, value] of Object.entries(fields)) data.append(name, value);
+    for (const [index, file] of files.entries()) {
+      const bytes = await this.readFileBytes(file);
+      data.append(fieldName, new Blob([bytes], { type: file.type || 'application/octet-stream' }), this.uploadFileName(file, index));
+    }
     return firstValueFrom(this.http.post<T>(url, data));
   }
 
   async uploadCapturedVideo<T>(url: string, file: File): Promise<T> {
-    const bytes = await file.arrayBuffer();
-    if (bytes.byteLength === 0) {
-      throw new Error(`The camera returned an empty video (${file.name || 'unnamed file'}, ${file.type || 'unknown type'}).`);
-    }
+    const bytes = await this.readFileBytes(file);
     const contentType = file.type || 'video/mp4';
     return firstValueFrom(this.http.post<T>(url, new Blob([bytes], { type: contentType }), {
       headers: new HttpHeaders({
@@ -37,15 +52,23 @@ export class MediaUploadService {
     }));
   }
 
+  async readFileBytes(file: File): Promise<ArrayBuffer> {
+    const bytes = await file.arrayBuffer();
+    if (bytes.byteLength === 0 || bytes.byteLength !== file.size)
+      throw new Error(`The browser could not read “${file.name || 'selected file'}” (${file.size} B selected, ${bytes.byteLength} B read). Choose the file again.`);
+    return bytes;
+  }
+
   private async prepareCameraImage(file: File): Promise<File> {
     const sourceUrl = URL.createObjectURL(file);
     try {
       const image = new Image();
       image.decoding = 'async';
-      image.src = sourceUrl;
       await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error('The captured image could not be decoded.'));
+        const timeout = setTimeout(() => reject(new Error('Camera image decoding timed out.')), 15000);
+        image.onload = () => { clearTimeout(timeout); resolve(); };
+        image.onerror = () => { clearTimeout(timeout); reject(new Error('The captured image could not be decoded.')); };
+        image.src = sourceUrl;
       });
 
       const maximumDimension = 2048;
@@ -59,7 +82,10 @@ export class MediaUploadService {
       if (!context) return file;
       context.drawImage(image, 0, 0, width, height);
 
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
+      const blob = await new Promise<Blob | null>(resolve => {
+        const timeout = setTimeout(() => resolve(null), 15000);
+        canvas.toBlob(result => { clearTimeout(timeout); resolve(result); }, 'image/jpeg', .86);
+      });
       if (!blob) return file;
       const baseName = file.name.replace(/\.[^.]+$/, '') || `camera-${Date.now()}`;
       return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });

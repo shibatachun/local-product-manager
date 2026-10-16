@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{INV}} Walmart Copy-Ready Draft</title>
+  <style>
+    :root{color-scheme:light;--ink:#152536;--muted:#607284;--line:#d7e2ec;--blue:#006fc9;--pale:#eef7ff;--warn:#9a4d00;--warnbg:#fff4e5}
+    *{box-sizing:border-box}body{margin:0;background:#f5f8fb;color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(980px,calc(100% - 28px));margin:28px auto}.hero,.card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 28px rgba(32,66,96,.07)}
+    .hero{padding:24px;margin-bottom:18px}.hero small{color:var(--blue);font-weight:800;letter-spacing:.08em;text-transform:uppercase}.hero h1{margin:.3rem 0 .2rem;font-size:clamp(1.7rem,5vw,2.6rem)}
+    .status{display:inline-block;margin-top:12px;padding:7px 10px;border-radius:999px;background:var(--warnbg);color:var(--warn);font-weight:800}
+    .grid{display:grid;gap:18px}.card{padding:22px}.card h2{margin:0 0 13px;font-size:1.2rem}.copyrow{display:flex;align-items:flex-start;gap:12px}.content{min-width:0;flex:1;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;white-space:pre-wrap}
+    button{flex:0 0 auto;border:0;border-radius:9px;background:var(--blue);color:#fff;padding:10px 13px;font-weight:800;cursor:pointer}button:hover{filter:brightness(.92)}button.done{background:#14804a}
+    ul{margin:0;padding-left:1.3rem}.note{color:var(--muted);font-size:.9rem;margin:.8rem 0 0}.blockers{border-left:5px solid #ef8b19}
+    .blockers li+li{margin-top:.35rem}.attrs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.attr{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfdff}.attr small{display:block;color:var(--muted);font-weight:700}.attr strong{display:block;margin:4px 0 8px}.attr button{padding:7px 10px;font-size:.85rem}
+    .gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gallery figure{margin:0;border:1px solid var(--line);border-radius:10px;padding:9px;background:#fbfdff}.gallery img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:6px}.gallery figcaption{padding-top:7px;color:var(--muted);font-size:.85rem}
+    a{color:var(--blue)}@media(max-width:620px){.attrs{grid-template-columns:1fr}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:620px){main{margin:14px auto}.hero,.card{padding:17px;border-radius:12px}.copyrow{display:block}button{width:100%;margin-top:10px}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <small>Walmart Marketplace · {{INV}}</small>
+    <h1>Copy-ready listing draft</h1>
+    <p>{{HERO_SUMMARY}}</p>
+    <span class="status">{{READINESS}}</span>
+  </section>
+  <div class="grid">
+    <section class="card">
+      <h2>Product name</h2>
+      <div class="copyrow"><div class="content" id="name">{{ITEM_NAME}}</div><button type="button" data-copy="name">Copy name</button></div>
+    </section>
+    <section class="card">
+      <h2>Site description</h2>
+      <div class="copyrow"><div class="content" id="description">{{SITE_DESCRIPTION}}</div><button type="button" data-copy="description">Copy description</button></div>
+    </section>
+    <section class="card">
+      <h2>Key features</h2>
+      <div class="copyrow"><div class="content"><ul id="features">{{KEY_FEATURE_LI}}</ul></div><button type="button" data-copy-features="features">Copy all features</button></div>
+      <p class="note">Paste into Walmart's single Key Features box. The button copies a formatted list when supported; otherwise it copies plain-text bullets. It never copies visible HTML tags.</p>
+    </section>
+    <section class="card">
+      <h2>Seller Center attributes</h2>
+      <p class="note">{{ATTRIBUTE_NOTE}}</p>
+      <div class="attrs">
+        {{ATTRIBUTE_CARDS}}
+      </div>
+      <p class="note">{{ATTRIBUTE_AUDIT_NOTE}}</p>
+    </section>
+    <section class="card">
+      <h2>Image order</h2>
+      <div class="gallery">
+        {{IMAGE_FIGURES}}
+      </div>
+      <p class="note">Use the real product-only image first. Generated examples are illustrative. See the <a href="walmart-listing-draft.md">full draft and checklist</a> before Seller Center setup.</p>
+    </section>
+    <section class="card blockers">
+      <h2>Resolve before submission</h2>
+      <ul>{{BLOCKER_LI}}</ul>
+    </section>
+  </div>
+</main>
+<script>
+  function showResult(button,ok){
+    const old=button.textContent;button.textContent=ok?'Copied':'Select and copy manually';button.classList.toggle('done',ok);setTimeout(()=>{button.textContent=old;button.classList.remove('done')},1800)
+  }
+  function legacyCopy(text){
+    const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();
+    try{return document.execCommand('copy')}finally{area.remove()}
+  }
+  async function copyText(text,button){
+    let ok=false;try{await navigator.clipboard.writeText(text);ok=true}catch(_){try{ok=legacyCopy(text)}catch(__){ok=false}}
+    showResult(button,ok)
+  }
+  async function copyFeatures(list,button){
+    const items=[...list.querySelectorAll('li')].map(item=>item.textContent.trim());
+    const plain=items.map(item=>'• '+item).join('\n');
+    let ok=false;
+    if(navigator.clipboard?.write && window.ClipboardItem){
+      try{
+        const item=new ClipboardItem({'text/html':new Blob([list.outerHTML],{type:'text/html'}),'text/plain':new Blob([plain],{type:'text/plain'})});
+        await navigator.clipboard.write([item]);ok=true
+      }catch(_){}
+    }
+    if(!ok){try{await navigator.clipboard.writeText(plain);ok=true}catch(_){try{ok=legacyCopy(plain)}catch(__){ok=false}}}
+    showResult(button,ok)
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('button');if(!button)return;
+    if(button.dataset.copy)copyText(document.getElementById(button.dataset.copy).textContent.trim(),button);
+    if(button.dataset.copyFeatures)copyFeatures(document.getElementById(button.dataset.copyFeatures),button)
+  })
+</script>
+</body>
+</html>

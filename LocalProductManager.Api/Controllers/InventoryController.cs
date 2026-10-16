@@ -47,9 +47,15 @@ public sealed class InventoryController(
                 Bin01Qty = level.Inventory
                     .Where(item => item.ProductId == productId && item.BinNumber == 1)
                     .Sum(item => (int?)item.Qty) ?? 0,
+                Bin01Channel = level.Inventory
+                    .Where(item => item.ProductId == productId && item.BinNumber == 1)
+                    .Select(item => item.InventoryChannel).FirstOrDefault(),
                 Bin02Qty = level.Inventory
                     .Where(item => item.ProductId == productId && item.BinNumber == 2)
-                    .Sum(item => (int?)item.Qty) ?? 0
+                    .Sum(item => (int?)item.Qty) ?? 0,
+                Bin02Channel = level.Inventory
+                    .Where(item => item.ProductId == productId && item.BinNumber == 2)
+                    .Select(item => item.InventoryChannel).FirstOrDefault()
             })
             .ToArrayAsync(cancellationToken);
 
@@ -58,11 +64,11 @@ public sealed class InventoryController(
             new ScannerLocationDto(
                 level.Id, 1, $"{level.Id}:1", $"{level.Code}-B01",
                 $"Row {level.RowNumber} · Rack {level.RackNumber} · Level {level.LevelNumber} · Bin 1",
-                level.Bin01Qty),
+                level.Bin01Qty, level.Bin01Channel ?? "general"),
             new ScannerLocationDto(
                 level.Id, 2, $"{level.Id}:2", $"{level.Code}-B02",
                 $"Row {level.RowNumber} · Rack {level.RackNumber} · Level {level.LevelNumber} · Bin 2",
-                level.Bin02Qty)
+                level.Bin02Qty, level.Bin02Channel ?? "general")
         }).ToArray());
     }
 
@@ -264,11 +270,13 @@ public sealed class InventoryController(
 
         if (request.BinNumber is < 1 or > 2)
             return BadRequest("Bin number must be 1 or 2.");
+        if (request.InventoryChannel is not null && !ValidInventoryChannel(request.InventoryChannel))
+            return BadRequest("Inventory channel must be general, walmart, or ebay.");
 
         var qty = Math.Max(0, request.Qty);
         var actor = await InventoryActorAsync(cancellationToken);
         await inventoryWrites.SetAsync(
-            levelId, request.BinNumber, request.ProductId, qty, actor, cancellationToken);
+            levelId, request.BinNumber, request.ProductId, qty, actor, cancellationToken, request.InventoryChannel);
 
         var updated = await db.ShelfLevels.AsNoTracking()
             .Include(item => item.Inventory).ThenInclude(item => item.Product)
@@ -284,6 +292,8 @@ public sealed class InventoryController(
     {
         if (request.Delta == 0)
             return BadRequest("Inventory delta cannot be 0.");
+        if (request.InventoryChannel is not null && !ValidInventoryChannel(request.InventoryChannel))
+            return BadRequest("Inventory channel must be general, walmart, or ebay.");
 
         if (request.BinNumber is < 1 or > 2)
             return BadRequest("Bin number must be 1 or 2.");
@@ -294,12 +304,12 @@ public sealed class InventoryController(
 
         var actor = await InventoryActorAsync(cancellationToken);
         var adjusted = await inventoryWrites.AdjustAsync(
-            levelId, request.BinNumber, request.ProductId, request.Delta, actor, cancellationToken);
+            levelId, request.BinNumber, request.ProductId, request.Delta, actor, cancellationToken, request.InventoryChannel);
         if (!adjusted)
         {
             return Conflict(new
             {
-                message = "Insufficient inventory for this stock-out operation.",
+                message = "Insufficient inventory for stock-out, or this location already has a different inventory channel.",
                 productId = request.ProductId,
                 levelId,
                 binNumber = request.BinNumber
@@ -327,6 +337,8 @@ public sealed class InventoryController(
             return BadRequest("Bin number must be 1 or 2.");
         if (request.Quantity < 1)
             return BadRequest("Move quantity must be greater than 0.");
+        if (request.TargetInventoryChannel is not null && !ValidInventoryChannel(request.TargetInventoryChannel))
+            return BadRequest("Inventory channel must be general, walmart, or ebay.");
         if (request.SourceLevelId.HasValue && request.SourceLevelId == request.TargetLevelId
             && request.SourceBinNumber == request.TargetBinNumber)
             return BadRequest("Choose a different target location.");
@@ -337,8 +349,9 @@ public sealed class InventoryController(
 
         var actor = await InventoryActorAsync(cancellationToken);
         if (!await inventoryWrites.MoveAsync(productId, request.SourceLevelId, request.SourceBinNumber,
-                request.TargetLevelId, request.TargetBinNumber, request.Quantity, actor, cancellationToken))
-            return Conflict("The source location does not have enough inventory, or the target is unchanged.");
+                request.TargetLevelId, request.TargetBinNumber, request.Quantity, actor, cancellationToken,
+                request.TargetInventoryChannel))
+            return Conflict("The source lacks inventory, or this product already has a different inventory channel at the target location.");
         return await GetProductLocations(productId, cancellationToken);
     }
 
@@ -369,6 +382,8 @@ public sealed class InventoryController(
         level.Id, level.Code, level.LevelNumber, level.Inventory.Sum(item => item.Qty),
         level.Inventory.OrderBy(item => item.BinNumber).ThenBy(item => item.Product!.Sku)
             .Select(item => new ShelfInventoryItemDto(
-                item.ProductId, item.Product!.Sku, item.Product.ProductName, item.Qty, item.BinNumber))
+                item.ProductId, item.Product!.Sku, item.Product.ProductName, item.Qty, item.BinNumber, item.InventoryChannel))
             .ToArray());
+
+    private static bool ValidInventoryChannel(string value) => value is "general" or "walmart" or "ebay";
 }

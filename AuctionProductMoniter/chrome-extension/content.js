@@ -104,10 +104,11 @@
       titledElements.find(item => /\b(?:won|purchased|bought|sold)\b/i.test(item.getAttribute("title") || ""))
         ?.getAttribute("title") || row.textContent
     );
-    const productText = clean(
-      titledElements.find(item => /#\s*[A-Z]{0,8}-?\d{1,5}\b/i.test(item.getAttribute("title") || ""))
-        ?.getAttribute("title") || row.textContent
-    );
+    const productTitle = titledElements.find(item =>
+      /#\s*[A-Z]{0,8}-?\d{1,5}\b/i.test(item.getAttribute("title") || "") &&
+      !/\b(?:won|purchased|bought|sold)\b/i.test(item.getAttribute("title") || "")
+    )?.getAttribute("title") || "";
+    const productText = clean(productTitle || row.textContent);
     const buyerName = extractBuyer(activityText, row);
     const productNumber = extractProductNumber(productText);
     if (!buyerName || !productNumber) return null;
@@ -116,6 +117,7 @@
       row,
       buyerName,
       productNumber,
+      productName: clean(productTitle),
       activityText,
       productText,
       sourceText: clean(`${activityText} ${productText}`),
@@ -123,8 +125,8 @@
     };
   }
 
-  function sendSale(buyerName, productNumber, sourceText, force = false) {
-    const key = `${buyerName.toLowerCase()}|${productNumber.toLowerCase()}`;
+  function sendSale(buyerName, productNumber, sourceText, force = false, productName = "") {
+    const key = `${buyerName.toLowerCase()}|${productNumber.toLowerCase()}|${productName.toLowerCase()}`;
     const now = Date.now();
     if (!force && now - (recentEvents.get(key) || 0) < 10000) return false;
     recentEvents.set(key, now);
@@ -134,6 +136,7 @@
       sale: {
         buyerName,
         productNumber,
+        productName,
         detectedAt: new Date().toISOString(),
         sourceText,
         pageUrl: location.href,
@@ -152,13 +155,13 @@
     for (const row of rows.reverse()) {
       const activity = parseActivityRow(row);
       if (!activity) continue;
-      if (sendSale(activity.buyerName, activity.productNumber, activity.sourceText, true)) sent++;
+      if (sendSale(activity.buyerName, activity.productNumber, activity.sourceText, true, activity.productName)) sent++;
     }
     return { rows: rows.length, sent };
   }
 
   function activitySignature(activity) {
-    return `${activity.buyerName.toLowerCase()}|${activity.productNumber.toLowerCase()}`;
+    return `${activity.buyerName.toLowerCase()}|${activity.productNumber.toLowerCase()}|${activity.productName.toLowerCase()}`;
   }
 
   function readActivityRows(sendNewRows) {
@@ -178,7 +181,7 @@
 
       if (sendNewRows) {
         newSales++;
-        sendSale(activity.buyerName, activity.productNumber, activity.sourceText);
+        sendSale(activity.buyerName, activity.productNumber, activity.sourceText, false, activity.productName);
       }
     }
 
@@ -219,7 +222,7 @@
       if (activity) {
         reportDiagnostic(activity.row, activity.sourceText);
         if (activity.fresh) {
-          sendSale(activity.buyerName, activity.productNumber, activity.sourceText);
+          sendSale(activity.buyerName, activity.productNumber, activity.sourceText, false, activity.productName);
         }
       }
       return;

@@ -126,12 +126,8 @@ export class ProductApiService {
   }
 
   uploadProductImage(productId: number, file: File): Promise<{ imagePath: string }> {
-    const data = new FormData();
-    data.append('file', file);
-    return firstValueFrom(this.http.post<{ imagePath: string }>(
-      `${this.baseUrl}/products/${productId}/image/upload`,
-      data,
-    ));
+    return this.mediaUpload.uploadMultipart<{ imagePath: string }>(
+      `${this.baseUrl}/products/${productId}/image/upload`, [file], 'file');
   }
 
   uploadProductImages(productId: number, files: File[]): Promise<ProductMediaUploadResult> {

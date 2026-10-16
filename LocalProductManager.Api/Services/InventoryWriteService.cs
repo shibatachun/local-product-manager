@@ -16,7 +16,7 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
     public Task<bool> MoveAsync(
         int productId, int? sourceLevelId, int? sourceBinNumber,
         int? targetLevelId, int? targetBinNumber, int quantity,
-        InventoryAuditActor actor, CancellationToken cancellationToken) =>
+        InventoryAuditActor actor, CancellationToken cancellationToken, string? targetInventoryChannel = null) =>
         ExecuteWithRetryAsync(async () =>
         {
             if (quantity < 1 || !sourceLevelId.HasValue && !targetLevelId.HasValue
@@ -24,6 +24,16 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
                 return false;
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var now = DateTimeOffset.UtcNow;
+            var sourceChannel = sourceLevelId.HasValue && sourceBinNumber.HasValue
+                ? await CurrentChannelAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, cancellationToken)
+                : "general";
+            var targetChannel = targetInventoryChannel ?? sourceChannel ?? "general";
+            if (!IsValidChannel(targetChannel)) return false;
+            if (targetLevelId.HasValue && targetBinNumber.HasValue)
+            {
+                var existingTargetChannel = await CurrentChannelAsync(targetLevelId.Value, targetBinNumber.Value, productId, cancellationToken);
+                if (existingTargetChannel is not null && existingTargetChannel != targetChannel) return false;
+            }
             if (sourceLevelId.HasValue && sourceBinNumber.HasValue)
             {
                 var sourceBefore = await CurrentQuantityAsync(sourceLevelId.Value, sourceBinNumber.Value, productId, cancellationToken);
@@ -44,7 +54,8 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
             if (targetLevelId.HasValue && targetBinNumber.HasValue)
             {
                 var targetBefore = await CurrentQuantityAsync(targetLevelId.Value, targetBinNumber.Value, productId, cancellationToken);
-                await AdjustLocationQuantityAsync(targetLevelId.Value, targetBinNumber.Value, productId, quantity, now, cancellationToken);
+                if (await AdjustLocationQuantityAsync(targetLevelId.Value, targetBinNumber.Value, productId, quantity, now, cancellationToken, targetChannel) == 0)
+                    return false;
                 await WriteHistoryAsync(targetLevelId.Value, targetBinNumber.Value, productId, targetBefore, targetBefore + quantity,
                     actor, sourceLevelId.HasValue ? $"move_in:{sourceLevelId}:{sourceBinNumber}" : "place_unassigned", now, cancellationToken);
             }
@@ -111,14 +122,16 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
         int productId,
         int qty,
         InventoryAuditActor actor,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        string? inventoryChannel = null) =>
         ExecuteWithRetryAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var now = DateTimeOffset.UtcNow;
             var beforeQty = await CurrentQuantityAsync(levelId, binNumber, productId, cancellationToken);
-
-            await SetLocationQuantityAsync(levelId, binNumber, productId, qty, now, cancellationToken);
+            var channel = inventoryChannel ?? await CurrentChannelAsync(levelId, binNumber, productId, cancellationToken) ?? "general";
+            if (!IsValidChannel(channel)) throw new ArgumentException("Invalid inventory channel.", nameof(inventoryChannel));
+            await SetLocationQuantityAsync(levelId, binNumber, productId, qty, now, cancellationToken, channel);
 
             await AdjustProductTotalAsync(productId, qty - beforeQty, now, cancellationToken);
             await WriteHistoryAsync(
@@ -133,15 +146,20 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
         int productId,
         int delta,
         InventoryAuditActor actor,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        string? inventoryChannel = null) =>
         ExecuteWithRetryAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var now = DateTimeOffset.UtcNow;
             var beforeQty = await CurrentQuantityAsync(levelId, binNumber, productId, cancellationToken);
+            var existingChannel = await CurrentChannelAsync(levelId, binNumber, productId, cancellationToken);
+            var channel = inventoryChannel ?? existingChannel ?? "general";
+            if (!IsValidChannel(channel) || delta > 0 && existingChannel is not null && existingChannel != channel)
+                return false;
 
             var affected = await AdjustLocationQuantityAsync(
-                levelId, binNumber, productId, delta, now, cancellationToken);
+                levelId, binNumber, productId, delta, now, cancellationToken, channel);
 
             if (affected == 0)
             {
@@ -160,7 +178,7 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
 
     private async Task SetLocationQuantityAsync(
         int levelId, int binNumber, int productId, int qty, DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string channel)
     {
         if (qty == 0)
         {
@@ -176,39 +194,40 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO shelf_level_inventory
-                    ("ShelfLevelId", "BinNumber", "ProductId", "Qty", "UpdatedAt")
-                VALUES ({levelId}, {binNumber}, {productId}, {qty}, {now})
+                    ("ShelfLevelId", "BinNumber", "ProductId", "Qty", "UpdatedAt", "InventoryChannel")
+                VALUES ({levelId}, {binNumber}, {productId}, {qty}, {now}, {channel})
                 ON CONFLICT ("ShelfLevelId", "BinNumber", "ProductId")
-                DO UPDATE SET "Qty" = EXCLUDED."Qty", "UpdatedAt" = EXCLUDED."UpdatedAt"
+                DO UPDATE SET "Qty" = EXCLUDED."Qty", "UpdatedAt" = EXCLUDED."UpdatedAt", "InventoryChannel" = EXCLUDED."InventoryChannel"
                 """, cancellationToken);
         }
         else
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO shelf_level_inventory
-                    (ShelfLevelId, BinNumber, ProductId, Qty, UpdatedAt)
-                VALUES ({levelId}, {binNumber}, {productId}, {qty}, {now})
+                    (ShelfLevelId, BinNumber, ProductId, Qty, UpdatedAt, InventoryChannel)
+                VALUES ({levelId}, {binNumber}, {productId}, {qty}, {now}, {channel})
                 ON CONFLICT(ShelfLevelId, BinNumber, ProductId)
-                DO UPDATE SET Qty = excluded.Qty, UpdatedAt = excluded.UpdatedAt
+                DO UPDATE SET Qty = excluded.Qty, UpdatedAt = excluded.UpdatedAt, InventoryChannel = excluded.InventoryChannel
                 """, cancellationToken);
         }
     }
 
     private Task<int> AdjustLocationQuantityAsync(
         int levelId, int binNumber, int productId, int delta, DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string channel = "general")
     {
         if (db.Database.IsNpgsql())
         {
             return delta > 0
                 ? db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO shelf_level_inventory
-                        ("ShelfLevelId", "BinNumber", "ProductId", "Qty", "UpdatedAt")
-                    VALUES ({levelId}, {binNumber}, {productId}, {delta}, {now})
+                        ("ShelfLevelId", "BinNumber", "ProductId", "Qty", "UpdatedAt", "InventoryChannel")
+                    VALUES ({levelId}, {binNumber}, {productId}, {delta}, {now}, {channel})
                     ON CONFLICT ("ShelfLevelId", "BinNumber", "ProductId")
                     DO UPDATE SET
                         "Qty" = shelf_level_inventory."Qty" + EXCLUDED."Qty",
                         "UpdatedAt" = EXCLUDED."UpdatedAt"
+                    WHERE shelf_level_inventory."InventoryChannel" = EXCLUDED."InventoryChannel"
                     """, cancellationToken)
                 : db.Database.ExecuteSqlInterpolatedAsync($"""
                     UPDATE shelf_level_inventory
@@ -223,10 +242,11 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
         return delta > 0
             ? db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO shelf_level_inventory
-                    (ShelfLevelId, BinNumber, ProductId, Qty, UpdatedAt)
-                VALUES ({levelId}, {binNumber}, {productId}, {delta}, {now})
+                    (ShelfLevelId, BinNumber, ProductId, Qty, UpdatedAt, InventoryChannel)
+                VALUES ({levelId}, {binNumber}, {productId}, {delta}, {now}, {channel})
                 ON CONFLICT(ShelfLevelId, BinNumber, ProductId)
                 DO UPDATE SET Qty = shelf_level_inventory.Qty + excluded.Qty, UpdatedAt = excluded.UpdatedAt
+                WHERE shelf_level_inventory.InventoryChannel = excluded.InventoryChannel
                 """, cancellationToken)
             : db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE shelf_level_inventory
@@ -256,6 +276,14 @@ public sealed class InventoryWriteService(AppDbContext db, ExchangeRateService e
                 && item.ProductId == productId)
             .Select(item => item.Qty)
             .FirstOrDefaultAsync(cancellationToken);
+
+    private Task<string?> CurrentChannelAsync(int levelId, int binNumber, int productId, CancellationToken cancellationToken) =>
+        db.ShelfLevelInventories
+            .Where(item => item.ShelfLevelId == levelId && item.BinNumber == binNumber && item.ProductId == productId)
+            .Select(item => item.InventoryChannel)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static bool IsValidChannel(string channel) => channel is "general" or "walmart" or "ebay";
 
     private async Task WriteHistoryAsync(
         int levelId,

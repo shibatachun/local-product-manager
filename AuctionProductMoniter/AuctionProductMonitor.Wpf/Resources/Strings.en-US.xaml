@@ -71,6 +71,7 @@
   <sys:String x:Key="ColumnTime">Time</sys:String>
   <sys:String x:Key="ColumnBuyerName">Buyer</sys:String>
   <sys:String x:Key="ColumnProductNumber">Product Number</sys:String>
+  <sys:String x:Key="ColumnProductName">Product Name</sys:String>
   <sys:String x:Key="ColumnQuantity">Qty</sys:String>
   <sys:String x:Key="ColumnShipment">Shipment ID</sys:String>
   <sys:String x:Key="ColumnPrintState">Print Status</sys:String>

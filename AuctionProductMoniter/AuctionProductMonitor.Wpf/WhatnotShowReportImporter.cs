@@ -45,7 +45,6 @@ public static partial class WhatnotShowReportImporter
 
         var sales = new List<SaleEvent>();
         var orderIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var productNumbers = new Dictionary<string, (int RowNumber, string Buyer, string Title)>(StringComparer.OrdinalIgnoreCase);
         var errors = new List<string>();
         var unnumberedOrders = new List<UnnumberedShowOrder>();
         var ignored = 0;
@@ -82,15 +81,6 @@ public static partial class WhatnotShowReportImporter
             var number = numberMatch.Groups[1].Value;
             var isFreeGift = FreeGiftPattern().IsMatch(title);
             var productNumber = isFreeGift ? $"Free Gift #{number}" : number;
-            var productNumberKey = isFreeGift ? $"free-gift:{number}" : $"auction:{number}";
-            if (productNumbers.TryGetValue(productNumberKey, out var firstUse))
-            {
-                errors.Add(
-                    $"row {rowNumber}: duplicate product label {productNumber}; " +
-                    $"first used on row {firstUse.RowNumber} by {firstUse.Buyer} ({firstUse.Title})");
-                continue;
-            }
-            productNumbers.Add(productNumberKey, (rowNumber, buyer, title));
             if (showDate.Length == 0 && placedAt.Length >= 10 &&
                 DateOnly.TryParseExact(placedAt[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                 showDate = placedAt[..10];
@@ -103,6 +93,7 @@ public static partial class WhatnotShowReportImporter
                 ReportPlacedAt = placedAt,
                 BuyerName = buyer,
                 ProductNumber = productNumber,
+                ProductName = title,
                 SourceText = title,
                 DetectedAt = DateTimeOffset.Now
             });

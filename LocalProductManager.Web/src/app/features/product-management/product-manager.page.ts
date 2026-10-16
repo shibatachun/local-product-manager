@@ -22,14 +22,18 @@ import {
 } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { ProductApiService, ProductImageFile } from '../../core/product-api.service';
-import { InventoryApiService, ProductScannerLocation } from '../../core/inventory-api.service';
+import { InventoryApiService, InventoryChannel, ProductScannerLocation } from '../../core/inventory-api.service';
 import { ProgressiveImageDirective } from '../../core/progressive-image.directive';
 import { productCategoryNumber } from '../../core/product-inventory-category';
 import { defaultProductLabelPresets, LabelSettings, loadSavedLabelPresets, SavedLabelPreset } from '../../core/label-preset-storage';
 import { LabelPrintingApiService } from '../../core/label-printing-api.service';
 import { LiveStreamBidProductApiService } from '../../core/live-stream-bid-product-api.service';
 import { MediaUploadService } from '../../core/media-upload.service';
+import { MediaPickerComponent } from '../../shared/media-picker.component';
+import { productInchesToMillimeters, productMillimetersToInches } from './product-dimension-units';
 import { FileStoragePanelComponent } from '../file-storage/file-storage-panel.component';
+import { MediaLibraryPanelComponent } from '../media-library/media-library-panel.component';
+import { BroochFinderPanelComponent } from '../brooch-finder/brooch-finder-panel.component';
 import { VideoTrendPanelComponent } from '../video-trend/video-trend-panel.component';
 import { UnitConverterPanelComponent } from '../unit-converter/unit-converter-panel.component';
 import { ApiDocsPanelComponent } from '../api-documentation/api-docs-panel.component';
@@ -78,7 +82,7 @@ interface DomesticSyncField {
 
 @Component({
   selector: 'app-product-manager',
-  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent, AutoListingPanelComponent, DomesticProductsPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ProgressiveImageDirective, FileStoragePanelComponent, MediaLibraryPanelComponent, BroochFinderPanelComponent, MediaPickerComponent, VideoTrendPanelComponent, UnitConverterPanelComponent, ApiDocsPanelComponent, Product3dSceneEditorPanelComponent, InventoryManagerPanelComponent, BarcodeScannerPage, LabelMakerPage, LiveStreamBidProductsPanelComponent, AutoListingPanelComponent, DomesticProductsPanelComponent],
   templateUrl: './product-manager.page.html',
   styleUrls: [
     './product-manager.page.css',
@@ -129,6 +133,8 @@ export class ProductManagerPage {
   readonly detailLocationOptions = signal<ProductScannerLocation[]>([]);
   detailMoveSourceKey = '';
   detailMoveTargetKey = '';
+  detailMoveTargetChannel: InventoryChannel = 'general';
+  createInventoryChannel: InventoryChannel = 'general';
   detailMoveSourceRow = '';
   detailMoveTargetRow = '';
   detailMoveSourceRack = '';
@@ -539,7 +545,7 @@ export class ProductManagerPage {
   async ngOnInit(): Promise<void> {
     this.loadProductColumnWidths();
     const requestedView = this.route.snapshot.queryParamMap.get('view') as ViewMode | null;
-    const validViews: ViewMode[] = ['products', 'bidProducts', 'inventory', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'videoTrend', 'sceneEditor', 'apiDocs'];
+    const validViews: ViewMode[] = ['products', 'bidProducts', 'inventory', 'broochFinder', 'barcodeScanner', 'labelMaker', 'pricing', 'unitConverter', 'marketing', 'storage', 'mediaLibrary', 'videoTrend', 'sceneEditor', 'apiDocs'];
     if (requestedView && validViews.includes(requestedView)) this.view.set(requestedView);
     await Promise.all([this.loadCurrentUser(), this.ensureViewData(this.view())]);
   }
@@ -828,12 +834,14 @@ export class ProductManagerPage {
       autoListing: 'Automated commerce',
       bidProducts: 'Live commerce',
       inventory: 'Warehouse operations',
+      broochFinder: 'Separate photo catalog',
       barcodeScanner: 'Inventory tools',
       labelMaker: 'Inventory tools',
       pricing: 'Cost planning',
       unitConverter: 'Measurement tools',
       marketing: 'Amazon Attribution',
       storage: 'Server settings',
+      mediaLibrary: 'Local media',
       videoTrend: 'Creative research',
       sceneEditor: '3D workspace',
       apiDocs: 'Developer reference',
@@ -848,12 +856,14 @@ export class ProductManagerPage {
       autoListing: 'Auto Listing',
       bidProducts: 'Live Stream Bid Products',
       inventory: 'Inventory Manager',
+      broochFinder: 'Brooch finder',
       barcodeScanner: 'Barcode Scanner',
       labelMaker: 'Label Maker',
       pricing: 'Pricing estimator',
       unitConverter: 'Converter',
       marketing: 'Marketing links',
       storage: 'File storage',
+      mediaLibrary: 'Media library',
       videoTrend: 'Video trend',
       sceneEditor: 'Product 3D Scene Editor',
       apiDocs: 'API documentation',
@@ -1064,6 +1074,7 @@ export class ProductManagerPage {
     const restored = await this.restoreWizardDraft();
     if (!restored) this.createForm.qty = 1;
     this.pendingBinTarget.set(target);
+    this.createInventoryChannel = 'general';
     this.wizardOpen.set(true);
   }
 
@@ -1211,6 +1222,7 @@ export class ProductManagerPage {
 
   saveWizardDraft(): void {
     const draft = {
+      dimensionsUnit: 'mm',
       createForm: { ...this.createForm },
       platformChoices: this.platformChoices.map(item => ({ platform: item.platform, selected: item.selected, url: item.url })),
       createAsin: { ...this.createAsin },
@@ -1430,9 +1442,9 @@ export class ProductManagerPage {
         readyToList: this.createForm.readyToList,
         note: this.createForm.note || null,
         weight: this.createForm.weight,
-        length: this.createForm.length,
-        width: this.createForm.width,
-        height: this.createForm.height,
+        length: productMillimetersToInches(this.createForm.length),
+        width: productMillimetersToInches(this.createForm.width),
+        height: productMillimetersToInches(this.createForm.height),
         imagePath: this.createForm.imagePath || null,
         imageSource: this.imageSourceFor(this.createForm.imagePath),
       });
@@ -1464,6 +1476,7 @@ export class ProductManagerPage {
           product.id,
           requestedQuantity,
           binTarget.binNumber,
+          this.createInventoryChannel,
         );
         this.pendingBinTarget.set(null);
         this.wizardOpen.set(false);
@@ -2174,6 +2187,17 @@ export class ProductManagerPage {
       this.detailMoveTargetKey = '';
   }
 
+  selectDetailMoveTarget(key: string): void {
+    this.detailMoveTargetKey = key;
+    const target = this.detailLocationOptions().find(location => location.key === key);
+    const source = this.detailLocations().find(location => location.key === this.detailMoveSourceKey);
+    this.detailMoveTargetChannel = target?.qty ? target.inventoryChannel : source?.inventoryChannel ?? 'general';
+  }
+
+  detailMoveTargetHasStock(): boolean {
+    return (this.detailLocationOptions().find(location => location.key === this.detailMoveTargetKey)?.qty ?? 0) > 0;
+  }
+
   private uniqueRackRepresentatives(locations: ProductScannerLocation[]): ProductScannerLocation[] {
     return [...new Map(locations.map(location => [this.locationRackKey(location), location])).values()];
   }
@@ -2185,6 +2209,8 @@ export class ProductManagerPage {
   selectDetailMoveSource(key: string): void {
     this.detailMoveSourceKey = key;
     if (this.detailMoveTargetKey === key) this.detailMoveTargetKey = '';
+    if (!this.detailMoveTargetHasStock())
+      this.detailMoveTargetChannel = this.detailLocations().find(location => location.key === key)?.inventoryChannel ?? 'general';
     const available = this.detailMoveAvailableQty();
     if (this.detailMoveQuantity > available) this.detailMoveQuantity = Math.max(1, available);
   }
@@ -2232,6 +2258,7 @@ export class ProductManagerPage {
         targetLevelId: target?.levelId ?? null,
         targetBinNumber: target?.binNumber ?? null,
         quantity,
+        targetInventoryChannel: target ? this.detailMoveTargetChannel : undefined,
       });
       this.detailLocationOptions.set(locations);
       this.detailLocations.set(locations.filter(location => location.qty > 0));
@@ -3072,22 +3099,33 @@ export class ProductManagerPage {
 
   private async restoreWizardDraft(): Promise<boolean> {
     let restored = false;
+    let migratedLegacyDimensions = false;
     try {
       const raw = localStorage.getItem(this.productDraftStorageKey);
       if (raw) {
         const draft = JSON.parse(raw) as {
+          dimensionsUnit?: string;
           createForm?: Record<string, unknown>;
           platformChoices?: Array<{ platform: Platform; selected: boolean; url: string }>;
           createAsin?: Record<string, unknown>;
           wizardStep?: number;
         };
-        if (draft.createForm) Object.assign(this.createForm, draft.createForm);
+        if (draft.createForm) {
+          Object.assign(this.createForm, draft.createForm);
+          if (draft.dimensionsUnit !== 'mm') {
+            this.createForm.length = productInchesToMillimeters(this.createForm.length);
+            this.createForm.width = productInchesToMillimeters(this.createForm.width);
+            this.createForm.height = productInchesToMillimeters(this.createForm.height);
+            migratedLegacyDimensions = true;
+          }
+        }
         for (const saved of draft.platformChoices ?? []) {
           const choice = this.platformChoices.find(item => item.platform === saved.platform);
           if (choice) Object.assign(choice, { selected: Boolean(saved.selected), url: saved.url ?? '' });
         }
         if (draft.createAsin) Object.assign(this.createAsin, draft.createAsin);
         this.wizardStep.set(Math.max(1, Math.min(3, Number(draft.wizardStep) || 1)));
+        if (migratedLegacyDimensions) this.saveWizardDraft();
         restored = true;
       } else {
         this.resetWizard();

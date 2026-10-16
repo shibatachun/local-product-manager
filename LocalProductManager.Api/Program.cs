@@ -55,6 +55,7 @@ builder.Services.AddScoped<TikTokReportImportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SocialDataMaintenanceService>();
 builder.Services.AddScoped<LiveStreamBidProductImportService>();
+builder.Services.AddScoped<WhatnotShowCostImportService>();
 builder.Services.AddScoped<DomesticProductImportService>();
 builder.Services.AddSingleton<ThirdPartyLabelPrintService>();
 builder.Services.AddHttpClient();
@@ -70,6 +71,7 @@ builder.Services.AddHostedService<SocialAiAnalysisHostedService>();
 builder.Services.AddHttpClient<AmazonImageLookupService>();
 builder.Services.AddHttpClient<RemoteImageProxyService>();
 builder.Services.AddSingleton<ImageMatcherService>();
+builder.Services.AddSingleton<BroochFinderService>();
 builder.Services.AddSingleton<ImageFileService>();
 builder.Services.AddSingleton<ImageThumbnailService>();
 builder.Services.AddSingleton<SocialFetchLogService>();
@@ -113,6 +115,7 @@ using (var scope = app.Services.CreateScope())
     if (!app.Environment.IsEnvironment("Testing"))
     {
         await WarehouseSchema.UpgradeAsync(db);
+        await InventoryChannelSchema.UpgradeAsync(db);
         await ProductInventoryCategorySchema.UpgradeAsync(db);
         await ProductExtendedDataSchema.UpgradeAsync(db);
         await ProductListingPriceSchema.UpgradeAsync(db);

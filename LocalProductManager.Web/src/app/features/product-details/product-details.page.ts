@@ -7,11 +7,12 @@ import { InventoryApiService, ProductScannerLocation } from '../../core/inventor
 import { ProductDetail, ProductExtendedData } from '../../core/models';
 import { AuthApiService } from '../../core/auth-api.service';
 import { MediaUploadService } from '../../core/media-upload.service';
+import { MediaPickerComponent } from '../../shared/media-picker.component';
 
 @Component({
   selector: 'app-product-details-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MediaPickerComponent],
   templateUrl: './product-details.page.html',
   styleUrl: './product-details.page.css',
 })
